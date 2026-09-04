@@ -1,0 +1,20 @@
+<div class="nav-dashboard">
+	<h2><:dashboard:titre_dashboard:></h2>
+	<ul class="liste-items">
+		<li><a href="[(#URL_ECRIRE{dashboard})]"><:dashboard:nav_retour_parc:></a></li>
+	</ul>
+
+	<BOUCLE_site(DASHBOARD_SITES){id_dashboard_site}>
+		[(#AUTORISER{supprimer,dashboard_site,#ID_DASHBOARD_SITE})
+		<ul class="liste-items">
+			<li>
+				<a class="dashboard-lien-danger"
+				   href="[(#URL_ACTION_AUTEUR{dashboard_supprimer,#ID_DASHBOARD_SITE,#URL_ECRIRE{dashboard}})]"
+				   onclick="return confirm('[(<:dashboard:confirmer_suppression:>|texte_backend)]');">
+					<:dashboard:action_supprimer_site:>
+				</a>
+			</li>
+		</ul>
+		]
+	</BOUCLE_site>
+</div>

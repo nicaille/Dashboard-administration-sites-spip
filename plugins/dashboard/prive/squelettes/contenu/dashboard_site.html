@@ -1,0 +1,225 @@
+[(#AUTORISER{voir, dashboard_site, #ENV{id_dashboard_site}}|sinon_interdire_acces)]
+<link rel="stylesheet" href="[(#CHEMIN{css/dashboard.css}|timestamp|direction_css)]" type="text/css" />
+
+[(#ENV{new}|oui)
+	<h1 class="grostitre"><:dashboard:icone_creer_site:></h1>
+	[(#AUTORISER{creer,dashboard_site}|sinon_interdire_acces)]
+	#FORMULAIRE_EDITER_DASHBOARD_SITE{new,#URL_ECRIRE{dashboard_site,id_dashboard_site=@id_dashboard_site@}}
+]
+
+<BOUCLE_site(DASHBOARD_SITES){id_dashboard_site}{statut != poubelle}>
+
+#SET{version_cible,#SPIP_VERSION|dashboard_version_disponible}
+
+<h1 class="grostitre">#TITRE</h1>
+
+[(#ENV{dashboard_message}|oui)
+	<p class="[(#ENV{dashboard_statut}|=={ok}|?{reponse_formulaire_ok,reponse_formulaire_erreur})] reponse_formulaire">
+		[(#ENV{dashboard_message}|textebrut)]
+	</p>
+]
+
+[(#ETAT|=={erreur}|oui)
+	<p class="reponse_formulaire reponse_formulaire_erreur">
+		<:dashboard:derniere_erreur:> [(#ERREUR|textebrut)]
+	</p>
+]
+
+<div class="dashboard-fiche">
+	<h2><:dashboard:titre_etat:></h2>
+	<table class="spip">
+		<tbody>
+			<tr><th scope="row"><:dashboard:label_url_site:></th><td>[<a href="(#URL_SITE)" rel="noreferrer">(#URL_SITE)</a>]</td></tr>
+			<tr><th scope="row"><:dashboard:label_url_agent:></th><td><code>[(#URL_AGENT|couper{90})]</code></td></tr>
+			<tr><th scope="row"><:dashboard:col_spip:></th><td>
+				[<code>(#SPIP_VERSION)</code>]
+				[(#CORE_MAJ|=={oui}|oui)<span class="dashboard-badge dashboard-badge-maj">&rarr; #GET{version_cible}</span>]
+			</td></tr>
+			<tr><th scope="row">PHP</th><td>[<code>(#PHP_VERSION)</code>] [(#INFOS|dashboard_info{serveur/memory_limit}) <:dashboard:memoire:>]</td></tr>
+			<tr><th scope="row"><:dashboard:label_base:></th><td>
+				[<code>(#SQL_VERSION)</code>]
+				[&mdash; (#INFOS|dashboard_info{base/octets}|dashboard_taille)]
+				[&mdash; (#INFOS|dashboard_info{base/contenus/article}) <:dashboard:articles:>]
+			</td></tr>
+			<tr><th scope="row"><:dashboard:label_agent:></th><td>[<code>(#AGENT_VERSION)</code>]</td></tr>
+			<tr><th scope="row"><:dashboard:col_sync:></th><td>[(#DATE_SYNC|?{[(#DATE_SYNC|affdate_heure)],<:dashboard:jamais:>})]</td></tr>
+			[<tr><th scope="row"><:dashboard:label_notes:></th><td>(#NOTES|propre)</td></tr>]
+		</tbody>
+	</table>
+
+	<p class="boutons dashboard-actions">
+		<a class="dashboard-bouton" href="[(#URL_ACTION_AUTEUR{dashboard_operation,sync/#ID_DASHBOARD_SITE,#SELF})]"><:dashboard:action_sync:></a>
+		[(#AUTORISER{modifier,dashboard_site,#ID_DASHBOARD_SITE})
+			<a class="dashboard-bouton" href="[(#URL_ECRIRE{dashboard_site,id_dashboard_site=#ID_DASHBOARD_SITE&modifier=oui})]"><:dashboard:icone_modifier_site:></a>
+		]
+	</p>
+</div>
+
+[(#ENV{modifier}|oui)
+	[(#AUTORISER{modifier,dashboard_site,#ID_DASHBOARD_SITE}|sinon_interdire_acces)]
+	<div class="dashboard-fiche">
+		<h2><:dashboard:icone_modifier_site:></h2>
+		#FORMULAIRE_EDITER_DASHBOARD_SITE{#ID_DASHBOARD_SITE,#URL_ECRIRE{dashboard_site,id_dashboard_site=#ID_DASHBOARD_SITE}}
+	</div>
+]
+
+[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+<div class="dashboard-fiche">
+	<h2><:dashboard:titre_caches:></h2>
+	<table class="spip liste">
+		<thead><tr>
+			<th scope="col"><:dashboard:col_cache:></th>
+			<th scope="col"><:dashboard:col_fichiers:></th>
+			<th scope="col"><:dashboard:col_taille:></th>
+			<th scope="col"><:dashboard:col_actions:></th>
+		</tr></thead>
+		<tbody>
+			<BOUCLE_caches(DATA){source table, #LISTE{pages,squelettes,images,css_js,sessions}}>
+				<tr>
+					<th scope="row">[(#VALEUR|dashboard_libelle_cache)]</th>
+					<td>[(#_site:INFOS|dashboard_cache_info{#VALEUR,fichiers})]</td>
+					<td>[(#_site:INFOS|dashboard_cache_info{#VALEUR,octets}|dashboard_taille)]</td>
+					<td><a class="dashboard-bouton" href="[(#URL_ACTION_AUTEUR{dashboard_operation,purger/#_site:ID_DASHBOARD_SITE/#VALEUR,#SELF})]"><:dashboard:action_purger:></a></td>
+				</tr>
+			</BOUCLE_caches>
+			<tr>
+				<th scope="row"><:dashboard:purge_tout:></th>
+				<td colspan="2"><em><:dashboard:purge_tout_explication:></em></td>
+				<td><a class="dashboard-bouton dashboard-bouton-primaire" href="[(#URL_ACTION_AUTEUR{dashboard_operation,purger/#ID_DASHBOARD_SITE/tout,#SELF})]"><:dashboard:action_purger:></a></td>
+			</tr>
+		</tbody>
+	</table>
+</div>
+]
+
+<div class="dashboard-fiche">
+	<h2><:dashboard:titre_plugins:> <small>[(#NB_PLUGINS)]</small></h2>
+
+	[(#NB_PLUGINS_MAJ|>{0}|oui)
+		[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+		<p class="boutons">
+			<a class="dashboard-bouton dashboard-bouton-primaire" href="[(#URL_ACTION_AUTEUR{dashboard_operation,plugin_maj_tous/#ID_DASHBOARD_SITE,#SELF})]">
+				<:dashboard:action_maj_tous:> ([(#NB_PLUGINS_MAJ)])
+			</a>
+		</p>
+		]
+	]
+
+	<B_plugins>
+	<table class="spip liste">
+		<thead><tr>
+			<th scope="col"><:dashboard:col_plugin:></th>
+			<th scope="col"><:dashboard:col_version:></th>
+			<th scope="col"><:dashboard:col_disponible:></th>
+			<th scope="col"><:dashboard:col_source:></th>
+			<th scope="col"><:dashboard:col_actions:></th>
+		</tr></thead>
+		<tbody>
+		<BOUCLE_plugins(DASHBOARD_PLUGINS){id_dashboard_site}{par prefixe}>
+			<tr class="[(#MAJ_DISPONIBLE|=={oui}|?{dashboard-ligne-maj,''})]">
+				<th scope="row">[(#NOM|sinon{#PREFIXE})] <small><code>#PREFIXE</code></small></th>
+				<td><code>#VERSION</code></td>
+				<td>[<code>(#VERSION_DISPONIBLE)</code>]</td>
+				<td>
+					[(#DISTRIBUE|=={oui}|?{'<em><:dashboard:plugin_distribue:></em>',''})]
+					[(#DISTRIBUE|=={non}|oui)#SOURCE]
+				</td>
+				<td>
+					[(#MAJ_DISPONIBLE|=={oui}|oui)
+						[(#DISTRIBUE|=={non}|oui)
+							[(#AUTORISER{operer,dashboard_site,#_site:ID_DASHBOARD_SITE})
+								<a class="dashboard-bouton" href="[(#URL_ACTION_AUTEUR{dashboard_operation,plugin_maj/#_site:ID_DASHBOARD_SITE/#PREFIXE,#SELF})]"><:dashboard:action_maj:></a>
+							]
+						]
+					]
+				</td>
+			</tr>
+		</BOUCLE_plugins>
+		</tbody>
+	</table>
+	</B_plugins>
+	<p class="petition"><:dashboard:plugins_vide:></p>
+	<//B_plugins>
+</div>
+
+[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+<div class="dashboard-fiche">
+	<h2><:dashboard:titre_sauvegardes:></h2>
+
+	<p class="boutons dashboard-actions">
+		<a class="dashboard-bouton dashboard-bouton-primaire" href="[(#URL_ACTION_AUTEUR{dashboard_operation,sauvegarde/#ID_DASHBOARD_SITE,#SELF})]"><:dashboard:action_sauvegarder:></a>
+		<a class="dashboard-bouton" href="[(#URL_ACTION_AUTEUR{dashboard_operation,sauvegarde/#ID_DASHBOARD_SITE/legere,#SELF})]"><:dashboard:action_sauvegarder_legere:></a>
+	</p>
+
+	<B_sauvegardes>
+	<table class="spip liste">
+		<thead><tr>
+			<th scope="col"><:dashboard:col_date:></th>
+			<th scope="col"><:dashboard:col_taille:></th>
+			<th scope="col"><:dashboard:col_statut:></th>
+			<th scope="col"><:dashboard:col_actions:></th>
+		</tr></thead>
+		<tbody>
+		<BOUCLE_sauvegardes(DASHBOARD_SAUVEGARDES){id_dashboard_site}{par date}{inverse}{0,15}>
+			<tr>
+				<td>[(#DATE|affdate_heure)]</td>
+				<td>[(#OCTETS|dashboard_taille)]</td>
+				<td>[(#STATUT|=={locale}|?{'<:dashboard:sauvegarde_locale:>','<:dashboard:sauvegarde_distante:>'})]</td>
+				<td>[(#STATUT|=={locale}|oui)
+					<a class="dashboard-bouton" href="[(#URL_ACTION_AUTEUR{dashboard_telecharger,#ID_DASHBOARD_SAUVEGARDE})]"><:dashboard:action_telecharger:></a>
+				]</td>
+			</tr>
+		</BOUCLE_sauvegardes>
+		</tbody>
+	</table>
+	</B_sauvegardes>
+	<p class="petition"><:dashboard:sauvegardes_vide:></p>
+	<//B_sauvegardes>
+</div>
+
+[(#CORE_MAJ|=={oui}|oui)
+<div class="dashboard-fiche dashboard-fiche-alerte">
+	<h2><:dashboard:titre_core_maj:></h2>
+	<p>
+		<:dashboard:core_maj_texte{version_actuelle=#SPIP_VERSION,version_cible=#GET{version_cible}}:>
+	</p>
+	<p class="explication"><:dashboard:core_maj_avertissement:></p>
+	<p class="boutons">
+		<a class="dashboard-bouton dashboard-bouton-danger"
+		   href="[(#URL_ACTION_AUTEUR{dashboard_operation,core_maj/#ID_DASHBOARD_SITE/#GET{version_cible},#SELF})]"
+		   onclick="return confirm('[(<:dashboard:core_maj_confirmation:>|texte_backend)]');">
+			<:dashboard:action_core_maj:>
+		</a>
+	</p>
+</div>
+]
+]
+
+<div class="dashboard-fiche">
+	<h2><:dashboard:titre_journal:></h2>
+	<B_journal>
+	<table class="spip liste">
+		<thead><tr>
+			<th scope="col"><:dashboard:col_date:></th>
+			<th scope="col"><:dashboard:col_operation:></th>
+			<th scope="col"><:dashboard:col_statut:></th>
+			<th scope="col"><:dashboard:col_message:></th>
+		</tr></thead>
+		<tbody>
+		<BOUCLE_journal(DASHBOARD_JOURNAL){id_dashboard_site}{par date}{inverse}{pagination 20}>
+			<tr class="dashboard-journal-#STATUT">
+				<td>[(#DATE|affdate_heure)]</td>
+				<td>[(#OPERATION|dashboard_libelle_operation)]</td>
+				<td>#STATUT</td>
+				<td>[(#MESSAGE|couper{160})]</td>
+			</tr>
+		</BOUCLE_journal>
+		</tbody>
+	</table>
+	#PAGINATION
+	</B_journal>
+	<p class="petition"><:dashboard:journal_vide:></p>
+	<//B_journal>
+</div>
+
+</BOUCLE_site>

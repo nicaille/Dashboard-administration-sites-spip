@@ -120,7 +120,7 @@ function dashagent_sauvegarde_ecrire($chemin, $tables) {
 		. '-- Date   : ' . date('c') . "\n"
 		. '-- SPIP   : ' . ($GLOBALS['spip_version_branche'] ?? '?') . "\n"
 		. '-- Tables : ' . count($tables) . "\n\n"
-		. "SET NAMES utf8mb4;\n"
+		. 'SET NAMES ' . dashagent_charset_connexion() . ";\n"
 		. "SET FOREIGN_KEY_CHECKS=0;\n\n";
 	gzwrite($gz, $entete);
 
@@ -137,6 +137,26 @@ function dashagent_sauvegarde_ecrire($chemin, $tables) {
 	gzclose($gz);
 
 	return '';
+}
+
+/**
+ * Jeu de caractères de la connexion SQL du site.
+ *
+ * Imposer utf8mb4 à l'aveugle produirait un dump illisible sur une base encore
+ * en latin1 : on reprend ce que le site utilise réellement.
+ *
+ * @return string
+ */
+function dashagent_charset_connexion() {
+	$charset = (string) ($GLOBALS['meta']['charset_sql_connexion'] ?? '');
+	if ($charset === '') {
+		$charset = (string) ($GLOBALS['meta']['charset_sql_base'] ?? '');
+	}
+	if (!preg_match('/^[a-z0-9_]+$/i', $charset)) {
+		$charset = 'utf8mb4';
+	}
+
+	return $charset;
 }
 
 /**

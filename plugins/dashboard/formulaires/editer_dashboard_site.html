@@ -1,0 +1,79 @@
+<div class="formulaire_spip formulaire_editer formulaire_editer_dashboard_site">
+
+	[<p class="reponse_formulaire reponse_formulaire_ok">(#MESSAGE_OK)</p>]
+	[<p class="reponse_formulaire reponse_formulaire_erreur">(#MESSAGE_ERREUR)</p>]
+
+	[(#ENV{editable})
+	<form method="post" action="#ENV{action}"><div>
+		#ACTION_FORMULAIRE{#ENV{action}}
+		[(#ENV*{_hidden})]
+
+		<fieldset>
+			<legend><:dashboard:legend_identite:></legend>
+			<ul>
+				<li class="editer editer_titre obligatoire[ (#ENV**{erreurs}|table_valeur{titre}|oui)erreur]">
+					<label for="titre"><:dashboard:label_titre:></label>
+					[<span class="erreur_message">(#ENV**{erreurs}|table_valeur{titre})</span>]
+					<input type="text" class="text" name="titre" id="titre" value="[(#ENV{titre}|entites_html)]" required="required" />
+				</li>
+				<li class="editer editer_url_site[ (#ENV**{erreurs}|table_valeur{url_site}|oui)erreur]">
+					<label for="url_site"><:dashboard:label_url_site:></label>
+					[<span class="erreur_message">(#ENV**{erreurs}|table_valeur{url_site})</span>]
+					<input type="url" class="text" name="url_site" id="url_site" value="[(#ENV{url_site}|entites_html)]" placeholder="https://exemple.org/" />
+				</li>
+				<li class="editer editer_url_agent obligatoire[ (#ENV**{erreurs}|table_valeur{url_agent}|oui)erreur]">
+					<label for="url_agent"><:dashboard:label_url_agent:></label>
+					[<span class="erreur_message">(#ENV**{erreurs}|table_valeur{url_agent})</span>]
+					<input type="url" class="text" name="url_agent" id="url_agent" value="[(#ENV{url_agent}|entites_html)]" placeholder="https://exemple.org/spip.php?action=dashagent" required="required" />
+					<p class="explication"><:dashboard:explication_url_agent:></p>
+				</li>
+				<li class="editer editer_groupe">
+					<label for="groupe"><:dashboard:label_groupe:></label>
+					<input type="text" class="text" name="groupe" id="groupe" value="[(#ENV{groupe}|entites_html)]" />
+					<p class="explication"><:dashboard:explication_groupe:></p>
+				</li>
+			</ul>
+		</fieldset>
+
+		<fieldset>
+			<legend><:dashboard:legend_secret:></legend>
+			[<p class="explication">(#ENV{secret_present}|=={oui}|?{
+				'<:dashboard:secret_configure:>',
+				'<:dashboard:secret_absent:>'})</p>]
+			[<p class="explication"><:dashboard:label_empreinte:> <code>(#ENV{secret_empreinte})</code></p>]
+			<ul>
+				<li class="editer editer_generer_secret">
+					<input type="checkbox" name="generer_secret" id="generer_secret" value="on" />
+					<label for="generer_secret"><:dashboard:label_generer_secret:></label>
+					<p class="explication"><:dashboard:explication_generer_secret:></p>
+				</li>
+				<li class="editer editer_secret_clair[ (#ENV**{erreurs}|table_valeur{secret_clair}|oui)erreur]">
+					<label for="secret_clair"><:dashboard:label_secret_clair:></label>
+					[<span class="erreur_message">(#ENV**{erreurs}|table_valeur{secret_clair})</span>]
+					<input type="text" class="text" name="secret_clair" id="secret_clair" value="" autocomplete="off" />
+					<p class="explication"><:dashboard:explication_secret_clair:></p>
+				</li>
+			</ul>
+		</fieldset>
+
+		<fieldset>
+			<legend><:dashboard:legend_supervision:></legend>
+			<ul>
+				<li class="editer editer_statut">
+					<label for="statut"><:dashboard:label_statut:></label>
+					<select name="statut" id="statut" class="select">
+						<option value="publie"[ (#ENV{statut}|=={publie}|oui)selected="selected"]><:dashboard:statut_supervise:></option>
+						<option value="prepa"[ (#ENV{statut}|=={prepa}|oui)selected="selected"]><:dashboard:statut_pause:></option>
+					</select>
+				</li>
+				<li class="editer editer_notes">
+					<label for="notes"><:dashboard:label_notes:></label>
+					<textarea name="notes" id="notes" rows="4" cols="40">[(#ENV{notes}|entites_html)]</textarea>
+				</li>
+			</ul>
+		</fieldset>
+
+		<p class="boutons"><input type="submit" class="submit" value="<:bouton_enregistrer:>" /></p>
+	</div></form>
+	]
+</div>

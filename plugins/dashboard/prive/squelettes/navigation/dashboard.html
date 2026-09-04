@@ -1,0 +1,23 @@
+<div class="nav-dashboard">
+	<h2><:dashboard:titre_dashboard:></h2>
+
+	<ul class="liste-items">
+		<li><a href="[(#URL_ECRIRE{dashboard})]"><:dashboard:nav_parc:></a></li>
+		[(#AUTORISER{creer,dashboard_site})
+			<li><a href="[(#URL_ECRIRE{dashboard_site,new=oui})]"><:dashboard:icone_creer_site:></a></li>
+		]
+		[(#AUTORISER{configurer,_dashboard})
+			<li><a href="[(#URL_ECRIRE{configurer_dashboard})]"><:dashboard:titre_configurer:></a></li>
+		]
+	</ul>
+
+	<B_erreurs>
+	<h3><:dashboard:nav_sites_en_erreur:></h3>
+	<ul class="liste-items">
+		<BOUCLE_erreurs(DASHBOARD_SITES){statut = publie}{etat = erreur}{par titre}{0,10}>
+			<li><a href="[(#URL_ECRIRE{dashboard_site,id_dashboard_site=#ID_DASHBOARD_SITE})]">#TITRE</a></li>
+		</BOUCLE_erreurs>
+	</ul>
+	</B_erreurs>
+	<//B_erreurs>
+</div>
