@@ -1,0 +1,40 @@
+[(#AUTORISER{configurer, _dashagent}|sinon_interdire_acces)]
+
+<h1 class="grostitre"><:dashagent:titre_configurer:></h1>
+
+#FORMULAIRE_CONFIGURER_DASHAGENT
+
+<div class="ajax">
+	<h2><:dashagent:titre_journal:></h2>
+
+	<B_journal>
+	<table class="spip liste">
+		<caption><:dashagent:journal_caption:></caption>
+		<thead>
+			<tr>
+				<th scope="col"><:dashagent:col_date:></th>
+				<th scope="col"><:dashagent:col_operation:></th>
+				<th scope="col"><:dashagent:col_statut:></th>
+				<th scope="col"><:dashagent:col_ip:></th>
+				<th scope="col"><:dashagent:col_duree:></th>
+				<th scope="col"><:dashagent:col_message:></th>
+			</tr>
+		</thead>
+		<tbody>
+		<BOUCLE_journal(DASHAGENT_JOURNAL){par date}{inverse}{pagination 25}>
+			<tr class="[(#COMPTEUR_BOUCLE|alterner{odd,even})]">
+				<td>[(#DATE|affdate_heure)]</td>
+				<td><code>#OPERATION</code></td>
+				<td class="dashagent-statut-#STATUT">#STATUT</td>
+				<td>#IP</td>
+				<td>[(#DUREE) ms]</td>
+				<td>[(#MESSAGE|couper{120})]</td>
+			</tr>
+		</BOUCLE_journal>
+		</tbody>
+	</table>
+	#PAGINATION
+	</B_journal>
+	<p class="petition"><:dashagent:journal_vide:></p>
+	<//B_journal>
+</div>
