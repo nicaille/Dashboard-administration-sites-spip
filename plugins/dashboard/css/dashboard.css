@@ -1,0 +1,110 @@
+/**
+ * Habillage du tableau de bord dans l'espace privé de SPIP.
+ * Volontairement minimal : il se pose sur le thème privé sans le remplacer.
+ */
+
+.dashboard-synthese {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 1em;
+	margin: 0 0 1.5em;
+	padding: 0;
+	list-style: none;
+}
+.dashboard-synthese li {
+	flex: 1 1 10em;
+	padding: .75em 1em;
+	border: 1px solid rgba(0, 0, 0, .12);
+	border-radius: 4px;
+	background: rgba(0, 0, 0, .02);
+}
+.dashboard-synthese strong {
+	display: block;
+	font-size: 1.8em;
+	line-height: 1.1;
+}
+.dashboard-synthese .dashboard-erreur strong { color: #a4001c; }
+.dashboard-synthese .dashboard-attention strong { color: #9a6200; }
+
+.dashboard-fiche {
+	margin: 0 0 2em;
+	padding: 0 0 1em;
+	border-bottom: 1px solid rgba(0, 0, 0, .08);
+}
+.dashboard-fiche-alerte {
+	padding: 1em;
+	border: 1px solid #d9a400;
+	border-radius: 4px;
+	background: #fff8e5;
+}
+
+.dashboard-parc td,
+.dashboard-parc th { vertical-align: top; }
+
+.dashboard-groupe {
+	font-size: .85em;
+	opacity: .7;
+}
+.dashboard-lien-public {
+	font-size: .85em;
+	word-break: break-all;
+}
+.dashboard-message-erreur {
+	display: block;
+	font-size: .85em;
+	color: #a4001c;
+}
+
+.dashboard-pastille {
+	display: inline-block;
+	width: .7em;
+	height: .7em;
+	margin-inline-end: .4em;
+	border-radius: 50%;
+	background: #999;
+}
+.dashboard-pastille-ok { background: #3f8f29; }
+.dashboard-pastille-ko { background: #c0001f; }
+
+.dashboard-badge {
+	display: inline-block;
+	padding: .1em .5em;
+	border-radius: 10px;
+	font-size: .8em;
+	white-space: nowrap;
+}
+.dashboard-badge-maj {
+	background: #ffe9b0;
+	color: #6b4500;
+}
+
+.dashboard-ligne-maj { background: rgba(255, 213, 128, .18); }
+
+.dashboard-actions { white-space: nowrap; }
+.dashboard-bouton {
+	display: inline-block;
+	margin: .1em .25em .1em 0;
+	padding: .25em .7em;
+	border: 1px solid rgba(0, 0, 0, .2);
+	border-radius: 3px;
+	background: #fff;
+	font-size: .9em;
+	text-decoration: none;
+}
+.dashboard-bouton:hover,
+.dashboard-bouton:focus { background: #f0f0f0; }
+.dashboard-bouton-primaire {
+	border-color: #2b6ca3;
+	background: #2b6ca3;
+	color: #fff;
+}
+.dashboard-bouton-primaire:hover,
+.dashboard-bouton-primaire:focus { background: #1f5580; }
+.dashboard-bouton-danger {
+	border-color: #a4001c;
+	background: #a4001c;
+	color: #fff;
+}
+.dashboard-lien-danger { color: #a4001c; }
+
+.dashboard-journal-erreur td { color: #a4001c; }

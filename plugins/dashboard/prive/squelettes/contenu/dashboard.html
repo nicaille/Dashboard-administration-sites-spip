@@ -1,0 +1,79 @@
+[(#AUTORISER{voir, dashboard}|sinon_interdire_acces)]
+<link rel="stylesheet" href="[(#CHEMIN{css/dashboard.css}|timestamp|direction_css)]" type="text/css" />
+
+<h1 class="grostitre"><:dashboard:titre_dashboard:></h1>
+
+[(#ENV{dashboard_message}|oui)
+	<p class="[(#ENV{dashboard_statut}|=={ok}|?{reponse_formulaire_ok,reponse_formulaire_erreur})] reponse_formulaire">
+		[(#ENV{dashboard_message}|textebrut)]
+	</p>
+]
+
+#SET{synthese,#VAL|dashboard_synthese}
+<ul class="dashboard-synthese">
+	<li><strong>[(#GET{synthese}|table_valeur{supervises})]</strong> <:dashboard:synthese_supervises:></li>
+	<li class="dashboard-erreur"><strong>[(#GET{synthese}|table_valeur{en_erreur})]</strong> <:dashboard:synthese_erreurs:></li>
+	<li class="dashboard-attention"><strong>[(#GET{synthese}|table_valeur{core_retard})]</strong> <:dashboard:synthese_core_retard:></li>
+	<li class="dashboard-attention"><strong>[(#GET{synthese}|table_valeur{plugins_maj})]</strong> <:dashboard:synthese_plugins_maj:></li>
+</ul>
+
+<B_sites>
+<table class="spip liste dashboard-parc">
+	<caption><:dashboard:parc_caption:></caption>
+	<thead>
+		<tr>
+			<th scope="col"><:dashboard:col_site:></th>
+			<th scope="col"><:dashboard:col_etat:></th>
+			<th scope="col"><:dashboard:col_spip:></th>
+			<th scope="col"><:dashboard:col_plugins:></th>
+			<th scope="col"><:dashboard:col_sync:></th>
+			<th scope="col"><:dashboard:col_actions:></th>
+		</tr>
+	</thead>
+	<tbody>
+	<BOUCLE_sites(DASHBOARD_SITES){statut != poubelle}{par groupe, titre}>
+		<tr class="[(#COMPTEUR_BOUCLE|alterner{odd,even})] [(#ETAT|dashboard_classe_etat)]">
+			<th scope="row">
+				<a href="[(#URL_ECRIRE{dashboard_site,id_dashboard_site=#ID_DASHBOARD_SITE})]">#TITRE</a>
+				[<br /><span class="dashboard-groupe">(#GROUPE)</span>]
+				[<br /><a class="dashboard-lien-public" href="(#URL_SITE)" rel="noreferrer">(#URL_SITE|couper{48})</a>]
+			</th>
+			<td class="dashboard-etat">
+				[(#ETAT|=={ok}|?{'<span class="dashboard-pastille dashboard-pastille-ok"></span>','<span class="dashboard-pastille dashboard-pastille-ko"></span>'})]
+				[(#STATUT|=={prepa}|oui)<em><:dashboard:statut_pause:></em>]
+				[<span class="dashboard-message-erreur">(#ERREUR|couper{90})</span>]
+			</td>
+			<td>
+				[<code>(#SPIP_VERSION)</code>]
+				[(#CORE_MAJ|=={oui}|oui)
+					<span class="dashboard-badge dashboard-badge-maj" title="<:dashboard:core_maj_disponible:>">
+						&rarr; [(#SPIP_VERSION|dashboard_version_disponible)]
+					</span>
+				]
+			</td>
+			<td>
+				#NB_PLUGINS
+				[(#NB_PLUGINS_MAJ|>{0}|oui)
+					<span class="dashboard-badge dashboard-badge-maj">[(#NB_PLUGINS_MAJ)] <:dashboard:a_mettre_a_jour:></span>
+				]
+			</td>
+			<td>[(#DATE_SYNC|?{[(#DATE_SYNC|affdate_jourcourt)],<:dashboard:jamais:>})]</td>
+			<td class="dashboard-actions">
+				<a class="dashboard-bouton" href="[(#URL_ACTION_AUTEUR{dashboard_operation,sync/#ID_DASHBOARD_SITE,#SELF})]"><:dashboard:action_sync:></a>
+				[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+					<a class="dashboard-bouton" href="[(#URL_ACTION_AUTEUR{dashboard_operation,purger/#ID_DASHBOARD_SITE/tout,#SELF})]"><:dashboard:action_purger:></a>
+				]
+			</td>
+		</tr>
+	</BOUCLE_sites>
+	</tbody>
+</table>
+</B_sites>
+<p class="petition"><:dashboard:parc_vide:></p>
+<//B_sites>
+
+[(#AUTORISER{creer,dashboard_site})
+<p class="boutons">
+	<a class="btn dashboard-bouton dashboard-bouton-primaire" href="[(#URL_ECRIRE{dashboard_site,new=oui})]"><:dashboard:icone_creer_site:></a>
+</p>
+]

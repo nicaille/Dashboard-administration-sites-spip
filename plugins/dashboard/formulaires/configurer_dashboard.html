@@ -1,0 +1,92 @@
+<div class="formulaire_spip formulaire_configurer formulaire_configurer_dashboard">
+
+	<h3 class="titrem"><:dashboard:titre_configurer:></h3>
+
+	[<p class="reponse_formulaire reponse_formulaire_ok">(#MESSAGE_OK)</p>]
+	[<p class="reponse_formulaire reponse_formulaire_erreur">(#MESSAGE_ERREUR)</p>]
+
+	[(#ENV{editable})
+	<form method="post" action="#ENV{action}"><div>
+		#ACTION_FORMULAIRE{#ENV{action}}
+
+		<fieldset>
+			<legend><:dashboard:legend_reseau:></legend>
+			<ul>
+				<li class="editer editer_timeout[ (#ENV**{erreurs}|table_valeur{timeout}|oui)erreur]">
+					<label for="timeout"><:dashboard:label_timeout:></label>
+					[<span class="erreur_message">(#ENV**{erreurs}|table_valeur{timeout})</span>]
+					<input type="number" class="text" name="timeout" id="timeout" min="5" max="300" value="[(#ENV{timeout})]" />
+				</li>
+				<li class="editer editer_timeout_long[ (#ENV**{erreurs}|table_valeur{timeout_long}|oui)erreur]">
+					<label for="timeout_long"><:dashboard:label_timeout_long:></label>
+					[<span class="erreur_message">(#ENV**{erreurs}|table_valeur{timeout_long})</span>]
+					<input type="number" class="text" name="timeout_long" id="timeout_long" min="30" max="900" value="[(#ENV{timeout_long})]" />
+					<p class="explication"><:dashboard:explication_timeout_long:></p>
+				</li>
+				<li class="editer editer_autoriser_http">
+					<input type="checkbox" name="autoriser_http" id="autoriser_http" value="on"[ (#ENV{autoriser_http}|=={on}|oui)checked="checked"] />
+					<label for="autoriser_http"><:dashboard:label_autoriser_http:></label>
+					<p class="explication"><:dashboard:explication_autoriser_http:></p>
+				</li>
+			</ul>
+		</fieldset>
+
+		<fieldset>
+			<legend><:dashboard:legend_synchronisation:></legend>
+			<ul>
+				<li class="editer editer_sync_auto">
+					<input type="checkbox" name="sync_auto" id="sync_auto" value="on"[ (#ENV{sync_auto}|=={on}|oui)checked="checked"] />
+					<label for="sync_auto"><:dashboard:label_sync_auto:></label>
+				</li>
+				<li class="editer editer_sync_frequence">
+					<label for="sync_frequence"><:dashboard:label_sync_frequence:></label>
+					<input type="number" class="text" name="sync_frequence" id="sync_frequence" min="1" max="168" value="[(#ENV{sync_frequence})]" />
+				</li>
+				<li class="editer editer_sync_lot">
+					<label for="sync_lot"><:dashboard:label_sync_lot:></label>
+					<input type="number" class="text" name="sync_lot" id="sync_lot" min="1" max="200" value="[(#ENV{sync_lot})]" />
+					<p class="explication"><:dashboard:explication_sync_lot:></p>
+				</li>
+			</ul>
+		</fieldset>
+
+		<fieldset>
+			<legend><:dashboard:legend_versions:></legend>
+			<ul>
+				<li class="editer editer_url_archives_spip[ (#ENV**{erreurs}|table_valeur{url_archives_spip}|oui)erreur]">
+					<label for="url_archives_spip"><:dashboard:label_url_archives:></label>
+					[<span class="erreur_message">(#ENV**{erreurs}|table_valeur{url_archives_spip})</span>]
+					<input type="url" class="text" name="url_archives_spip" id="url_archives_spip" value="[(#ENV{url_archives_spip}|entites_html)]" />
+				</li>
+				<li class="editer editer_versions_manuelles[ (#ENV**{erreurs}|table_valeur{versions_manuelles}|oui)erreur]">
+					<label for="versions_manuelles"><:dashboard:label_versions_manuelles:></label>
+					[<span class="erreur_message">(#ENV**{erreurs}|table_valeur{versions_manuelles})</span>]
+					<textarea name="versions_manuelles" id="versions_manuelles" rows="4" cols="30" placeholder="4.2 = 4.2.16">[(#ENV{versions_manuelles}|entites_html)]</textarea>
+					<p class="explication"><:dashboard:explication_versions_manuelles:></p>
+				</li>
+			</ul>
+		</fieldset>
+
+		<fieldset>
+			<legend><:dashboard:legend_securite_maj:></legend>
+			<ul>
+				<li class="editer editer_sauvegarder_avant_maj">
+					<input type="checkbox" name="sauvegarder_avant_maj" id="sauvegarder_avant_maj" value="on"[ (#ENV{sauvegarder_avant_maj}|=={on}|oui)checked="checked"] />
+					<label for="sauvegarder_avant_maj"><:dashboard:label_sauvegarder_avant_maj:></label>
+					<p class="explication"><:dashboard:explication_sauvegarder_avant_maj:></p>
+				</li>
+				<li class="editer editer_retention_sauvegardes">
+					<label for="retention_sauvegardes"><:dashboard:label_retention_sauvegardes:></label>
+					<input type="number" class="text" name="retention_sauvegardes" id="retention_sauvegardes" min="1" max="3650" value="[(#ENV{retention_sauvegardes})]" />
+				</li>
+				<li class="editer editer_retention_journal">
+					<label for="retention_journal"><:dashboard:label_retention_journal:></label>
+					<input type="number" class="text" name="retention_journal" id="retention_journal" min="1" max="3650" value="[(#ENV{retention_journal})]" />
+				</li>
+			</ul>
+		</fieldset>
+
+		<p class="boutons"><input type="submit" class="submit" value="<:bouton_enregistrer:>" /></p>
+	</div></form>
+	]
+</div>

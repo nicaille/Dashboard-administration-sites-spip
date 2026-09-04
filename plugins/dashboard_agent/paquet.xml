@@ -1,0 +1,37 @@
+<paquet
+	prefix="dashagent"
+	categorie="maintenance"
+	version="1.0.0"
+	etat="test"
+	compatibilite="[4.1.0;4.4.*]"
+	logo="images/dashagent-64.svg"
+	documentation="https://github.com/nicaille/Dashboard-administration-sites-spip/blob/main/docs/protocole-api.md"
+	schema="1.0.0"
+>
+
+	<nom>Dashboard : agent</nom>
+	<slogan>Expose ce site à un tableau de bord d'administration de parc SPIP</slogan>
+	<description>
+		Installe sur ce site un point d'entrée JSON signé (HMAC-SHA256) permettant à un
+		site « tour de contrôle » d'inventorier le site (version du core, plugins, versions),
+		de vider les caches, de déclencher une sauvegarde de la base et de piloter les
+		mises à jour des plugins et du core.
+	</description>
+
+	<auteur lien="https://github.com/nicaille">Nicolas Villeroy</auteur>
+	<licence lien="https://www.gnu.org/licenses/gpl-3.0.html">GPL 3</licence>
+
+	<necessite nom="SPIP" compatibilite="[4.1.0;4.4.*]" />
+
+	<utilise nom="svp" compatibilite="[3.0.0;[" />
+
+	<pipeline nom="declarer_tables_principales" inclure="base/dashagent_tables.php" />
+	<pipeline nom="declarer_tables_auxiliaires" inclure="base/dashagent_tables.php" />
+	<pipeline nom="declarer_tables_interfaces" inclure="base/dashagent_tables.php" />
+	<pipeline nom="autoriser" inclure="dashagent_autorisations.php" />
+	<pipeline nom="taches_generales_cron" inclure="dashagent_pipelines.php" />
+
+	<menu nom="configurer_dashagent" titre="dashagent:titre_configurer" parent="menu_configuration" icone="images/dashagent-16.svg" />
+
+	<install type="php" fichier="dashagent_administrations.php" />
+</paquet>

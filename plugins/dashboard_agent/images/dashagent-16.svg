@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Dashboard agent">
+	<rect x="6" y="10" width="52" height="36" rx="4" fill="none" stroke="#3874a4" stroke-width="3"/>
+	<path d="M6 20h52" stroke="#3874a4" stroke-width="3"/>
+	<circle cx="13" cy="15" r="1.8" fill="#3874a4"/>
+	<circle cx="19" cy="15" r="1.8" fill="#3874a4"/>
+	<path d="M18 34l6-6 6 8 6-12 6 10" fill="none" stroke="#7aa93c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+	<path d="M24 46v6M40 46v6M18 54h28" stroke="#3874a4" stroke-width="3" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,97 @@
+<div class="formulaire_spip formulaire_configurer formulaire_configurer_dashagent">
+
+	<h3 class="titrem"><:dashagent:titre_configurer:></h3>
+
+	[<p class="reponse_formulaire reponse_formulaire_ok">(#MESSAGE_OK)</p>]
+	[<p class="reponse_formulaire reponse_formulaire_erreur">(#MESSAGE_ERREUR)</p>]
+
+	<p class="explication"><:dashagent:explication_configurer:></p>
+
+	<p class="explication">
+		<strong><:dashagent:label_url_agent:></strong>
+		<code>[(#ENV{url_agent})]</code>
+	</p>
+
+	[(#ENV{editable})
+	<form method="post" action="#ENV{action}"><div>
+		#ACTION_FORMULAIRE{#ENV{action}}
+
+		<fieldset>
+			<legend><:dashagent:legend_appairage:></legend>
+
+			[<p class="explication">(#ENV{secret_present}|=={oui}|?{
+				'<:dashagent:secret_configure:>',
+				'<:dashagent:secret_absent:>'})</p>]
+			[<p class="explication"><:dashagent:label_empreinte:> <code>(#ENV{secret_empreinte})</code></p>]
+
+			<ul>
+				<li class="editer editer_generer">
+					<input type="checkbox" name="generer" id="generer" value="on" />
+					<label for="generer"><:dashagent:label_generer:></label>
+					<p class="explication"><:dashagent:explication_generer:></p>
+				</li>
+				<li class="editer editer_secret_clair[ (#ENV**{erreurs}|table_valeur{secret_clair}|oui)erreur]">
+					<label for="secret_clair"><:dashagent:label_secret_clair:></label>
+					[<span class="erreur_message">(#ENV**{erreurs}|table_valeur{secret_clair})</span>]
+					<input type="text" class="text" name="secret_clair" id="secret_clair" value="" autocomplete="off" />
+					<p class="explication"><:dashagent:explication_secret_clair:></p>
+				</li>
+			</ul>
+		</fieldset>
+
+		<fieldset>
+			<legend><:dashagent:legend_operations:></legend>
+			<p class="explication"><:dashagent:explication_operations:></p>
+			<ul>
+				<li class="editer editer_op_infos">
+					<input type="checkbox" name="op_infos" id="op_infos" value="on"[ (#ENV{op_infos}|=={on}|oui)checked="checked"] />
+					<label for="op_infos"><:dashagent:label_op_infos:></label>
+				</li>
+				<li class="editer editer_op_purger">
+					<input type="checkbox" name="op_purger" id="op_purger" value="on"[ (#ENV{op_purger}|=={on}|oui)checked="checked"] />
+					<label for="op_purger"><:dashagent:label_op_purger:></label>
+				</li>
+				<li class="editer editer_op_sauvegarde">
+					<input type="checkbox" name="op_sauvegarde" id="op_sauvegarde" value="on"[ (#ENV{op_sauvegarde}|=={on}|oui)checked="checked"] />
+					<label for="op_sauvegarde"><:dashagent:label_op_sauvegarde:></label>
+				</li>
+				<li class="editer editer_op_plugin_maj">
+					<input type="checkbox" name="op_plugin_maj" id="op_plugin_maj" value="on"[ (#ENV{op_plugin_maj}|=={on}|oui)checked="checked"] />
+					<label for="op_plugin_maj"><:dashagent:label_op_plugin_maj:></label>
+				</li>
+				<li class="editer editer_op_core_maj">
+					<input type="checkbox" name="op_core_maj" id="op_core_maj" value="on"[ (#ENV{op_core_maj}|=={on}|oui)checked="checked"] />
+					<label for="op_core_maj"><:dashagent:label_op_core_maj:></label>
+				</li>
+			</ul>
+		</fieldset>
+
+		<fieldset>
+			<legend><:dashagent:legend_reglages:></legend>
+			<ul>
+				<li class="editer editer_ips_autorisees[ (#ENV**{erreurs}|table_valeur{ips_autorisees}|oui)erreur]">
+					<label for="ips_autorisees"><:dashagent:label_ips:></label>
+					[<span class="erreur_message">(#ENV**{erreurs}|table_valeur{ips_autorisees})</span>]
+					<input type="text" class="text" name="ips_autorisees" id="ips_autorisees" value="[(#ENV{ips_autorisees})]" />
+					<p class="explication"><:dashagent:explication_ips:></p>
+				</li>
+				<li class="editer editer_tolerance_horloge[ (#ENV**{erreurs}|table_valeur{tolerance_horloge}|oui)erreur]">
+					<label for="tolerance_horloge"><:dashagent:label_tolerance:></label>
+					[<span class="erreur_message">(#ENV**{erreurs}|table_valeur{tolerance_horloge})</span>]
+					<input type="number" class="text" name="tolerance_horloge" id="tolerance_horloge" min="30" max="3600" value="[(#ENV{tolerance_horloge})]" />
+				</li>
+				<li class="editer editer_retention_journal">
+					<label for="retention_journal"><:dashagent:label_retention_journal:></label>
+					<input type="number" class="text" name="retention_journal" id="retention_journal" min="1" max="3650" value="[(#ENV{retention_journal})]" />
+				</li>
+				<li class="editer editer_retention_backup">
+					<label for="retention_backup"><:dashagent:label_retention_backup:></label>
+					<input type="number" class="text" name="retention_backup" id="retention_backup" min="1" max="365" value="[(#ENV{retention_backup})]" />
+				</li>
+			</ul>
+		</fieldset>
+
+		<p class="boutons"><input type="submit" class="submit" value="<:bouton_enregistrer:>" /></p>
+	</div></form>
+	]
+</div>

@@ -1,0 +1,36 @@
+<paquet
+	prefix="dashboard"
+	categorie="maintenance"
+	version="1.0.0"
+	etat="test"
+	compatibilite="[4.1.0;4.4.*]"
+	logo="images/dashboard-64.svg"
+	documentation="https://github.com/nicaille/Dashboard-administration-sites-spip/blob/main/docs/installation.md"
+	schema="1.0.0"
+>
+
+	<nom>Dashboard d'administration de sites SPIP</nom>
+	<slogan>Superviser et maintenir un parc de sites SPIP depuis un seul site</slogan>
+	<description>
+		Transforme ce site en tour de contrôle d'un parc de sites SPIP hébergés
+		n'importe où. Vue d'ensemble des versions du core et des plugins, mises à
+		jour à distance, sauvegardes de base rapatriables et purge des caches,
+		en dialoguant avec le plugin « Dashboard : agent » installé sur chaque site.
+	</description>
+
+	<auteur lien="https://github.com/nicaille">Nicolas Villeroy</auteur>
+	<licence lien="https://www.gnu.org/licenses/gpl-3.0.html">GPL 3</licence>
+
+	<necessite nom="SPIP" compatibilite="[4.1.0;4.4.*]" />
+
+	<pipeline nom="declarer_tables_objets_sql" inclure="base/dashboard_tables.php" />
+	<pipeline nom="declarer_tables_principales" inclure="base/dashboard_tables.php" />
+	<pipeline nom="declarer_tables_interfaces" inclure="base/dashboard_tables.php" />
+	<pipeline nom="autoriser" inclure="dashboard_autorisations.php" />
+	<pipeline nom="taches_generales_cron" inclure="dashboard_pipelines.php" />
+
+	<menu nom="dashboard" titre="dashboard:titre_dashboard" parent="menu_edition" icone="images/dashboard-16.svg" />
+	<menu nom="configurer_dashboard" titre="dashboard:titre_configurer" parent="menu_configuration" icone="images/dashboard-16.svg" />
+
+	<install type="php" fichier="dashboard_administrations.php" />
+</paquet>
