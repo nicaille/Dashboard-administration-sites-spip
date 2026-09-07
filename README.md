@@ -63,7 +63,7 @@ Deux suites, exécutables sans installation SPIP :
 
 ```bash
 php tests/test_protocole.php   # signature partagée, filtrage IP, validation des archives
-php tests/test_structure.php   # manifestes, pipelines, menus, actions, clefs de langue
+php tests/test_structure.php   # manifestes, pipelines, menus, actions, tables, filtres, langue
 ```
 
 La seconde attrape la classe d'erreurs qui ne se voit sinon qu'à l'installation

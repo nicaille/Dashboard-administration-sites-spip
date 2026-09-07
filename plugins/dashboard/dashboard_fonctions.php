@@ -14,6 +14,48 @@ include_spip('inc/dashboard_operations');
 include_spip('inc/dashboard_versions');
 
 /**
+ * Les tables du plugin sont-elles réellement présentes en base ?
+ *
+ * Une activation ratée peut laisser la version enregistrée en meta sans que les
+ * tables aient été créées. Plutôt que de laisser les boucles échouer sur une
+ * erreur SQL brute, les pages testent d'abord ce point et expliquent quoi faire.
+ *
+ * @filtre
+ * @return bool
+ */
+function dashboard_tables_presentes($rien = '') {
+	static $presentes = null;
+
+	if ($presentes === null) {
+		$liste = sql_alltable('%');
+		$liste = is_array($liste) ? array_flip($liste) : [];
+		$presentes = true;
+		foreach (['spip_dashboard_sites', 'spip_dashboard_plugins', 'spip_dashboard_journal', 'spip_dashboard_sauvegardes'] as $table) {
+			$presentes = $presentes && isset($liste[$table]);
+		}
+	}
+
+	return $presentes;
+}
+
+/**
+ * Liste des tables du plugin absentes de la base, pour affichage.
+ *
+ * @filtre
+ * @return string
+ */
+function dashboard_tables_absentes($rien = '') {
+	include_spip('dashboard_administrations');
+	include_spip('base/dashboard_tables');
+
+	if (!function_exists('dashboard_tables_manquantes') || !function_exists('dashboard_descriptions_tables')) {
+		return '';
+	}
+
+	return implode(', ', dashboard_tables_manquantes(array_keys(dashboard_descriptions_tables())));
+}
+
+/**
  * Extrait une valeur de l'inventaire JSON mémorisé pour un site.
  *
  * Exemple : `[(#INFOS|dashboard_info{serveur/php})]`
@@ -106,6 +148,10 @@ function dashboard_libelle_operation($operation) {
  * @return array
  */
 function dashboard_synthese($rien = '') {
+	if (!dashboard_tables_presentes()) {
+		return ['sites' => 0, 'supervises' => 0, 'en_erreur' => 0, 'core_a_jour' => 0, 'core_retard' => 0, 'plugins_maj' => 0];
+	}
+
 	$synthese = [
 		'sites'        => (int) sql_countsel('spip_dashboard_sites', 'statut != ' . sql_quote('poubelle')),
 		'supervises'   => (int) sql_countsel('spip_dashboard_sites', 'statut = ' . sql_quote('publie')),

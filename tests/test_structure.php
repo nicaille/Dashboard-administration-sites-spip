@@ -195,6 +195,135 @@ foreach ($plugins as $plugin) {
 	}
 }
 
+echo "\n== Cohérence installation / déclaration des tables ==\n";
+
+foreach ($plugins as $plugin) {
+	$nom_court = basename($plugin);
+	$xml       = simplexml_load_file($plugin . '/paquet.xml');
+	$prefixe   = (string) $xml['prefix'];
+	$schema    = (string) $xml['schema'];
+	$administrations = $plugin . '/' . $prefixe . '_administrations.php';
+	if ($schema === '' || !is_file($administrations)) {
+		continue;
+	}
+	$install = file_get_contents($administrations);
+
+	$declarees = [];
+	$base = '';
+	foreach (glob($plugin . '/base/*.php') as $fichier) {
+		$source = file_get_contents($fichier);
+		$base .= $source;
+		preg_match_all('/\$tables\[\'(spip_[a-z0-9_]+)\'\]/', $source, $trouves);
+		$declarees = array_merge($declarees, $trouves[1]);
+	}
+	$declarees = array_unique($declarees);
+	verifier("$nom_court : des tables sont déclarées", (bool) $declarees);
+
+	// Les descripteurs doivent être accessibles sans passer par le registre de
+	// SPIP : c'est ce qui permet à l'installation de se vérifier elle-même.
+	verifier(
+		"$nom_court : {$prefixe}_descriptions_tables() expose les descripteurs",
+		strpos($base, "function {$prefixe}_descriptions_tables(") !== false
+	);
+	verifier(
+		"$nom_court : l’installation appelle {$prefixe}_creer_tables",
+		strpos($install, "{$prefixe}_creer_tables") !== false
+	);
+	verifier(
+		"$nom_court : la création contrôle son résultat",
+		strpos($install, "{$prefixe}_tables_manquantes(") !== false
+	);
+
+	foreach ($declarees as $table) {
+		verifier("$nom_court : $table supprimée par la désinstallation", strpos($install, "sql_drop_table('$table')") !== false);
+
+		// Sans correspondance nom de boucle -> table, le compilateur répond
+		// « Table SQL inconnue » alors que la table existe bel et bien. Seules
+		// les tables réellement parcourues par un squelette sont concernées.
+		$boucle = preg_replace('/^spip_/', '', $table);
+		$bouclee = false;
+		foreach (fichiers($plugin, ['html']) as $squelette) {
+			if (preg_match('/<BOUCLE[a-z0-9_]*\\(' . strtoupper($boucle) . '\\)/i', file_get_contents($squelette))) {
+				$bouclee = true;
+				break;
+			}
+		}
+		if ($bouclee) {
+			verifier(
+				"$nom_court : <BOUCLE(" . strtoupper($boucle) . ")> associée à $table",
+				strpos($base, "['table_des_tables']['$boucle']") !== false
+			);
+		}
+	}
+
+	// Une table déclarée seulement comme objet éditorial n'est pas créée :
+	// maj_tables() ne consulte pas ce registre-là.
+	if (preg_match_all('/\\$tables\\[\'(spip_[a-z0-9_]+)\'\\]/', $base, $t)
+		&& preg_match('/function ' . $prefixe . '_declarer_tables_objets_sql\\(.*?\\n}/s', $base, $bloc)
+	) {
+		preg_match_all('/\\$tables\\[\'(spip_[a-z0-9_]+)\'\\]/', $bloc[0], $objets);
+		preg_match('/function ' . $prefixe . '_declarer_tables_principales\\(.*?\\n}/s', $base, $bloc_principales);
+		foreach (array_unique($objets[1]) as $table) {
+			verifier(
+				"$nom_court : $table déclarée aussi comme table principale",
+				!empty($bloc_principales[0]) && strpos($bloc_principales[0], $table) !== false
+			);
+		}
+	}
+
+	// Créer des tables sans réinitialiser les caches laisse le compilateur sur
+	// une vue périmée du schéma.
+	verifier(
+		"$nom_court : la création réinitialise les caches de schéma",
+		strpos($install, "charger_fonction('trouver_table', 'base'") !== false
+	);
+
+	// « create » n'étant jamais rejouée, il faut une étape versionnée au niveau
+	// du schéma pour rattraper une installation restée incomplète.
+	preg_match_all('/\$maj\[\'([0-9]+\.[0-9]+\.[0-9]+)\'\]/', $install, $trouves);
+	$etapes = array_unique($trouves[1]);
+	verifier("$nom_court : au moins une étape de migration versionnée", (bool) $etapes);
+	if ($etapes) {
+		usort($etapes, 'version_compare');
+		$plus_haute = end($etapes);
+		verifier("$nom_court : schema=$schema aligné sur la plus haute étape ($plus_haute)", $schema === $plus_haute);
+	}
+
+	// Marqueur de dernière modification attendu par SPIP sur toute table gérée.
+	foreach (glob($plugin . '/base/*.php') as $fichier) {
+		$source = file_get_contents($fichier);
+		foreach ($declarees as $table) {
+			$position = strpos($source, "\$tables['$table']");
+			if ($position === false) {
+				continue;
+			}
+			$suite = substr($source, $position, 3000);
+			verifier("$nom_court : $table porte une colonne maj TIMESTAMP", strpos($suite, "'maj'") !== false);
+		}
+	}
+}
+
+echo "\n== Filtres appelés par les squelettes ==\n";
+
+foreach ($plugins as $plugin) {
+	$prefixe = (string) simplexml_load_file($plugin . '/paquet.xml')['prefix'];
+	$fonctions = $plugin . '/' . $prefixe . '_fonctions.php';
+	$disponibles = '';
+	foreach (array_merge(glob($plugin . '/*_fonctions.php'), glob($plugin . '/inc/*.php')) as $fichier) {
+		$disponibles .= file_get_contents($fichier);
+	}
+	foreach (fichiers($plugin, ['html']) as $squelette) {
+		$affiche = str_replace($plugin . '/', '', $squelette);
+		preg_match_all('/\|(' . $prefixe . '_[a-z0-9_]+)/', file_get_contents($squelette), $trouves);
+		foreach (array_unique($trouves[1]) as $filtre) {
+			verifier("$affiche : filtre |$filtre défini", strpos($disponibles, "function $filtre(") !== false);
+		}
+	}
+	if (glob($plugin . '/*_fonctions.php')) {
+		verifier(basename($plugin) . " : {$prefixe}_fonctions.php chargé automatiquement", is_file($fonctions));
+	}
+}
+
 echo "\n== Clefs de langue référencées ==\n";
 
 $modules = [];

@@ -30,6 +30,7 @@ function dashagent_declarer_tables_principales($tables) {
 			'duree'                => 'int(11) DEFAULT 0 NOT NULL',
 			'message'              => "text DEFAULT '' NOT NULL",
 			'detail'               => "mediumtext DEFAULT '' NOT NULL",
+			'maj'                  => 'TIMESTAMP',
 		],
 		'key' => [
 			'PRIMARY KEY'   => 'id_dashagent_journal',
@@ -57,6 +58,7 @@ function dashagent_declarer_tables_auxiliaires($tables) {
 		'field' => [
 			'nonce' => "varchar(64) DEFAULT '' NOT NULL",
 			'date'  => "datetime DEFAULT '0000-00-00 00:00:00' NOT NULL",
+			'maj'   => 'TIMESTAMP',
 		],
 		'key' => [
 			'PRIMARY KEY' => 'nonce',
@@ -80,4 +82,17 @@ function dashagent_declarer_tables_interfaces($interfaces) {
 	$interfaces['table_des_tables']['dashagent_journal'] = 'dashagent_journal';
 
 	return $interfaces;
+}
+
+/**
+ * Descripteurs de toutes les tables de l'agent, indexés par nom de table.
+ *
+ * @see dashboard_descriptions_tables()
+ * @return array
+ */
+function dashagent_descriptions_tables() {
+	return array_merge(
+		dashagent_declarer_tables_principales([]),
+		dashagent_declarer_tables_auxiliaires([])
+	);
 }

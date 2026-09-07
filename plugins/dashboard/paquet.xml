@@ -1,10 +1,10 @@
 <paquet
 	prefix="dashboard"
 	categorie="maintenance"
-	version="1.0.0"
+	version="1.0.4"
 	etat="test"
 	compatibilite="[4.1.0;4.*]"
-	schema="1.0.0"
+	schema="1.0.4"
 	logo="prive/themes/spip/images/dashboard-64.svg"
 	documentation="https://github.com/nicaille/Dashboard-administration-sites-spip/blob/main/docs/installation.md"
 	developpement="https://github.com/nicaille/Dashboard-administration-sites-spip"
