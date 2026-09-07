@@ -139,21 +139,62 @@ verifier(
 	'dépôt sans conteneur d’archives : pas d’URL',
 	dashagent_url_archive_depot(['url_archives' => '', 'nom_archive' => 'gis.zip']) === ''
 );
+// Le `type` du dépôt décrit ses sources, pas le transport de l'archive :
+// choisir_teleporteur() retourne « http » par défaut, y compris pour un dépôt
+// git ou svn. Filtrer là-dessus écarterait plugins.spip.net.
 verifier(
-	'dépôt git : pas d’archive téléchargeable',
+	'dépôt git : archive tout de même servie en http',
 	dashagent_url_archive_depot(['url_archives' => 'https://exemple.org/zips',
-		'nom_archive' => 'gis.zip', 'type_depot' => 'git']) === ''
+		'nom_archive' => 'gis.zip', 'type_depot' => 'git']) === 'https://exemple.org/zips/gis.zip'
 );
 verifier(
-	'dépôt svn : pas d’archive téléchargeable',
+	'dépôt svn : archive tout de même servie en http',
 	dashagent_url_archive_depot(['url_archives' => 'https://exemple.org/zips',
-		'nom_archive' => 'gis.zip', 'type_depot' => 'svn']) === ''
+		'nom_archive' => 'gis.zip', 'type_depot' => 'svn']) === 'https://exemple.org/zips/gis.zip'
 );
 verifier(
-	'type de dépôt non renseigné : traité comme http',
+	'type de dépôt non renseigné : sans effet',
 	dashagent_url_archive_depot(['url_archives' => 'https://exemple.org/zips',
-		'nom_archive' => 'gis.zip']) !== ''
+		'nom_archive' => 'gis.zip']) === 'https://exemple.org/zips/gis.zip'
 );
+
+echo "\n== Inventaire des plugins ==\n";
+
+// SPIP range dans la meta « plugin » les capacités fournies — extensions PHP,
+// bibliothèques — sous la forme procure:xxx. Ce ne sont pas des plugins.
+verifier('plugin réel retenu', dashagent_est_un_plugin(
+	['dir' => 'dashboard/', 'dir_type' => '_DIR_PLUGINS']));
+verifier('plugin livré avec SPIP retenu', dashagent_est_un_plugin(
+	['dir' => 'medias', 'dir_type' => '_DIR_PLUGINS_DIST']));
+verifier('extension PHP écartée', !dashagent_est_un_plugin(
+	['dir' => 'procure:php:gd', 'dir_type' => '_DIR_RESTREINT']));
+verifier('capacité fournie par un plugin écartée', !dashagent_est_un_plugin(
+	['dir' => 'compresseur/procure:csstidy', 'dir_type' => '_DIR_PLUGINS_DIST']));
+verifier('core SPIP lui-même écarté', !dashagent_est_un_plugin(
+	['dir' => '', 'dir_type' => '_DIR_RESTREINT']));
+
+echo "\n== Versions normalisées par SVP ==\n";
+
+verifier('004.003.003 redevient 4.3.3', dashagent_denormaliser_version('004.003.003') === '4.3.3',
+	dashagent_denormaliser_version('004.003.003'));
+verifier('001.002.000-dev redevient 1.2.0-dev',
+	dashagent_denormaliser_version('001.002.000-dev') === '1.2.0-dev',
+	dashagent_denormaliser_version('001.002.000-dev'));
+verifier('une version déjà lisible est laissée telle quelle',
+	dashagent_denormaliser_version('4.3.3') === '4.3.3');
+verifier('version vide sans effet', dashagent_denormaliser_version('') === '');
+
+echo "\n== Noms de plugins multilingues ==\n";
+
+$multi = '[fr]Le Couteau Suisse[en]Swiss Knife[es]La Navaja Suiza';
+verifier('langue du site retenue', dashagent_texte_multi($multi, 'fr') === 'Le Couteau Suisse',
+	dashagent_texte_multi($multi, 'fr'));
+verifier('autre langue retenue', dashagent_texte_multi($multi, 'es') === 'La Navaja Suiza');
+verifier('repli sur le français si la langue manque',
+	dashagent_texte_multi($multi, 'de') === 'Le Couteau Suisse');
+verifier('nom simple laissé intact', dashagent_texte_multi('GIS') === 'GIS');
+verifier('crochet isolé sans balise de langue laissé intact',
+	dashagent_texte_multi('Plugin [beta]') === 'Plugin [beta]');
 
 echo "\n== Extraction ZIP : refus des chemins hors répertoire ==\n";
 

@@ -34,6 +34,30 @@ async function erreurs(page) {
 	return pb;
 }
 
+/**
+ * Traque ce qui ne devrait jamais atteindre l'écran : chaîne de langue brute,
+ * bloc de squelette non compilé, nom multilingue, version normalisée par SVP,
+ * extension PHP prise pour un plugin.
+ */
+async function artefacts(page) {
+	const t = await page.locator('body').innerText();
+	const trouves = [];
+	const regles = [
+		[/<:[a-z]+:[a-z0-9_]+:>/, 'chaîne de langue non interprétée'],
+		[/\[\(#?[a-zA-Z0-9_|={}\s]*\)/, 'bloc de squelette non compilé'],
+		[/\[[a-z]{2}\][A-ZÀ-Ÿa-z]/, 'nom multilingue non résolu'],
+		[/\b0\d\d\.\d/, 'version normalisée par SVP'],
+		[/\bPHP:[A-Z]/, 'extension PHP listée comme plugin'],
+	];
+	for (const [motif, libelle] of regles) {
+		const m = t.match(motif);
+		if (m) {
+			trouves.push(libelle + ' (' + m[0].slice(0, 40) + ')');
+		}
+	}
+	return trouves;
+}
+
 async function ouvrir(page, titre, url) {
 	await page.goto(base + url, { waitUntil: 'domcontentloaded' });
 	const pb = await erreurs(page);
@@ -176,6 +200,18 @@ const actifs = execFileSync('php', ['-r',
 	`$db=new SQLite3(getenv('BDD'));$k=array_keys(unserialize($db->querySingle('SELECT valeur FROM spip_meta WHERE nom="plugin"')));echo implode(',',array_intersect(['DASHBOARD','DASHAGENT','ZZZTEST'],$k));`,
 ], { env: { ...process.env, BDD: bdd } }).toString();
 dit('aucun plugin désactivé par la mise à jour', actifs.split(',').filter(Boolean).length === 3, actifs);
+
+console.log('\n### Rendu des pages');
+for (const [nom, url] of [
+	['parc', '/ecrire/?exec=dashboard'],
+	['fiche du site', '/ecrire/?exec=dashboard_site&id_dashboard_site=1'],
+	['configuration', '/ecrire/?exec=configurer_dashboard'],
+	['configuration de l’agent', '/ecrire/?exec=configurer_dashagent'],
+]) {
+	await page.goto(base + url, { waitUntil: 'domcontentloaded' });
+	const trouves = await artefacts(page);
+	dit(`${nom} : rien d’étranger à l’écran`, trouves.length === 0, trouves.join(' | '));
+}
 
 console.log('\n### Restauration du dump');
 try {

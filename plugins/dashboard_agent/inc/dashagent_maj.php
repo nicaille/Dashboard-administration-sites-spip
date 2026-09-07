@@ -90,7 +90,8 @@ function dashagent_plugin_preflight($args) {
 		'plugin'      => $plugin,
 		'strategies'  => $strategies,
 		'inscriptible' => is_writable($plugin['chemin']) && is_writable(dirname(rtrim($plugin['chemin'], '/'))),
-		'archive_svp' => dashagent_plugin_url_svp($plugin['prefixe']),
+		'archive_svp' => dashagent_plugin_url_svp($plugin['prefixe'], $diagnostic_svp),
+		'diagnostic_svp' => $diagnostic_svp,
 	];
 }
 
@@ -121,6 +122,7 @@ function dashagent_plugin_maj($args) {
 			$strategie = 'git';
 		} else {
 			$url = (string) $preflight['archive_svp'];
+			$diagnostic = $preflight['diagnostic_svp'] ?? [];
 			$strategie = 'zip';
 		}
 	}
@@ -129,9 +131,17 @@ function dashagent_plugin_maj($args) {
 		$resultat = dashagent_plugin_maj_git($plugin);
 	} elseif ($strategie === 'zip') {
 		if ($url === '') {
-			return ['ok' => false, 'erreur' => 'Aucune URL d’archive : ni fournie par le tableau de bord,'
-				. ' ni trouvée dans les dépôts SVP de ce site (le plugin y est-il référencé, et ce dépôt'
-				. ' sert-il bien des archives zip ?)'];
+			$diag = $diagnostic ?? [];
+			$detail = 'aucun paquet distant pour ce préfixe dans les dépôts SVP du site';
+			if (!empty($diag['paquets_distants'])) {
+				$detail = $diag['paquets_distants'] . ' paquet(s) distant(s) trouvé(s), mais '
+					. ($diag['sans_nom_archive'] ? $diag['sans_nom_archive'] . ' sans nom d’archive' : '')
+					. ($diag['sans_nom_archive'] && $diag['sans_conteneur_archives'] ? ' et ' : '')
+					. ($diag['sans_conteneur_archives'] ? $diag['sans_conteneur_archives'] . ' dont le dépôt n’a pas d’URL d’archives' : '')
+					. ' — relancez la mise à jour des dépôts dans SVP';
+			}
+
+			return ['ok' => false, 'erreur' => 'Aucune URL d’archive : ' . $detail];
 		}
 		$resultat = dashagent_plugin_maj_zip($plugin, $url, (string) ($args['sha256'] ?? ''));
 	} else {
@@ -309,9 +319,11 @@ function dashagent_remplacer_repertoire($cible, $source) {
  * URL d'archive d'un plugin telle que connue par les dépôts SVP locaux.
  *
  * @param string $prefixe
+ * @param array|null $diagnostic Renseigné avec le détail de la recherche
  * @return string
  */
-function dashagent_plugin_url_svp($prefixe) {
+function dashagent_plugin_url_svp($prefixe, &$diagnostic = null) {
+	$diagnostic = ['paquets_distants' => 0, 'sans_conteneur_archives' => 0, 'sans_nom_archive' => 0];
 	include_spip('inc/dashagent_infos');
 	include_spip('inc/plugin');
 
@@ -325,7 +337,6 @@ function dashagent_plugin_url_svp($prefixe) {
 			'pa.nom_archive AS nom_archive',
 			'pa.src_archive AS src_archive',
 			'de.url_archives AS url_archives',
-			'de.type AS type_depot',
 		],
 		['spip_paquets AS pa', 'spip_plugins AS pl', 'spip_depots AS de'],
 		['pa.id_plugin = pl.id_plugin', 'pa.id_depot = de.id_depot', 'pa.id_depot > 0', 'pl.prefixe = ' . sql_quote($prefixe)],
@@ -341,7 +352,18 @@ function dashagent_plugin_url_svp($prefixe) {
 	}
 
 	$meilleure = ['version' => '', 'url' => ''];
+	$vus = 0;
+	$sans_conteneur = 0;
+	$sans_archive = 0;
+
 	while ($ligne = sql_fetch($res, '')) {
+		$vus++;
+		if (trim((string) $ligne['url_archives']) === '') {
+			$sans_conteneur++;
+		}
+		if (trim((string) $ligne['nom_archive']) === '') {
+			$sans_archive++;
+		}
 		$url = dashagent_url_archive_depot($ligne);
 		if ($url === '') {
 			continue;
@@ -350,6 +372,14 @@ function dashagent_plugin_url_svp($prefixe) {
 			$meilleure = ['version' => (string) $ligne['version'], 'url' => $url];
 		}
 	}
+
+	// Dit pourquoi la recherche a échoué : sans cela, impossible de savoir si le
+	// plugin est absent des dépôts ou si le dépôt lui-même est incomplet.
+	$diagnostic = [
+		'paquets_distants' => $vus,
+		'sans_conteneur_archives' => $sans_conteneur,
+		'sans_nom_archive' => $sans_archive,
+	];
 
 	return $meilleure['url'];
 }
@@ -361,21 +391,18 @@ function dashagent_plugin_url_svp($prefixe) {
  * `src_archive`, qui désigne selon les cas un chemin local (`auto/prefixe/version`)
  * ou l'adresse d'un dépôt git ou svn, jamais un zip téléchargeable.
  *
- * @param array $ligne Colonnes url_archives, nom_archive, type_depot
+ * @param array $ligne Colonnes url_archives et nom_archive du paquet distant
  * @return string Chaîne vide si ce dépôt ne sert pas d'archives téléchargeables
  */
 function dashagent_url_archive_depot($ligne) {
 	$base    = trim((string) ($ligne['url_archives'] ?? ''));
 	$archive = trim((string) ($ligne['nom_archive'] ?? ''));
 
+	// Le `type` du dépôt décrit son dépôt de sources (svn, git…), pas le moyen
+	// de récupérer l'archive : `choisir_teleporteur()` retourne « http » par
+	// défaut, et le zip reste servi depuis url_archives. Filtrer sur ce type
+	// écarterait la plupart des dépôts, plugins.spip.net compris.
 	if ($base === '' || $archive === '') {
-		return '';
-	}
-
-	// Les dépôts svn ou git ne distribuent pas de zip : leur mise à jour passe
-	// par un client dédié, hors du champ de cet agent.
-	$type = strtolower((string) ($ligne['type_depot'] ?? ''));
-	if ($type !== '' && !in_array($type, ['http', 'https', 'zip', ''], true)) {
 		return '';
 	}
 
