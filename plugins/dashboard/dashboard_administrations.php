@@ -10,6 +10,8 @@ if (!defined('_ECRIRE_INC_VERSION')) {
 }
 
 /**
+ * Création / mise à jour du schéma.
+ *
  * @param string $nom_meta_base_version
  * @param string $version_cible
  * @return void
@@ -17,25 +19,16 @@ if (!defined('_ECRIRE_INC_VERSION')) {
 function dashboard_upgrade($nom_meta_base_version, $version_cible) {
 	$maj = [];
 
-	$tables = [
-		'spip_dashboard_sites',
-		'spip_dashboard_plugins',
-		'spip_dashboard_journal',
-		'spip_dashboard_sauvegardes',
-	];
-
 	$maj['create'] = [
-		['maj_tables', $tables],
+		['dashboard_creer_tables'],
 		['dashboard_initialiser_configuration'],
 	];
 
-	// Rattrapage : une première activation avec un paquet.xml invalide pouvait
-	// enregistrer la version en meta sans que les tables soient créées, et
-	// l'étape « create » n'est jamais rejouée une fois la meta présente.
-	// maj_tables() n'ajoutant que ce qui manque, cette étape est sans effet sur
-	// une installation saine.
-	$maj['1.0.1'] = [
-		['maj_tables', $tables],
+	// L'étape « create » n'est jamais rejouée une fois la version enregistrée en
+	// meta. Cette étape versionnée rattrape les installations où les tables
+	// n'ont pas été créées ; elle est sans effet quand tout est déjà en place.
+	$maj['1.0.2'] = [
+		['dashboard_creer_tables'],
 		['dashboard_initialiser_configuration'],
 	];
 
@@ -44,6 +37,8 @@ function dashboard_upgrade($nom_meta_base_version, $version_cible) {
 }
 
 /**
+ * Suppression complète des données du plugin.
+ *
  * @param string $nom_meta_base_version
  * @return void
  */
@@ -55,6 +50,99 @@ function dashboard_vider_tables($nom_meta_base_version) {
 
 	effacer_meta('dashboard');
 	effacer_meta($nom_meta_base_version);
+}
+
+/**
+ * Crée les tables du plugin, et vérifie qu'elles existent réellement ensuite.
+ *
+ * `maj_tables()` ne traite que les tables présentes dans le registre de SPIP au
+ * moment de l'appel ; si le plugin vient d'être activé et que ce registre n'est
+ * pas encore peuplé, elle ne fait rien — sans le signaler. On repasse donc
+ * derrière avec les descripteurs du plugin lui-même, qui ne dépendent de rien.
+ *
+ * @return array Tables encore absentes après coup (vide si tout va bien)
+ */
+function dashboard_creer_tables() {
+	include_spip('base/create');
+	include_spip('base/dashboard_tables');
+
+	$descriptions = dashboard_descriptions_tables();
+	$noms = array_keys($descriptions);
+
+	if (function_exists('maj_tables')) {
+		maj_tables($noms);
+	}
+
+	$manquantes = dashboard_tables_manquantes($noms);
+	foreach ($manquantes as $nom) {
+		dashboard_creer_table($nom, $descriptions[$nom]);
+	}
+
+	$restantes = dashboard_tables_manquantes($noms);
+
+	if ($restantes) {
+		spip_log('installation : tables toujours absentes après création : ' . implode(', ', $restantes), 'dashboard');
+	} elseif ($manquantes) {
+		spip_log('installation : tables créées directement depuis les descripteurs : ' . implode(', ', $manquantes), 'dashboard');
+	}
+
+	return $restantes;
+}
+
+/**
+ * Crée une table à partir de son descripteur.
+ *
+ * @param string $nom
+ * @param array $description
+ * @return void
+ */
+function dashboard_creer_table($nom, $description) {
+	if (!function_exists('sql_create') || empty($description['field'])) {
+		return;
+	}
+
+	sql_create(
+		$nom,
+		$description['field'],
+		$description['key'] ?? [],
+		dashboard_table_autoincrement($description),
+		false,
+		'',
+		'continue'
+	);
+}
+
+/**
+ * La clef primaire de cette table est-elle un identifiant auto-incrémenté ?
+ *
+ * @param array $description
+ * @return bool
+ */
+function dashboard_table_autoincrement($description) {
+	$primaire = $description['key']['PRIMARY KEY'] ?? '';
+
+	// Une clef composite ou textuelle ne s'auto-incrémente pas.
+	return (strpos($primaire, ',') === false) && (strncmp($primaire, 'id_', 3) === 0);
+}
+
+/**
+ * Parmi ces tables, lesquelles n'existent pas en base ?
+ *
+ * @param array $noms
+ * @return array
+ */
+function dashboard_tables_manquantes($noms) {
+	$existantes = sql_alltable('%');
+	$existantes = is_array($existantes) ? array_flip($existantes) : [];
+
+	$manquantes = [];
+	foreach ($noms as $nom) {
+		if (!isset($existantes[$nom])) {
+			$manquantes[] = $nom;
+		}
+	}
+
+	return $manquantes;
 }
 
 /**

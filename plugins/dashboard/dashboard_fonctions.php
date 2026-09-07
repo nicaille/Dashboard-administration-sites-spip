@@ -39,6 +39,23 @@ function dashboard_tables_presentes($rien = '') {
 }
 
 /**
+ * Liste des tables du plugin absentes de la base, pour affichage.
+ *
+ * @filtre
+ * @return string
+ */
+function dashboard_tables_absentes($rien = '') {
+	include_spip('dashboard_administrations');
+	include_spip('base/dashboard_tables');
+
+	if (!function_exists('dashboard_tables_manquantes') || !function_exists('dashboard_descriptions_tables')) {
+		return '';
+	}
+
+	return implode(', ', dashboard_tables_manquantes(array_keys(dashboard_descriptions_tables())));
+}
+
+/**
  * Extrait une valeur de l'inventaire JSON mémorisé pour un site.
  *
  * Exemple : `[(#INFOS|dashboard_info{serveur/php})]`

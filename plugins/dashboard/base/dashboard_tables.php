@@ -127,6 +127,7 @@ function dashboard_declarer_tables_principales($tables) {
 			'detail'               => "mediumtext DEFAULT '' NOT NULL",
 			'duree'                => 'int(11) DEFAULT 0 NOT NULL',
 			'date'                 => "datetime DEFAULT '0000-00-00 00:00:00' NOT NULL",
+			'maj'                  => 'TIMESTAMP',
 		],
 		'key' => [
 			'PRIMARY KEY'           => 'id_dashboard_journal',
@@ -146,6 +147,7 @@ function dashboard_declarer_tables_principales($tables) {
 			'sha256'                  => "varchar(64) DEFAULT '' NOT NULL",
 			'statut'                  => "varchar(16) DEFAULT 'distante' NOT NULL",
 			'date'                    => "datetime DEFAULT '0000-00-00 00:00:00' NOT NULL",
+			'maj'                     => 'TIMESTAMP',
 		],
 		'key' => [
 			'PRIMARY KEY'           => 'id_dashboard_sauvegarde',
@@ -171,4 +173,20 @@ function dashboard_declarer_tables_interfaces($interfaces) {
 	$interfaces['table_des_tables']['dashboard_sauvegardes'] = 'dashboard_sauvegardes';
 
 	return $interfaces;
+}
+
+/**
+ * Descripteurs de toutes les tables du plugin, indexés par nom de table.
+ *
+ * Les fonctions de pipeline sont appelées directement, sur un tableau vide :
+ * l'installation dispose ainsi des descripteurs sans dépendre de l'état du
+ * registre de tables de SPIP au moment où elle s'exécute.
+ *
+ * @return array
+ */
+function dashboard_descriptions_tables() {
+	return array_merge(
+		dashboard_declarer_tables_objets_sql([]),
+		dashboard_declarer_tables_principales([])
+	);
 }

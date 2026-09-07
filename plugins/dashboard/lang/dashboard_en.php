@@ -15,6 +15,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'action_purger'            => 'Clear',
 	'action_sauvegarder'       => 'Back up the database',
 	'action_sauvegarder_legere' => 'Back up without statistics',
+	'action_installer'         => 'Create the tables now',
 	'action_supprimer_site'    => 'Remove this site from the fleet',
 	'action_sync'              => 'Synchronise',
 	'action_telecharger'       => 'Download',
@@ -49,6 +50,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'derniere_erreur' => 'Last error:',
 
 	// E
+	'erreur_non_autorise'      => 'Operation restricted to webmasters.',
 	'erreur_secret_court'      => 'The shared secret must be at least @min@ characters long.',
 	'erreur_secret_obligatoire' => 'Provide the agent secret, or ask for a new one to be generated.',
 	'erreur_timeout'           => 'The timeout must be between 5 and 300 seconds.',
@@ -65,7 +67,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'explication_secret_clair' => 'Paste here the secret generated on the managed site. It is never displayed again.',
 	'explication_sync_lot'     => 'How many sites are polled on each cron pass. Least recently synchronised sites go first.',
 	'explication_timeout_long' => 'Applies to backups and upgrades, which can take several minutes.',
-	'explication_tables_absentes' => 'This plugin’s tables do not exist in the database: its installation did not complete. Uninstall the plugin from “Configuration → Manage plugins” (uninstall, not just deactivate), then activate it again: the tables will be created.',
+	'explication_tables_absentes' => 'This plugin’s tables do not exist in the database: its installation did not complete. The button below creates them directly.',
 	'explication_url_agent'    => 'Entry point of the "Dashboard: agent" plugin on the managed site, shown on its settings page.',
 	'explication_versions_manuelles' => 'One line per branch, formatted <code>4.2 = 4.2.16</code>. These values take precedence over the official archive index.',
 
@@ -73,6 +75,8 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'icone_creer_site'    => 'Add a site to the fleet',
 	'icone_modifier_site' => 'Edit this site',
 	'info_1_site'         => 'One managed site',
+	'installation_echouee' => 'Could not create: @tables@. Check SPIP’s log (tmp/log/dashboard.log) and the SQL user’s privileges.',
+	'installation_reussie' => 'Plugin tables created.',
 	'info_aucun_site'     => 'No managed site',
 	'info_nb_sites'       => '@nb@ managed sites',
 
@@ -157,6 +161,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 
 	// T
 	'titre_configurer'   => 'Dashboard: settings',
+	'tables_manquantes'  => 'Missing tables:',
 	'titre_tables_absentes' => 'Plugin tables missing',
 	'titre_caches'       => 'Caches',
 	'titre_core_maj'     => 'SPIP core upgrade',

@@ -15,6 +15,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'action_purger'            => 'Vider',
 	'action_sauvegarder'       => 'Sauvegarder la base',
 	'action_sauvegarder_legere' => 'Sauvegarder sans les statistiques',
+	'action_installer'         => 'Créer les tables maintenant',
 	'action_supprimer_site'    => 'Retirer ce site du parc',
 	'action_sync'              => 'Synchroniser',
 	'action_telecharger'       => 'Télécharger',
@@ -49,6 +50,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'derniere_erreur' => 'Dernière erreur :',
 
 	// E
+	'erreur_non_autorise'      => 'Opération réservée aux webmestres.',
 	'erreur_secret_court'      => 'Le secret doit faire au moins @min@ caractères.',
 	'erreur_secret_obligatoire' => 'Renseignez le secret de l’agent, ou demandez la génération d’un nouveau secret.',
 	'erreur_timeout'           => 'Le délai doit être compris entre 5 et 300 secondes.',
@@ -65,7 +67,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'explication_secret_clair' => 'Collez ici le secret généré sur le site géré. Il n’est jamais réaffiché ensuite.',
 	'explication_sync_lot'     => 'Nombre de sites interrogés à chaque passage du cron. Les sites les moins récemment synchronisés passent en premier.',
 	'explication_timeout_long' => 'S’applique aux sauvegardes et aux mises à jour, qui peuvent durer plusieurs minutes.',
-	'explication_tables_absentes' => 'Les tables de ce plugin n’existent pas en base : son installation ne s’est pas terminée. Désinstallez le plugin depuis « Configuration → Gestion des plugins » (désinstaller, pas seulement désactiver), puis réactivez-le : les tables seront créées.',
+	'explication_tables_absentes' => 'Les tables de ce plugin n’existent pas en base : son installation ne s’est pas terminée. Le bouton ci-dessous les crée directement.',
 	'explication_url_agent'    => 'Point d’entrée du plugin « Dashboard : agent » sur le site géré, affiché sur sa page de configuration.',
 	'explication_versions_manuelles' => 'Une ligne par branche, au format <code>4.2 = 4.2.16</code>. Ces valeurs priment sur l’index des archives officielles.',
 
@@ -73,6 +75,8 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'icone_creer_site'    => 'Ajouter un site au parc',
 	'icone_modifier_site' => 'Modifier ce site',
 	'info_1_site'         => 'Un site géré',
+	'installation_echouee' => 'Création impossible pour : @tables@. Consultez le journal de SPIP (tmp/log/dashboard.log) et vérifiez les droits de l’utilisateur SQL.',
+	'installation_reussie' => 'Tables du plugin créées.',
 	'info_aucun_site'     => 'Aucun site géré',
 	'info_nb_sites'       => '@nb@ sites gérés',
 
@@ -157,6 +161,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 
 	// T
 	'titre_configurer'   => 'Dashboard : configuration',
+	'tables_manquantes'  => 'Tables manquantes :',
 	'titre_tables_absentes' => 'Tables du plugin absentes',
 	'titre_caches'       => 'Caches',
 	'titre_core_maj'     => 'Mise à jour du core SPIP',

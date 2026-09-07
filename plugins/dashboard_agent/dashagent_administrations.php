@@ -19,17 +19,15 @@ if (!defined('_ECRIRE_INC_VERSION')) {
 function dashagent_upgrade($nom_meta_base_version, $version_cible) {
 	$maj = [];
 
-	$tables = ['spip_dashagent_journal', 'spip_dashagent_nonces'];
-
 	$maj['create'] = [
-		['maj_tables', $tables],
+		['dashagent_creer_tables'],
 		['dashagent_initialiser_configuration'],
 	];
 
-	// Rattrapage : voir dashboard_administrations.php. Une activation avec un
-	// paquet.xml invalide laissait la meta de version posée et les tables absentes.
-	$maj['1.0.1'] = [
-		['maj_tables', $tables],
+	// Rattrapage des installations où les tables n'ont pas été créées :
+	// voir dashboard_administrations.php pour le détail du problème.
+	$maj['1.0.2'] = [
+		['dashagent_creer_tables'],
 		['dashagent_initialiser_configuration'],
 	];
 
@@ -49,6 +47,66 @@ function dashagent_vider_tables($nom_meta_base_version) {
 
 	effacer_meta('dashagent');
 	effacer_meta($nom_meta_base_version);
+}
+
+/**
+ * Crée les tables de l'agent, et vérifie qu'elles existent réellement ensuite.
+ *
+ * @see dashboard_creer_tables()
+ * @return array Tables encore absentes après coup
+ */
+function dashagent_creer_tables() {
+	include_spip('base/create');
+	include_spip('base/dashagent_tables');
+
+	$descriptions = dashagent_descriptions_tables();
+	$noms = array_keys($descriptions);
+
+	if (function_exists('maj_tables')) {
+		maj_tables($noms);
+	}
+
+	$manquantes = dashagent_tables_manquantes($noms);
+	foreach ($manquantes as $nom) {
+		$description = $descriptions[$nom];
+		if (!function_exists('sql_create') || empty($description['field'])) {
+			continue;
+		}
+		$primaire = $description['key']['PRIMARY KEY'] ?? '';
+		$autoinc  = (strpos($primaire, ',') === false) && (strncmp($primaire, 'id_', 3) === 0);
+
+		sql_create($nom, $description['field'], $description['key'] ?? [], $autoinc, false, '', 'continue');
+	}
+
+	$restantes = dashagent_tables_manquantes($noms);
+
+	if ($restantes) {
+		spip_log('installation : tables toujours absentes après création : ' . implode(', ', $restantes), 'dashagent');
+	} elseif ($manquantes) {
+		spip_log('installation : tables créées directement depuis les descripteurs : ' . implode(', ', $manquantes), 'dashagent');
+	}
+
+	return $restantes;
+}
+
+/**
+ * Parmi ces tables, lesquelles n'existent pas en base ?
+ *
+ * @param array $noms
+ * @return array
+ */
+function dashagent_tables_manquantes($noms) {
+	$existantes = sql_alltable('%');
+	$existantes = is_array($existantes) ? array_flip($existantes) : [];
+
+	$manquantes = [];
+	foreach ($noms as $nom) {
+		if (!isset($existantes[$nom])) {
+			$manquantes[] = $nom;
+		}
+	}
+
+	return $manquantes;
 }
 
 /**

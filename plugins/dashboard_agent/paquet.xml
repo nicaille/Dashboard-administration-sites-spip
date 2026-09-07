@@ -1,10 +1,10 @@
 <paquet
 	prefix="dashagent"
 	categorie="maintenance"
-	version="1.0.1"
+	version="1.0.2"
 	etat="test"
 	compatibilite="[4.1.0;4.*]"
-	schema="1.0.1"
+	schema="1.0.2"
 	logo="prive/themes/spip/images/dashagent-64.svg"
 	documentation="https://github.com/nicaille/Dashboard-administration-sites-spip/blob/main/docs/protocole-api.md"
 	developpement="https://github.com/nicaille/Dashboard-administration-sites-spip"

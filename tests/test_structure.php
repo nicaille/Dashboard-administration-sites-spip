@@ -208,32 +208,58 @@ foreach ($plugins as $plugin) {
 	}
 	$install = file_get_contents($administrations);
 
-	// Toute table déclarée doit être créée à l'installation et supprimée à la
-	// désinstallation : c'est ce chaînon manquant qui produit un « la table
-	// n'existe pas » au premier affichage.
 	$declarees = [];
+	$base = '';
 	foreach (glob($plugin . '/base/*.php') as $fichier) {
-		preg_match_all('/\$tables\[\'(spip_[a-z0-9_]+)\'\]/', file_get_contents($fichier), $trouves);
+		$source = file_get_contents($fichier);
+		$base .= $source;
+		preg_match_all('/\$tables\[\'(spip_[a-z0-9_]+)\'\]/', $source, $trouves);
 		$declarees = array_merge($declarees, $trouves[1]);
 	}
+	$declarees = array_unique($declarees);
 	verifier("$nom_court : des tables sont déclarées", (bool) $declarees);
-	foreach (array_unique($declarees) as $table) {
-		verifier("$nom_court : $table créée par l’installation", strpos($install, "'$table'") !== false);
+
+	// Les descripteurs doivent être accessibles sans passer par le registre de
+	// SPIP : c'est ce qui permet à l'installation de se vérifier elle-même.
+	verifier(
+		"$nom_court : {$prefixe}_descriptions_tables() expose les descripteurs",
+		strpos($base, "function {$prefixe}_descriptions_tables(") !== false
+	);
+	verifier(
+		"$nom_court : l’installation appelle {$prefixe}_creer_tables",
+		strpos($install, "{$prefixe}_creer_tables") !== false
+	);
+	verifier(
+		"$nom_court : la création contrôle son résultat",
+		strpos($install, "{$prefixe}_tables_manquantes(") !== false
+	);
+
+	foreach ($declarees as $table) {
 		verifier("$nom_court : $table supprimée par la désinstallation", strpos($install, "sql_drop_table('$table')") !== false);
 	}
 
-	// L'étape « create » n'est jamais rejouée : sans une étape versionnée au
-	// niveau du schéma, une installation interrompue reste définitivement bancale.
+	// « create » n'étant jamais rejouée, il faut une étape versionnée au niveau
+	// du schéma pour rattraper une installation restée incomplète.
 	preg_match_all('/\$maj\[\'([0-9]+\.[0-9]+\.[0-9]+)\'\]/', $install, $trouves);
 	$etapes = array_unique($trouves[1]);
 	verifier("$nom_court : au moins une étape de migration versionnée", (bool) $etapes);
 	if ($etapes) {
 		usort($etapes, 'version_compare');
 		$plus_haute = end($etapes);
-		verifier(
-			"$nom_court : schema=$schema aligné sur la plus haute étape ($plus_haute)",
-			$schema === $plus_haute
-		);
+		verifier("$nom_court : schema=$schema aligné sur la plus haute étape ($plus_haute)", $schema === $plus_haute);
+	}
+
+	// Marqueur de dernière modification attendu par SPIP sur toute table gérée.
+	foreach (glob($plugin . '/base/*.php') as $fichier) {
+		$source = file_get_contents($fichier);
+		foreach ($declarees as $table) {
+			$position = strpos($source, "\$tables['$table']");
+			if ($position === false) {
+				continue;
+			}
+			$suite = substr($source, $position, 3000);
+			verifier("$nom_court : $table porte une colonne maj TIMESTAMP", strpos($suite, "'maj'") !== false);
+		}
 	}
 }
 
