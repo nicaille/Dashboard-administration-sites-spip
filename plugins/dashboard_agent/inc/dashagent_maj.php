@@ -129,7 +129,9 @@ function dashagent_plugin_maj($args) {
 		$resultat = dashagent_plugin_maj_git($plugin);
 	} elseif ($strategie === 'zip') {
 		if ($url === '') {
-			return ['ok' => false, 'erreur' => 'Aucune URL d’archive fournie et aucun dépôt SVP ne connaît ce plugin'];
+			return ['ok' => false, 'erreur' => 'Aucune URL d’archive : ni fournie par le tableau de bord,'
+				. ' ni trouvée dans les dépôts SVP de ce site (le plugin y est-il référencé, et ce dépôt'
+				. ' sert-il bien des archives zip ?)'];
 		}
 		$resultat = dashagent_plugin_maj_zip($plugin, $url, (string) ($args['sha256'] ?? ''));
 	} else {
@@ -138,11 +140,23 @@ function dashagent_plugin_maj($args) {
 
 	if (!empty($resultat['ok'])) {
 		$resultat['post'] = dashagent_apres_maj();
+
+		// La liste des plugins vient d'être réécrite en base : sans relecture,
+		// $GLOBALS['meta'] garde l'état d'avant la mise à jour et la version
+		// constatée serait celle de départ.
+		include_spip('inc/meta');
+		if (function_exists('lire_metas')) {
+			lire_metas();
+		}
+
 		$apres = dashagent_plugin_actif($plugin['prefixe']);
 		$resultat['version_avant'] = $plugin['version'];
 		$resultat['version_apres'] = $apres['version'] ?? null;
 	}
 	$resultat['strategie'] = $strategie;
+	if ($url !== '') {
+		$resultat['url_archive'] = $url;
+	}
 
 	return $resultat;
 }
@@ -306,7 +320,13 @@ function dashagent_plugin_url_svp($prefixe) {
 	}
 
 	$res = sql_select(
-		['pa.version AS version', 'pa.src_archive AS src_archive', 'pa.nom_archive AS nom_archive', 'de.url_archives AS url_archives'],
+		[
+			'pa.version AS version',
+			'pa.nom_archive AS nom_archive',
+			'pa.src_archive AS src_archive',
+			'de.url_archives AS url_archives',
+			'de.type AS type_depot',
+		],
 		['spip_paquets AS pa', 'spip_plugins AS pl', 'spip_depots AS de'],
 		['pa.id_plugin = pl.id_plugin', 'pa.id_depot = de.id_depot', 'pa.id_depot > 0', 'pl.prefixe = ' . sql_quote($prefixe)],
 		'',
@@ -322,8 +342,8 @@ function dashagent_plugin_url_svp($prefixe) {
 
 	$meilleure = ['version' => '', 'url' => ''];
 	while ($ligne = sql_fetch($res, '')) {
-		$url = rtrim((string) $ligne['url_archives'], '/') . '/' . ltrim((string) $ligne['src_archive'], '/');
-		if ((string) $ligne['src_archive'] === '') {
+		$url = dashagent_url_archive_depot($ligne);
+		if ($url === '') {
 			continue;
 		}
 		if ($meilleure['version'] === '' || spip_version_compare((string) $ligne['version'], $meilleure['version'], '>')) {
@@ -332,6 +352,34 @@ function dashagent_plugin_url_svp($prefixe) {
 	}
 
 	return $meilleure['url'];
+}
+
+/**
+ * Compose l'URL de l'archive d'un paquet à partir de sa ligne de dépôt SVP.
+ *
+ * C'est `url_archives` du dépôt suivi de `nom_archive` du paquet — et non
+ * `src_archive`, qui désigne selon les cas un chemin local (`auto/prefixe/version`)
+ * ou l'adresse d'un dépôt git ou svn, jamais un zip téléchargeable.
+ *
+ * @param array $ligne Colonnes url_archives, nom_archive, type_depot
+ * @return string Chaîne vide si ce dépôt ne sert pas d'archives téléchargeables
+ */
+function dashagent_url_archive_depot($ligne) {
+	$base    = trim((string) ($ligne['url_archives'] ?? ''));
+	$archive = trim((string) ($ligne['nom_archive'] ?? ''));
+
+	if ($base === '' || $archive === '') {
+		return '';
+	}
+
+	// Les dépôts svn ou git ne distribuent pas de zip : leur mise à jour passe
+	// par un client dédié, hors du champ de cet agent.
+	$type = strtolower((string) ($ligne['type_depot'] ?? ''));
+	if ($type !== '' && !in_array($type, ['http', 'https', 'zip', ''], true)) {
+		return '';
+	}
+
+	return rtrim($base, '/') . '/' . ltrim($archive, '/');
 }
 
 /* -------------------------------------------------------------------------- */
@@ -585,13 +633,23 @@ function dashagent_apres_maj() {
 
 	$rapport = ['cache_purge' => dashagent_purger(['pages', 'squelettes'])];
 
+	// « ajoute » avec une liste vide revalide depuis le disque les plugins déjà
+	// actifs, et rien d'autre : c'est le recalcul sûr après remplacement de
+	// fichiers. Surtout pas « raz », qui prend la liste telle qu'on la fournit
+	// et désactiverait tous les plugins du répertoire plugins/ — dont celui-ci.
 	include_spip('inc/plugin');
-	include_spip('plugins/installer');
-	if (function_exists('ecrire_plugin_actifs') && function_exists('liste_plugin_actifs')) {
-		ecrire_plugin_actifs(liste_plugin_actifs(), false, 'ajoute');
+	$rapport['plugins_recalcules'] = false;
+	if (function_exists('ecrire_plugin_actifs')) {
+		ecrire_plugin_actifs([], false, 'ajoute');
 		$rapport['plugins_recalcules'] = true;
-	} else {
-		$rapport['plugins_recalcules'] = false;
+	}
+
+	// Le plugin mis à jour peut avoir un schéma de base à faire évoluer.
+	include_spip('plugins/installer');
+	$rapport['installations_rejouees'] = false;
+	if (function_exists('plugin_installes_meta')) {
+		plugin_installes_meta();
+		$rapport['installations_rejouees'] = true;
 	}
 
 	return $rapport;

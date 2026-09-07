@@ -109,6 +109,52 @@ verifier('version du core lue', $core['version'] === '4.2.16', $core['version'])
 verifier('version inattendue refusée', !dashagent_verifier_archive_core($base . 'core', '4.4.0')['ok']);
 verifier('archive incomplète refusée', !dashagent_verifier_archive_core($base . 'vide')['ok']);
 
+echo "\n== URL d'archive d'un dépôt SVP ==\n";
+
+// Relevé dans plugins-dist/svp/inc/svp_actionner.php : l'URL téléchargeable est
+// « url_archives du dépôt » + « nom_archive du paquet ». src_archive désigne
+// selon les cas un chemin local ou l'adresse d'un dépôt git : jamais un zip.
+$depot = ['url_archives' => 'https://files.spip.net/spip-zone/', 'nom_archive' => 'cextras.zip',
+	'src_archive' => 'auto/cextras/v4.3.0/', 'type_depot' => 'http'];
+
+verifier(
+	'URL composée depuis url_archives et nom_archive',
+	dashagent_url_archive_depot($depot) === 'https://files.spip.net/spip-zone/cextras.zip',
+	dashagent_url_archive_depot($depot)
+);
+verifier(
+	'src_archive n’est jamais utilisée comme URL',
+	strpos(dashagent_url_archive_depot($depot), 'auto/') === false
+);
+verifier(
+	'barre oblique finale non doublée',
+	dashagent_url_archive_depot(['url_archives' => 'https://exemple.org/zips', 'nom_archive' => 'gis.zip'])
+		=== 'https://exemple.org/zips/gis.zip'
+);
+verifier(
+	'dépôt sans archive nommée : pas d’URL',
+	dashagent_url_archive_depot(['url_archives' => 'https://exemple.org/zips', 'nom_archive' => '']) === ''
+);
+verifier(
+	'dépôt sans conteneur d’archives : pas d’URL',
+	dashagent_url_archive_depot(['url_archives' => '', 'nom_archive' => 'gis.zip']) === ''
+);
+verifier(
+	'dépôt git : pas d’archive téléchargeable',
+	dashagent_url_archive_depot(['url_archives' => 'https://exemple.org/zips',
+		'nom_archive' => 'gis.zip', 'type_depot' => 'git']) === ''
+);
+verifier(
+	'dépôt svn : pas d’archive téléchargeable',
+	dashagent_url_archive_depot(['url_archives' => 'https://exemple.org/zips',
+		'nom_archive' => 'gis.zip', 'type_depot' => 'svn']) === ''
+);
+verifier(
+	'type de dépôt non renseigné : traité comme http',
+	dashagent_url_archive_depot(['url_archives' => 'https://exemple.org/zips',
+		'nom_archive' => 'gis.zip']) !== ''
+);
+
 echo "\n== Extraction ZIP : refus des chemins hors répertoire ==\n";
 
 $zip_ok = _DIR_TMP . 'sain.zip';

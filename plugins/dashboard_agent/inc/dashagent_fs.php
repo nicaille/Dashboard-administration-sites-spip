@@ -135,8 +135,8 @@ function dashagent_copier_repertoire($source, $cible) {
 function dashagent_telecharger($url, $destination, $taille_max = null) {
 	$taille_max = $taille_max ?: _DASHAGENT_TAILLE_MAX_ARCHIVE;
 
-	if (!preg_match('#^https://#i', $url)) {
-		return ['ok' => false, 'erreur' => 'URL non https refusée', 'octets' => 0];
+	if (!dashagent_url_archive_acceptable($url)) {
+		return ['ok' => false, 'erreur' => 'URL non https refusée : ' . $url, 'octets' => 0];
 	}
 
 	include_spip('inc/distant');
@@ -146,20 +146,52 @@ function dashagent_telecharger($url, $destination, $taille_max = null) {
 		'follow_location' => 3,
 	]);
 
-	if (!is_array($contenu) || empty($contenu['status']) || $contenu['status'] != 200) {
-		$statut = is_array($contenu) ? ($contenu['status'] ?? '?') : '?';
+	// Un message qui ne nomme ni l'adresse ni la cause ne permet pas de
+	// diagnostiquer : recuperer_url() rend false sur échec de connexion, et un
+	// simple « HTTP ? » laissait sans piste.
+	$adresse = strlen($url) > 120 ? substr($url, 0, 117) . '…' : $url;
+	if (!is_array($contenu)) {
 		@unlink($destination);
 
-		return ['ok' => false, 'erreur' => 'Téléchargement échoué (HTTP ' . $statut . ')', 'octets' => 0];
+		return ['ok' => false, 'erreur' => 'Connexion impossible vers ' . $adresse, 'octets' => 0];
+	}
+	if (empty($contenu['status']) || $contenu['status'] != 200) {
+		$statut = $contenu['status'] ?? 0;
+		@unlink($destination);
+
+		return [
+			'ok'     => false,
+			'erreur' => ($statut ? 'HTTP ' . $statut : 'Aucune réponse') . ' sur ' . $adresse,
+			'octets' => 0,
+		];
 	}
 
 	if (!file_exists($destination) || !filesize($destination)) {
 		@unlink($destination);
 
-		return ['ok' => false, 'erreur' => 'Archive vide', 'octets' => 0];
+		return ['ok' => false, 'erreur' => 'Archive vide reçue de ' . $adresse, 'octets' => 0];
 	}
 
 	return ['ok' => true, 'erreur' => '', 'octets' => (int) filesize($destination)];
+}
+
+/**
+ * L'URL d'archive est-elle téléchargeable ?
+ *
+ * https par défaut, et uniquement : une archive récupérée en clair peut être
+ * altérée en transit, ce qui revient à laisser exécuter du code arbitraire sur
+ * le site. Le http n'est toléré que si `mes_options.php` le demande
+ * explicitement, pour du développement local.
+ *
+ * @param string $url
+ * @return bool
+ */
+function dashagent_url_archive_acceptable($url) {
+	if (preg_match('#^https://#i', (string) $url)) {
+		return true;
+	}
+
+	return _DASHAGENT_ARCHIVES_HTTP && preg_match('#^http://#i', (string) $url);
 }
 
 /**

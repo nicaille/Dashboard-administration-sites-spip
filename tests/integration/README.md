@@ -5,8 +5,9 @@ installe un vrai SPIP, y active les deux plugins, et déroule le parcours comple
 dans un navigateur : création d'un site, appairage, synchronisation signée,
 purge de cache, sauvegarde de base et restauration du dump obtenu.
 
-C'est elle qui a mis au jour l'incompatibilité SQLite de la sauvegarde, que la
-seule analyse statique ne pouvait pas voir.
+C'est elle qui a mis au jour l'incompatibilité SQLite de la sauvegarde et le
+recalcul de liste qui désactivait les plugins — deux défauts que la seule
+analyse statique ne pouvait pas voir.
 
 ## Pré-requis
 
@@ -46,4 +47,5 @@ cd <repertoire>/site && PHP_CLI_SERVER_WORKERS=4 php -S 127.0.0.1:8321 -t . &
 | Synchronisation | version du core, de PHP, de SQL et inventaire des plugins remontés |
 | Purge | les fichiers de cache sont réellement supprimés |
 | Sauvegarde | le dump est créé, rapatrié, son empreinte SHA-256 vérifiée |
+| Mise à jour de plugin | un dépôt SVP local propose une 1.0.1 : l'archive est téléchargée, déployée, et aucun plugin n'est désactivé au passage |
 | Restauration | le dump se rejoue dans une base neuve, contenu intact |

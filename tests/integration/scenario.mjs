@@ -80,6 +80,19 @@ await ouvrir(page, 'configuration du tableau de bord', '/ecrire/?exec=configurer
 await ouvrir(page, 'configuration de l’agent', '/ecrire/?exec=configurer_dashagent');
 await ouvrir(page, 'formulaire de création', '/ecrire/?exec=dashboard_site&new=oui');
 
+// L'agent de test est sur la boucle locale, donc en http : le tableau de bord
+// refuse cette URL tant que l'exception n'est pas accordée. À poser avant la
+// création, puisque c'est la saisie du formulaire qui est validée.
+console.log('\n### Autorisation du http local');
+await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
+await page.check('[name="autoriser_http"]');
+await page.locator('form input[type=submit]').first().click();
+await page.waitForLoadState('domcontentloaded').catch(() => {});
+await page.waitForTimeout(500);
+dit('http local autorisé', (await page.locator('body').innerText()).includes('enregistrée'));
+
+await page.goto(base + '/ecrire/?exec=dashboard_site&new=oui', { waitUntil: 'domcontentloaded' });
+
 console.log('\n### Création d’un site');
 await page.fill('[name="titre"]', 'Site de test');
 await page.fill('[name="url_site"]', base + '/');
@@ -100,11 +113,6 @@ await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form
 await page.waitForTimeout(500);
 const secret = ((await page.locator('body').innerText()).match(/([a-f0-9]{64})/) || [])[1];
 dit('secret de l’agent généré', !!secret);
-
-await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
-await page.check('[name="autoriser_http"]');
-await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').first().click()]);
-await page.waitForTimeout(400);
 
 await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1&modifier=oui', { waitUntil: 'domcontentloaded' });
 await page.fill('[name="secret_clair"]', secret || '');
@@ -131,6 +139,43 @@ dit('sauvegarde créée et rapatriée', /rapatri/i.test(apresSauvegarde), (apres
 
 const sauvegardes = JSON.parse(sql('SELECT fichier, octets, statut FROM spip_dashboard_sauvegardes'));
 dit('sauvegarde enregistrée localement', sauvegardes.some((s) => s.statut === 'locale' && Number(s.octets) > 0), JSON.stringify(sauvegardes));
+
+console.log('\n### Mise à jour d’un plugin');
+await page.goto(base + '/ecrire/?exec=configurer_dashagent', { waitUntil: 'domcontentloaded' });
+await page.check('[name="op_plugin_maj"]').catch(() => {});
+await page.locator('form input[type=submit]').last().click();
+await page.waitForTimeout(700);
+
+await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+await bouton(page, 'Synchroniser');
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+
+const ligneMaj = page.locator('tr', { hasText: 'ZZZTEST' });
+dit('mise à jour proposée pour ZZZTEST', await ligneMaj.count() > 0);
+const boutonMaj = ligneMaj.locator('a.dashboard-bouton').first();
+if (await boutonMaj.count()) {
+	await boutonMaj.click();
+	await page.waitForLoadState('domcontentloaded').catch(() => {});
+	await page.waitForTimeout(3000);
+	const t = await page.locator('body').innerText();
+	dit('mise à jour sans erreur', (await erreurs(page)).length === 0, (await erreurs(page)).join(' ; '));
+	dit('version passée de 1.0.0 à 1.0.1', /ZZZTEST\s*:\s*1\.0\.0\s*→\s*1\.0\.1/.test(t),
+		(t.match(/ZZZTEST[^\n]{0,60}/) || [''])[0]);
+} else {
+	dit('bouton de mise à jour présent', false);
+}
+
+// Le remplacement des fichiers ne doit pas désactiver les plugins : « raz »
+// sur une liste partielle couperait le dashboard et l'agent eux-mêmes.
+const versionFichier = execFileSync('php', ['-r',
+	`$x=@file_get_contents(getenv('SITE').'/plugins/zzztest/paquet.xml'); preg_match('/version="([^"]+)"/',(string)$x,$m); echo $m[1] ?? '?';`,
+], { env: { ...process.env, SITE: site } }).toString();
+dit('fichiers réellement remplacés sur le disque', versionFichier === '1.0.1', 'paquet.xml en ' + versionFichier);
+
+const actifs = execFileSync('php', ['-r',
+	`$db=new SQLite3(getenv('BDD'));$k=array_keys(unserialize($db->querySingle('SELECT valeur FROM spip_meta WHERE nom="plugin"')));echo implode(',',array_intersect(['DASHBOARD','DASHAGENT','ZZZTEST'],$k));`,
+], { env: { ...process.env, BDD: bdd } }).toString();
+dit('aucun plugin désactivé par la mise à jour', actifs.split(',').filter(Boolean).length === 3, actifs);
 
 console.log('\n### Restauration du dump');
 try {
