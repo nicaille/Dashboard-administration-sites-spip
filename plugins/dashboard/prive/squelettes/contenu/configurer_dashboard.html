@@ -20,6 +20,9 @@
 	[(#GET{api_manquantes}|non)
 		<p><:dashboard:api_complete:></p>
 	]
+	[(#VAL|dashboard_secrets_chiffres|non)
+		<p class="reponse_formulaire reponse_formulaire_erreur"><:dashboard:secrets_en_clair:></p>
+	]
 	[(#GET{api_optionnelle}|oui)
 		<p class="explication"><:dashboard:api_optionnelle_manquante:> <code>[(#GET{api_optionnelle})]</code></p>
 	]

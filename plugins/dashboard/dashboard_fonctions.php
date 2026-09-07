@@ -26,12 +26,14 @@ include_spip('inc/dashboard_versions');
 function dashboard_api_requise() {
 	return [
 		''                     => ['include_spip', 'charger_fonction', '_T', '_request', 'spip_log',
-			'ecrire_meta', 'effacer_meta', 'parametre_url', 'redirige_par_entete', 'url_de_base',
-			'generer_url_ecrire'],
+			'parametre_url', 'url_de_base', 'generer_url_ecrire'],
+		'inc/headers'          => ['redirige_par_entete'],
 		'inc/autoriser'        => ['autoriser'],
 		'inc/config'           => ['lire_config', 'ecrire_config'],
 		'inc/distant'          => ['recuperer_url'],
-		'inc/flock'            => ['purger_repertoire', 'sous_repertoire'],
+		'inc/flock'            => ['sous_repertoire'],
+		'inc/invalideur'       => ['purger_repertoire'],
+		'inc/meta'             => ['ecrire_meta', 'effacer_meta'],
 		'inc/plugin'           => ['spip_version_compare'],
 		'inc/session'          => ['session_get'],
 		'inc/editer'           => ['formulaires_editer_objet_charger', 'formulaires_editer_objet_verifier',
@@ -51,9 +53,20 @@ function dashboard_api_requise() {
  * @return array
  */
 function dashboard_api_optionnelle() {
-	return [
-		'inc/chiffrer' => ['chiffrer', 'dechiffrer'],
-	];
+	return [];
+}
+
+/**
+ * Le chiffrement des secrets fonctionne-t-il ? Sinon, ils sont stockés en clair.
+ *
+ * @filtre
+ * @param string $rien
+ * @return bool
+ */
+function dashboard_secrets_chiffres($rien = '') {
+	include_spip('inc/dashboard_client');
+
+	return function_exists('dashboard_chiffrement_disponible') && dashboard_chiffrement_disponible();
 }
 
 /**

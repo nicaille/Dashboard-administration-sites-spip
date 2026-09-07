@@ -458,7 +458,7 @@ $api_spip = [
 	'effacer_meta', 'parametre_url', 'redirige_par_entete', 'url_de_base', 'generer_url_ecrire',
 	// inc/
 	'autoriser', 'lire_config', 'ecrire_config', 'recuperer_url', 'purger_repertoire',
-	'sous_repertoire', 'spip_version_compare', 'session_get', 'chiffrer', 'dechiffrer',
+	'sous_repertoire', 'spip_version_compare', 'session_get',
 	'liste_plugin_actifs', 'ecrire_plugin_actifs',
 	// formulaires CVT sur objet
 	'formulaires_editer_objet_charger', 'formulaires_editer_objet_verifier',
@@ -559,6 +559,84 @@ if (preg_match('/function dashboard_api_requise\(.*?\n}/s', $fonctions, $bloc)) 
 	foreach ($hors as $nom) {
 		echo "         annoncée mais hors contrat : $nom\n";
 	}
+}
+
+echo "\n== Fichiers d’inclusion des API SPIP ==\n";
+
+/**
+ * Fichier qui définit réellement chaque fonction, relevé dans les sources de
+ * SPIP 4.4.23. Une fonction appelée sans son include_spip() est fatale à
+ * l’exécution — c’est ainsi que purger_repertoire(), cherchée à tort dans
+ * inc/flock, restait indéfinie.
+ */
+$fournisseur = [
+	'autoriser'            => 'inc/autoriser',
+	'ecrire_config'        => 'inc/config',
+	'lire_config'          => 'inc/config',
+	'ecrire_meta'          => 'inc/meta',
+	'effacer_meta'         => 'inc/meta',
+	'purger_repertoire'    => 'inc/invalideur',
+	'sous_repertoire'      => 'inc/flock',
+	'recuperer_url'        => 'inc/distant',
+	'session_get'          => 'inc/session',
+	'redirige_par_entete'  => 'inc/headers',
+	'spip_version_compare' => 'inc/plugin',
+	'liste_plugin_actifs'  => 'plugins/installer',
+	'ecrire_plugin_actifs' => 'inc/plugin',
+	'objet_inserer'        => 'action/editer_objet',
+	'objet_modifier'       => 'action/editer_objet',
+	'objet_instituer'      => 'action/editer_objet',
+	'maj_tables'           => 'base/create',
+	'maj_plugin'           => 'base/upgrade',
+	'formulaires_editer_objet_charger'  => 'inc/editer',
+	'formulaires_editer_objet_verifier' => 'inc/editer',
+	'formulaires_editer_objet_traiter'  => 'inc/editer',
+];
+
+// Chargés par le noyau avant tout code de plugin.
+$toujours_charges = ['inc/autoriser', 'inc/config', 'inc/plugin', 'inc/session'];
+
+$defauts = [];
+foreach ($plugins as $plugin) {
+	foreach (fichiers($plugin, ['php']) as $fichier) {
+		$source  = file_get_contents($fichier);
+		$affiche = basename($plugin) . '/' . str_replace($plugin . '/', '', $fichier);
+		preg_match_all("/include_spip\(\s*'([^']+)'/", $source, $inc);
+		$inclus = array_flip($inc[1]);
+
+		$jetons = token_get_all($source);
+		$nb = count($jetons);
+		for ($i = 0; $i < $nb; $i++) {
+			if (!is_array($jetons[$i]) || $jetons[$i][0] !== T_STRING) {
+				continue;
+			}
+			$nom = strtolower($jetons[$i][1]);
+			if (!isset($fournisseur[$nom])) {
+				continue;
+			}
+			for ($j = $i + 1; $j < $nb && is_array($jetons[$j]) && $jetons[$j][0] === T_WHITESPACE; $j++);
+			if (($jetons[$j] ?? null) !== '(') {
+				continue;
+			}
+			for ($k = $i - 1; $k >= 0 && is_array($jetons[$k])
+				&& in_array($jetons[$k][0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true); $k--);
+			$avant = $jetons[$k] ?? null;
+			if (is_array($avant) && in_array($avant[0], [T_FUNCTION, T_NEW, T_OBJECT_OPERATOR, T_DOUBLE_COLON], true)) {
+				continue;
+			}
+
+			$requis = $fournisseur[$nom];
+			if (in_array($requis, $toujours_charges, true) || isset($inclus[$requis])) {
+				continue;
+			}
+			$defauts[$affiche . ' : ' . $nom . '() sans include_spip(\'' . $requis . '\')'] = true;
+		}
+	}
+}
+
+verifier('chaque API SPIP est appelée avec son include_spip', !$defauts);
+foreach (array_keys($defauts) as $defaut) {
+	echo "         $defaut\n";
 }
 
 echo "\n== Clefs de langue référencées ==\n";

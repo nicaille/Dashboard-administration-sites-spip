@@ -156,6 +156,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'sauvegardes_vide'    => 'No backup for this site.',
 	'secret_a_copier'     => 'New shared secret (shown only once): @secret@',
 	'secret_absent'       => 'No secret stored: this site cannot be polled.',
+	'secrets_en_clair'    => 'Core encryption is unavailable: managed site secrets are stored in clear text. Check that the PHP sodium extension is enabled and that config/cles.php is readable.',
 	'site_sans_nom'       => 'Unnamed site @id@',
 	'secret_configure'    => 'A secret is stored for this site.',
 	'statut_pause'        => 'Paused',

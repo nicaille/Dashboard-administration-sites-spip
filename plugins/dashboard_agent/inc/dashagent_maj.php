@@ -586,6 +586,7 @@ function dashagent_apres_maj() {
 	$rapport = ['cache_purge' => dashagent_purger(['pages', 'squelettes'])];
 
 	include_spip('inc/plugin');
+	include_spip('plugins/installer');
 	if (function_exists('ecrire_plugin_actifs') && function_exists('liste_plugin_actifs')) {
 		ecrire_plugin_actifs(liste_plugin_actifs(), false, 'ajoute');
 		$rapport['plugins_recalcules'] = true;

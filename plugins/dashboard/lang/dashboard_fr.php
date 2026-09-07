@@ -156,6 +156,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'sauvegardes_vide'    => 'Aucune sauvegarde pour ce site.',
 	'secret_a_copier'     => 'Nouveau secret partagé (affiché une seule fois) : @secret@',
 	'secret_absent'       => 'Aucun secret enregistré : ce site ne peut pas être interrogé.',
+	'secrets_en_clair'    => 'Le chiffrement du core est indisponible : les secrets des sites gérés sont stockés en clair en base. Vérifiez que l’extension PHP sodium est active et que le fichier config/cles.php est accessible.',
 	'site_sans_nom'       => 'Site sans nom @id@',
 	'secret_configure'    => 'Un secret est enregistré pour ce site.',
 	'statut_pause'        => 'En pause',

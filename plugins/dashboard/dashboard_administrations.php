@@ -63,6 +63,8 @@ function dashboard_upgrade($nom_meta_base_version, $version_cible) {
  * @return void
  */
 function dashboard_vider_tables($nom_meta_base_version) {
+	include_spip('inc/meta');
+
 	sql_drop_table('spip_dashboard_sites');
 	sql_drop_table('spip_dashboard_plugins');
 	sql_drop_table('spip_dashboard_journal');
@@ -183,8 +185,9 @@ function dashboard_vider_caches() {
 		$trouver_table('');
 	}
 
-	// Squelettes compilés et pages calculées.
-	include_spip('inc/flock');
+	// purger_repertoire() vit dans inc/invalideur, pas dans inc/flock.
+	include_spip('inc/invalideur');
+	include_spip('inc/meta');
 	if (function_exists('purger_repertoire') && defined('_DIR_CACHE') && is_dir(_DIR_CACHE)) {
 		purger_repertoire(_DIR_CACHE, ['subdir' => true]);
 	}
