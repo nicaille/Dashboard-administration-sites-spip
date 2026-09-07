@@ -37,9 +37,8 @@
 
 		<fieldset>
 			<legend><:dashboard:legend_secret:></legend>
-			[<p class="explication">(#ENV{secret_present}|=={oui}|?{
-				'<:dashboard:secret_configure:>',
-				'<:dashboard:secret_absent:>'})</p>]
+			[(#ENV{secret_present}|=={oui}|oui)<p class="explication"><:dashboard:secret_configure:></p>]
+			[(#ENV{secret_present}|=={oui}|non)<p class="explication"><:dashboard:secret_absent:></p>]
 			[<p class="explication"><:dashboard:label_empreinte:> <code>(#ENV{secret_empreinte})</code></p>]
 			<ul>
 				<li class="editer editer_generer_secret">

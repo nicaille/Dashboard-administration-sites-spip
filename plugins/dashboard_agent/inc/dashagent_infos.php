@@ -160,6 +160,9 @@ function dashagent_infos_plugins() {
 	$plugins = [];
 
 	foreach ($actifs as $prefixe => $plugin) {
+		if (!dashagent_est_un_plugin($plugin)) {
+			continue;
+		}
 		$dir_type = $plugin['dir_type'] ?? '_DIR_PLUGINS';
 		$racine   = defined($dir_type) ? constant($dir_type) : _DIR_PLUGINS;
 		$chemin   = $racine . ($plugin['dir'] ?? '');
@@ -192,6 +195,30 @@ function dashagent_infos_plugins() {
 }
 
 /**
+ * Cette entrée de la meta « plugin » est-elle un plugin réellement installé ?
+ *
+ * SPIP y range aussi les capacités fournies — extensions PHP, bibliothèques,
+ * jQuery — sous la forme `procure:xxx`, ainsi que le core lui-même. Les faire
+ * figurer dans l'inventaire d'un parc n'a pas de sens : elles n'ont pas de
+ * répertoire, pas de mise à jour, et noient les vrais plugins.
+ *
+ * @param array $plugin
+ * @return bool
+ */
+function dashagent_est_un_plugin($plugin) {
+	$dir = (string) ($plugin['dir'] ?? '');
+	if ($dir === '' || strpos($dir, 'procure:') !== false) {
+		return false;
+	}
+
+	return in_array(
+		(string) ($plugin['dir_type'] ?? ''),
+		['_DIR_PLUGINS', '_DIR_PLUGINS_DIST', '_DIR_PLUGINS_SUPPL', '_DIR_EXTENSIONS'],
+		true
+	);
+}
+
+/**
  * Nom lisible d'un plugin, quel que soit le format stocké dans la meta.
  *
  * @param array $plugin
@@ -209,7 +236,71 @@ function dashagent_nom_plugin($plugin) {
 		return (string) ($plugin['dir'] ?? $nom);
 	}
 
-	return $nom;
+	return dashagent_texte_multi($nom);
+}
+
+/**
+ * Réduit un texte multilingue `[fr]…[en]…` à une seule langue.
+ *
+ * Les paquet.xml peuvent porter un nom multilingue ; affiché tel quel dans un
+ * tableau, il devient illisible.
+ *
+ * @param string $texte
+ * @param string $langue Langue souhaitée, celle du site par défaut
+ * @return string
+ */
+function dashagent_texte_multi($texte, $langue = '') {
+	$texte = (string) $texte;
+	if (strpos($texte, '[') === false || !preg_match('/\[[a-z]{2}(_[a-zA-Z]{2,})?\]/', $texte)) {
+		return $texte;
+	}
+
+	$langue = $langue ?: (string) ($GLOBALS['meta']['langue_site'] ?? 'fr');
+
+	if (!preg_match_all('/\[([a-z]{2}(?:_[a-zA-Z]{2,})?)\]([^\[]*)/', $texte, $trouves, PREG_SET_ORDER)) {
+		return $texte;
+	}
+
+	$blocs = [];
+	foreach ($trouves as $bloc) {
+		$valeur = trim($bloc[2]);
+		if ($valeur !== '' && !isset($blocs[$bloc[1]])) {
+			$blocs[$bloc[1]] = $valeur;
+		}
+	}
+
+	foreach ([$langue, 'fr', 'en'] as $preferee) {
+		if (!empty($blocs[$preferee])) {
+			return $blocs[$preferee];
+		}
+	}
+
+	return $blocs ? (string) reset($blocs) : $texte;
+}
+
+/**
+ * Rend sa forme usuelle à une version normalisée par SVP.
+ *
+ * SVP stocke les versions remplies de zéros à gauche pour pouvoir les trier
+ * (« 004.003.003 »). Affichée telle quelle, la version est incompréhensible ;
+ * comparée telle quelle, elle fausse les comparaisons.
+ *
+ * @param string $version
+ * @return string
+ */
+function dashagent_denormaliser_version($version) {
+	$version = (string) $version;
+	if ($version === '' || !preg_match('/^0\d/', $version)) {
+		return $version;
+	}
+
+	$morceaux = [];
+	foreach (explode('.', $version) as $nombre) {
+		$sans_zeros = ltrim($nombre, '0');
+		$morceaux[] = ($sans_zeros !== '' && $sans_zeros[0] !== '-') ? $sans_zeros : '0' . $sans_zeros;
+	}
+
+	return implode('.', $morceaux);
 }
 
 /**
@@ -266,7 +357,7 @@ function dashagent_versions_disponibles() {
 
 	while ($ligne = sql_fetch($res, '')) {
 		$prefixe = strtoupper((string) $ligne['prefixe']);
-		$version = (string) $ligne['version'];
+		$version = dashagent_denormaliser_version((string) $ligne['version']);
 		if ($version === '') {
 			continue;
 		}

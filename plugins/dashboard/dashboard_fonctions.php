@@ -158,6 +158,70 @@ function dashboard_tables_absentes($rien = '') {
 }
 
 /**
+ * Date lisible, ou chaîne vide si la date n'a jamais été renseignée.
+ *
+ * Le squelette affiche alors un libellé de repli dans un bloc voisin : imbriquer
+ * `[(…)]` dans l'argument d'un filtre casse le comptage des crochets du
+ * compilateur, et tout le reste du fichier finit affiché tel quel.
+ *
+ * @filtre
+ * @param string $date
+ * @param string $format heure|jour
+ * @return string
+ */
+function dashboard_date_lisible($date, $format = 'heure') {
+	$date = (string) $date;
+	if ($date === '' || strncmp($date, '0000-00-00', 10) === 0) {
+		return '';
+	}
+
+	include_spip('inc/filtres_dates');
+	if ($format === 'jour' && function_exists('affdate_jourcourt')) {
+		return affdate_jourcourt($date);
+	}
+	if (function_exists('affdate_heure')) {
+		return affdate_heure($date);
+	}
+
+	return $date;
+}
+
+/**
+ * Nom de plugin lisible, même si l'inventaire mémorisé est antérieur au
+ * filtrage fait côté agent.
+ *
+ * @filtre
+ * @param string $nom
+ * @return string
+ */
+function dashboard_nom_lisible($nom) {
+	$nom = (string) $nom;
+	if (strpos($nom, '[') === false || !preg_match('/\[[a-z]{2}(_[a-zA-Z]{2,})?\]/', $nom)) {
+		return $nom;
+	}
+
+	$langue = (string) ($GLOBALS['meta']['langue_site'] ?? 'fr');
+	if (!preg_match_all('/\[([a-z]{2}(?:_[a-zA-Z]{2,})?)\]([^\[]*)/', $nom, $trouves, PREG_SET_ORDER)) {
+		return $nom;
+	}
+
+	$blocs = [];
+	foreach ($trouves as $bloc) {
+		$valeur = trim($bloc[2]);
+		if ($valeur !== '' && !isset($blocs[$bloc[1]])) {
+			$blocs[$bloc[1]] = $valeur;
+		}
+	}
+	foreach ([$langue, 'fr', 'en'] as $preferee) {
+		if (!empty($blocs[$preferee])) {
+			return $blocs[$preferee];
+		}
+	}
+
+	return $blocs ? (string) reset($blocs) : $nom;
+}
+
+/**
  * Extrait une valeur de l'inventaire JSON mémorisé pour un site.
  *
  * Exemple : `[(#INFOS|dashboard_info{serveur/php})]`

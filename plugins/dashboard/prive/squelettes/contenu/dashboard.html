@@ -41,7 +41,8 @@
 				[<br /><a class="dashboard-lien-public" href="(#URL_SITE)" rel="noreferrer">(#URL_SITE|couper{48})</a>]
 			</th>
 			<td class="dashboard-etat">
-				[(#ETAT|=={ok}|?{'<span class="dashboard-pastille dashboard-pastille-ok"></span>','<span class="dashboard-pastille dashboard-pastille-ko"></span>'})]
+				[(#ETAT|=={ok}|oui)<span class="dashboard-pastille dashboard-pastille-ok"></span>]
+				[(#ETAT|=={ok}|non)<span class="dashboard-pastille dashboard-pastille-ko"></span>]
 				[(#STATUT|=={prepa}|oui)<em><:dashboard:statut_pause:></em>]
 				[<span class="dashboard-message-erreur">(#ERREUR|couper{90})</span>]
 			</td>
@@ -59,7 +60,7 @@
 					<span class="dashboard-badge dashboard-badge-maj">[(#NB_PLUGINS_MAJ)] <:dashboard:a_mettre_a_jour:></span>
 				]
 			</td>
-			<td>[(#DATE_SYNC|?{[(#DATE_SYNC|affdate_jourcourt)],<:dashboard:jamais:>})]</td>
+			<td>[(#DATE_SYNC|dashboard_date_lisible{jour})][(#DATE_SYNC|dashboard_date_lisible{jour}|non)<:dashboard:jamais:>]</td>
 			<td class="dashboard-actions">
 				<a class="dashboard-bouton" href="[(#URL_ACTION_AUTEUR{dashboard_operation,sync/#ID_DASHBOARD_SITE,#SELF})]"><:dashboard:action_sync:></a>
 				[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})

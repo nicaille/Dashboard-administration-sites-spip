@@ -54,6 +54,7 @@ function spip_version_compare($v1, $v2, $op = null) {
 require_once __DIR__ . '/../plugins/dashboard_agent/dashagent_options.php';
 require_once __DIR__ . '/../plugins/dashboard_agent/inc/dashagent_securite.php';
 require_once __DIR__ . '/../plugins/dashboard_agent/inc/dashagent_fs.php';
+require_once __DIR__ . '/../plugins/dashboard_agent/inc/dashagent_infos.php';
 require_once __DIR__ . '/../plugins/dashboard_agent/inc/dashagent_maj.php';
 
 /* Le client du dashboard tire quelques fonctions du core SPIP : on les neutralise

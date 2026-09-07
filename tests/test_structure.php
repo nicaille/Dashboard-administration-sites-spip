@@ -446,6 +446,30 @@ foreach ($plugins as $plugin) {
 	}
 }
 
+echo "\n== Crochets des squelettes ==\n";
+
+foreach ($plugins as $plugin) {
+	foreach (fichiers($plugin, ['html']) as $squelette) {
+		$source  = file_get_contents($squelette);
+		$affiche = basename($plugin) . '/' . str_replace($plugin . '/', '', $squelette);
+
+		// Un `[(…)]` dans l'argument d'un filtre déséquilibre le comptage des
+		// crochets : le compilateur perd le fil et le reste du fichier est
+		// affiché littéralement, `[(oui|=={oui}|oui)` compris.
+		verifier(
+			"$affiche : pas de [(…)] imbriqué dans un argument de filtre",
+			!preg_match('/\\|[a-z_]+\\{[^}]*\\[\\(/i', $source)
+		);
+
+		// Une chaîne de langue dans un argument entre quotes n'est pas
+		// interprétée : elle s'affiche telle quelle, `<:module:cle:>` compris.
+		verifier(
+			"$affiche : pas de <:…:> dans un argument entre quotes",
+			!preg_match("/\\|[a-z_?]+\\{[^}]*'[^']*<:/i", $source)
+		);
+	}
+}
+
 echo "\n== Filtres appelés par les squelettes ==\n";
 
 foreach ($plugins as $plugin) {
@@ -482,7 +506,7 @@ $api_spip = [
 	'effacer_meta', 'parametre_url', 'redirige_par_entete', 'url_de_base', 'generer_url_ecrire',
 	// inc/
 	'autoriser', 'lire_config', 'ecrire_config', 'recuperer_url', 'purger_repertoire',
-	'lire_metas', 'plugin_installes_meta',
+	'lire_metas', 'plugin_installes_meta', 'affdate_heure', 'affdate_jourcourt',
 	'sous_repertoire', 'spip_version_compare', 'session_get',
 	'liste_plugin_actifs', 'ecrire_plugin_actifs',
 	// formulaires CVT sur objet
@@ -600,6 +624,8 @@ $fournisseur = [
 	'lire_config'          => 'inc/config',
 	'ecrire_meta'          => 'inc/meta',
 	'lire_metas'           => 'inc/meta',
+	'affdate_heure'        => 'inc/filtres_dates',
+	'affdate_jourcourt'    => 'inc/filtres_dates',
 	'plugin_installes_meta' => 'inc/plugin',
 	'effacer_meta'         => 'inc/meta',
 	'purger_repertoire'    => 'inc/invalideur',

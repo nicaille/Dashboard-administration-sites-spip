@@ -19,9 +19,8 @@
 		<fieldset>
 			<legend><:dashagent:legend_appairage:></legend>
 
-			[<p class="explication">(#ENV{secret_present}|=={oui}|?{
-				'<:dashagent:secret_configure:>',
-				'<:dashagent:secret_absent:>'})</p>]
+			[(#ENV{secret_present}|=={oui}|oui)<p class="explication"><:dashagent:secret_configure:></p>]
+			[(#ENV{secret_present}|=={oui}|non)<p class="explication"><:dashagent:secret_absent:></p>]
 			[<p class="explication"><:dashagent:label_empreinte:> <code>(#ENV{secret_empreinte})</code></p>]
 
 			<ul>

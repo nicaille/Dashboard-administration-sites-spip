@@ -44,7 +44,7 @@
 				[&mdash; (#INFOS|dashboard_info{base/contenus/article}) <:dashboard:articles:>]
 			</td></tr>
 			<tr><th scope="row"><:dashboard:label_agent:></th><td>[<code>(#AGENT_VERSION)</code>]</td></tr>
-			<tr><th scope="row"><:dashboard:col_sync:></th><td>[(#DATE_SYNC|?{[(#DATE_SYNC|affdate_heure)],<:dashboard:jamais:>})]</td></tr>
+			<tr><th scope="row"><:dashboard:col_sync:></th><td>[(#DATE_SYNC|dashboard_date_lisible)][(#DATE_SYNC|dashboard_date_lisible|non)<:dashboard:jamais:>]</td></tr>
 			[<tr><th scope="row"><:dashboard:label_notes:></th><td>(#NOTES|propre)</td></tr>]
 		</tbody>
 	</table>
@@ -118,12 +118,12 @@
 		</tr></thead>
 		<tbody>
 		<BOUCLE_plugins(DASHBOARD_PLUGINS){id_dashboard_site}{par prefixe}>
-			<tr class="[(#MAJ_DISPONIBLE|=={oui}|?{dashboard-ligne-maj,''})]">
-				<th scope="row">[(#NOM|sinon{#PREFIXE})] <small><code>#PREFIXE</code></small></th>
+			<tr class="[(#MAJ_DISPONIBLE|=={oui}|?{dashboard-ligne-maj,})]">
+				<th scope="row">[(#NOM|dashboard_nom_lisible|sinon{#PREFIXE})] <small><code>#PREFIXE</code></small></th>
 				<td><code>#VERSION</code></td>
 				<td>[<code>(#VERSION_DISPONIBLE)</code>]</td>
 				<td>
-					[(#DISTRIBUE|=={oui}|?{'<em><:dashboard:plugin_distribue:></em>',''})]
+					[(#DISTRIBUE|=={oui}|oui)<em><:dashboard:plugin_distribue:></em>]
 					[(#DISTRIBUE|=={non}|oui)#SOURCE]
 				</td>
 				<td>
@@ -166,7 +166,7 @@
 			<tr>
 				<td>[(#DATE|affdate_heure)]</td>
 				<td>[(#OCTETS|dashboard_taille)]</td>
-				<td>[(#STATUT|=={locale}|?{'<:dashboard:sauvegarde_locale:>','<:dashboard:sauvegarde_distante:>'})]</td>
+				<td>[(#STATUT|=={locale}|oui)<:dashboard:sauvegarde_locale:>][(#STATUT|=={locale}|non)<:dashboard:sauvegarde_distante:>]</td>
 				<td>[(#STATUT|=={locale}|oui)
 					<a class="dashboard-bouton" href="[(#URL_ACTION_AUTEUR{dashboard_telecharger,#ID_DASHBOARD_SAUVEGARDE})]"><:dashboard:action_telecharger:></a>
 				]</td>
@@ -186,10 +186,12 @@
 		<:dashboard:core_maj_texte{version_actuelle=#VERSION_SPIP,version_cible=#GET{version_cible}}:>
 	</p>
 	<p class="explication"><:dashboard:core_maj_avertissement:></p>
+	#SET{url_core_maj,#URL_ACTION_AUTEUR{dashboard_operation,core_maj/#ID_DASHBOARD_SITE/#GET{version_cible},#SELF}}
 	<p class="boutons">
 		<a class="dashboard-bouton dashboard-bouton-danger"
-		   href="[(#URL_ACTION_AUTEUR{dashboard_operation,core_maj/#ID_DASHBOARD_SITE/#GET{version_cible},#SELF})]"
-		   onclick="return confirm('[(<:dashboard:core_maj_confirmation:>|texte_backend)]');">
+		   href="#GET{url_core_maj}"
+		   data-confirmation="<:dashboard:core_maj_confirmation:>"
+		   onclick="return confirm(this.dataset.confirmation);">
 			<:dashboard:action_core_maj:>
 		</a>
 	</p>
