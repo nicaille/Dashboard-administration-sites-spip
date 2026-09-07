@@ -18,6 +18,7 @@ if (!defined('_ECRIRE_INC_VERSION')) {
  */
 function action_dashboard_supprimer_dist() {
 	include_spip('inc/headers');
+	include_spip('inc/autoriser');
 
 	$securiser_action = charger_fonction('securiser_action', 'inc');
 	$id_dashboard_site = (int) $securiser_action();

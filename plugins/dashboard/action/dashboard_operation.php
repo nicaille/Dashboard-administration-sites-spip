@@ -89,6 +89,7 @@ function action_dashboard_operation_dist() {
  */
 function dashboard_operation_retour($id_site, $ok, $message) {
 	include_spip('inc/headers');
+	include_spip('inc/autoriser');
 
 	$redirect = _request('redirect');
 	if (!$redirect) {

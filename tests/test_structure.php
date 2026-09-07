@@ -303,6 +303,62 @@ foreach ($plugins as $plugin) {
 	}
 }
 
+echo "\n== Autorisations ==\n";
+
+foreach ($plugins as $plugin) {
+	$nom_court = basename($plugin);
+	$prefixe   = (string) simplexml_load_file($plugin . '/paquet.xml')['prefix'];
+	$fichier   = $plugin . "/{$prefixe}_autorisations.php";
+	if (!is_file($fichier)) {
+		continue;
+	}
+	$source = file_get_contents($fichier);
+
+	// La chaîne de résolution de SPIP essaie plusieurs noms pour un même
+	// contrôle. Si l'un délègue à un autre, ou repasse par autoriser(), la
+	// récursion est sans fin — et le symptôme est un dépassement de pile très
+	// loin de la cause.
+	preg_match_all('/function\s+(autoriser_[a-z0-9_]+)\s*\([^)]*\)\s*\{(.*?)\n\}/s', $source, $trouves, PREG_SET_ORDER);
+	verifier("$nom_court : des fonctions d’autorisation sont définies", (bool) $trouves);
+	foreach ($trouves as $fonction) {
+		verifier(
+			"$nom_court : {$fonction[1]}() ne délègue à aucune autre autorisation",
+			!preg_match('/\bautoriser[_(]/', $fonction[2])
+		);
+	}
+
+	// Sans ce chargement, autoriser() n'existe pas encore dans un fichier action.
+	foreach (glob($plugin . '/action/*.php') as $action) {
+		$code = file_get_contents($action);
+		if (strpos($code, 'autoriser(') === false) {
+			continue;
+		}
+		verifier(
+			"$nom_court : " . basename($action) . " charge inc/autoriser",
+			strpos($code, "include_spip('inc/autoriser')") !== false
+		);
+	}
+}
+
+echo "\n== Champs éditables ==\n";
+
+foreach ($plugins as $plugin) {
+	$nom_court = basename($plugin);
+	$prefixe   = (string) simplexml_load_file($plugin . '/paquet.xml')['prefix'];
+	$fichier   = $plugin . "/base/{$prefixe}_tables.php";
+	if (!is_file($fichier)) {
+		continue;
+	}
+	// objet_modifier() route tout « statut » posté vers objet_instituer() : le
+	// déclarer éditable revient à écrire le champ par deux mécanismes à la fois.
+	if (preg_match("/'champs_editables'\s*=>\s*\[([^\]]*)\]/", file_get_contents($fichier), $bloc)) {
+		verifier(
+			"$nom_court : « statut » n’est pas déclaré champ éditable",
+			strpos($bloc[1], "'statut'") === false
+		);
+	}
+}
+
 echo "\n== Noms de colonnes ==\n";
 
 foreach ($plugins as $plugin) {

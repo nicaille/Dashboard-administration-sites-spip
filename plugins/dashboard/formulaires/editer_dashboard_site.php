@@ -103,6 +103,14 @@ function formulaires_editer_dashboard_site_traiter_dist($id_dashboard_site = 'ne
 		return $retours;
 	}
 
+	// Le statut ne passe pas par objet_modifier() : on l'institue à part, une
+	// seule fois, avec le contrôle d'autorisation qui va avec.
+	$statut = (string) _request('statut');
+	if (in_array($statut, ['publie', 'prepa'], true)) {
+		include_spip('action/editer_objet');
+		objet_instituer('dashboard_site', $id, ['statut' => $statut]);
+	}
+
 	$nouveau_secret = '';
 	if (_request('generer_secret') === 'on') {
 		$nouveau_secret = dashboard_generer_secret();

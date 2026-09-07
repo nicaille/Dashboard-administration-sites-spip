@@ -18,6 +18,8 @@ if (!defined('_ECRIRE_INC_VERSION')) {
 function action_dashboard_telecharger_dist() {
 	include_spip('inc/dashboard_operations');
 
+	include_spip('inc/autoriser');
+
 	$securiser_action = charger_fonction('securiser_action', 'inc');
 	$id_sauvegarde = (int) $securiser_action();
 
