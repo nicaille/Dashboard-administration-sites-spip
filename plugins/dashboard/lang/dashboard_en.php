@@ -65,6 +65,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'explication_secret_clair' => 'Paste here the secret generated on the managed site. It is never displayed again.',
 	'explication_sync_lot'     => 'How many sites are polled on each cron pass. Least recently synchronised sites go first.',
 	'explication_timeout_long' => 'Applies to backups and upgrades, which can take several minutes.',
+	'explication_tables_absentes' => 'This plugin’s tables do not exist in the database: its installation did not complete. Uninstall the plugin from “Configuration → Manage plugins” (uninstall, not just deactivate), then activate it again: the tables will be created.',
 	'explication_url_agent'    => 'Entry point of the "Dashboard: agent" plugin on the managed site, shown on its settings page.',
 	'explication_versions_manuelles' => 'One line per branch, formatted <code>4.2 = 4.2.16</code>. These values take precedence over the official archive index.',
 
@@ -156,6 +157,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 
 	// T
 	'titre_configurer'   => 'Dashboard: settings',
+	'titre_tables_absentes' => 'Plugin tables missing',
 	'titre_caches'       => 'Caches',
 	'titre_core_maj'     => 'SPIP core upgrade',
 	'titre_dashboard'    => 'SPIP site fleet',

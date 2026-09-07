@@ -25,6 +25,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'explication_ips'        => 'Optional. One address or CIDR range per line (or comma separated). Empty means no address filtering — the signature remains the primary protection.',
 	'explication_operations' => 'This site has the final say: the dashboard can only trigger the operations ticked here.',
 	'explication_secret_clair' => 'If the secret was generated on the dashboard, paste it here. Otherwise leave empty and tick the box above.',
+	'explication_tables_absentes' => 'This plugin’s tables do not exist in the database: its installation did not complete. Uninstall the plugin from “Configuration → Manage plugins” (uninstall, not just deactivate), then activate it again: the tables will be created.',
 
 	// J
 	'journal_caption' => 'Requests received by the agent, most recent first.',

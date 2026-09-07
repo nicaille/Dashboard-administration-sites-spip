@@ -7,6 +7,7 @@
 <div class="ajax">
 	<h2><:dashagent:titre_journal:></h2>
 
+	<BOUCLE_installe(CONDITION){si #VAL|dashagent_tables_presentes}>
 	<B_journal>
 	<table class="spip liste">
 		<caption><:dashagent:journal_caption:></caption>
@@ -37,4 +38,7 @@
 	</B_journal>
 	<p class="petition"><:dashagent:journal_vide:></p>
 	<//B_journal>
+	</BOUCLE_installe>
+	<p class="reponse_formulaire reponse_formulaire_erreur"><:dashagent:explication_tables_absentes:></p>
+	<//B_installe>
 </div>

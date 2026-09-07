@@ -17,13 +17,25 @@ if (!defined('_ECRIRE_INC_VERSION')) {
 function dashboard_upgrade($nom_meta_base_version, $version_cible) {
 	$maj = [];
 
+	$tables = [
+		'spip_dashboard_sites',
+		'spip_dashboard_plugins',
+		'spip_dashboard_journal',
+		'spip_dashboard_sauvegardes',
+	];
+
 	$maj['create'] = [
-		['maj_tables', [
-			'spip_dashboard_sites',
-			'spip_dashboard_plugins',
-			'spip_dashboard_journal',
-			'spip_dashboard_sauvegardes',
-		]],
+		['maj_tables', $tables],
+		['dashboard_initialiser_configuration'],
+	];
+
+	// Rattrapage : une première activation avec un paquet.xml invalide pouvait
+	// enregistrer la version en meta sans que les tables soient créées, et
+	// l'étape « create » n'est jamais rejouée une fois la meta présente.
+	// maj_tables() n'ajoutant que ce qui manque, cette étape est sans effet sur
+	// une installation saine.
+	$maj['1.0.1'] = [
+		['maj_tables', $tables],
 		['dashboard_initialiser_configuration'],
 	];
 

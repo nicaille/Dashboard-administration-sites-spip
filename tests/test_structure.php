@@ -195,6 +195,69 @@ foreach ($plugins as $plugin) {
 	}
 }
 
+echo "\n== Cohérence installation / déclaration des tables ==\n";
+
+foreach ($plugins as $plugin) {
+	$nom_court = basename($plugin);
+	$xml       = simplexml_load_file($plugin . '/paquet.xml');
+	$prefixe   = (string) $xml['prefix'];
+	$schema    = (string) $xml['schema'];
+	$administrations = $plugin . '/' . $prefixe . '_administrations.php';
+	if ($schema === '' || !is_file($administrations)) {
+		continue;
+	}
+	$install = file_get_contents($administrations);
+
+	// Toute table déclarée doit être créée à l'installation et supprimée à la
+	// désinstallation : c'est ce chaînon manquant qui produit un « la table
+	// n'existe pas » au premier affichage.
+	$declarees = [];
+	foreach (glob($plugin . '/base/*.php') as $fichier) {
+		preg_match_all('/\$tables\[\'(spip_[a-z0-9_]+)\'\]/', file_get_contents($fichier), $trouves);
+		$declarees = array_merge($declarees, $trouves[1]);
+	}
+	verifier("$nom_court : des tables sont déclarées", (bool) $declarees);
+	foreach (array_unique($declarees) as $table) {
+		verifier("$nom_court : $table créée par l’installation", strpos($install, "'$table'") !== false);
+		verifier("$nom_court : $table supprimée par la désinstallation", strpos($install, "sql_drop_table('$table')") !== false);
+	}
+
+	// L'étape « create » n'est jamais rejouée : sans une étape versionnée au
+	// niveau du schéma, une installation interrompue reste définitivement bancale.
+	preg_match_all('/\$maj\[\'([0-9]+\.[0-9]+\.[0-9]+)\'\]/', $install, $trouves);
+	$etapes = array_unique($trouves[1]);
+	verifier("$nom_court : au moins une étape de migration versionnée", (bool) $etapes);
+	if ($etapes) {
+		usort($etapes, 'version_compare');
+		$plus_haute = end($etapes);
+		verifier(
+			"$nom_court : schema=$schema aligné sur la plus haute étape ($plus_haute)",
+			$schema === $plus_haute
+		);
+	}
+}
+
+echo "\n== Filtres appelés par les squelettes ==\n";
+
+foreach ($plugins as $plugin) {
+	$prefixe = (string) simplexml_load_file($plugin . '/paquet.xml')['prefix'];
+	$fonctions = $plugin . '/' . $prefixe . '_fonctions.php';
+	$disponibles = '';
+	foreach (array_merge(glob($plugin . '/*_fonctions.php'), glob($plugin . '/inc/*.php')) as $fichier) {
+		$disponibles .= file_get_contents($fichier);
+	}
+	foreach (fichiers($plugin, ['html']) as $squelette) {
+		$affiche = str_replace($plugin . '/', '', $squelette);
+		preg_match_all('/\|(' . $prefixe . '_[a-z0-9_]+)/', file_get_contents($squelette), $trouves);
+		foreach (array_unique($trouves[1]) as $filtre) {
+			verifier("$affiche : filtre |$filtre défini", strpos($disponibles, "function $filtre(") !== false);
+		}
+	}
+	if (glob($plugin . '/*_fonctions.php')) {
+		verifier(basename($plugin) . " : {$prefixe}_fonctions.php chargé automatiquement", is_file($fonctions));
+	}
+}
+
 echo "\n== Clefs de langue référencées ==\n";
 
 $modules = [];

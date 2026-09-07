@@ -1,6 +1,8 @@
 [(#AUTORISER{voir, dashboard_site, #ENV{id_dashboard_site}}|sinon_interdire_acces)]
 <link rel="stylesheet" href="[(#CHEMIN{css/dashboard.css}|timestamp|direction_css)]" type="text/css" />
 
+<BOUCLE_installe(CONDITION){si #VAL|dashboard_tables_presentes}>
+
 [(#ENV{new}|oui)
 	<h1 class="grostitre"><:dashboard:icone_creer_site:></h1>
 	[(#AUTORISER{creer,dashboard_site}|sinon_interdire_acces)]
@@ -223,3 +225,10 @@
 </div>
 
 </BOUCLE_site>
+
+</BOUCLE_installe>
+<div class="dashboard-fiche dashboard-fiche-alerte">
+	<h2><:dashboard:titre_tables_absentes:></h2>
+	<p><:dashboard:explication_tables_absentes:></p>
+</div>
+<//B_installe>

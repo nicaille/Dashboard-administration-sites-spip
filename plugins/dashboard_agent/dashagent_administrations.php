@@ -19,8 +19,17 @@ if (!defined('_ECRIRE_INC_VERSION')) {
 function dashagent_upgrade($nom_meta_base_version, $version_cible) {
 	$maj = [];
 
+	$tables = ['spip_dashagent_journal', 'spip_dashagent_nonces'];
+
 	$maj['create'] = [
-		['maj_tables', ['spip_dashagent_journal', 'spip_dashagent_nonces']],
+		['maj_tables', $tables],
+		['dashagent_initialiser_configuration'],
+	];
+
+	// Rattrapage : voir dashboard_administrations.php. Une activation avec un
+	// paquet.xml invalide laissait la meta de version posée et les tables absentes.
+	$maj['1.0.1'] = [
+		['maj_tables', $tables],
 		['dashagent_initialiser_configuration'],
 	];
 

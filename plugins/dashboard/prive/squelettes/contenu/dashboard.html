@@ -9,6 +9,8 @@
 	</p>
 ]
 
+<BOUCLE_installe(CONDITION){si #VAL|dashboard_tables_presentes}>
+
 #SET{synthese,#VAL|dashboard_synthese}
 <ul class="dashboard-synthese">
 	<li><strong>[(#GET{synthese}|table_valeur{supervises})]</strong> <:dashboard:synthese_supervises:></li>
@@ -77,3 +79,10 @@
 	<a class="btn dashboard-bouton dashboard-bouton-primaire" href="[(#URL_ECRIRE{dashboard_site,new=oui})]"><:dashboard:icone_creer_site:></a>
 </p>
 ]
+
+</BOUCLE_installe>
+<div class="dashboard-fiche dashboard-fiche-alerte">
+	<h2><:dashboard:titre_tables_absentes:></h2>
+	<p><:dashboard:explication_tables_absentes:></p>
+</div>
+<//B_installe>

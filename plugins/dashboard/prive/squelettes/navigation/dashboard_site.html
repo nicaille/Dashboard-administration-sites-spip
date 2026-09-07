@@ -4,6 +4,7 @@
 		<li><a href="[(#URL_ECRIRE{dashboard})]"><:dashboard:nav_retour_parc:></a></li>
 	</ul>
 
+	<BOUCLE_installe(CONDITION){si #VAL|dashboard_tables_presentes}>
 	<BOUCLE_site(DASHBOARD_SITES){id_dashboard_site}>
 		[(#AUTORISER{supprimer,dashboard_site,#ID_DASHBOARD_SITE})
 		<ul class="liste-items">
@@ -17,4 +18,6 @@
 		</ul>
 		]
 	</BOUCLE_site>
+	</BOUCLE_installe>
+	<//B_installe>
 </div>

@@ -25,6 +25,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'explication_ips'        => 'Facultatif. Une adresse ou une plage CIDR par ligne (ou séparées par des virgules). Vide = pas de filtrage par adresse, la signature restant la protection principale.',
 	'explication_operations' => 'Ce site garde le dernier mot : le tableau de bord ne peut déclencher que les opérations cochées ici.',
 	'explication_secret_clair' => 'Si le secret a été généré sur le tableau de bord, collez-le ici. Sinon, laissez vide et cochez la case ci-dessus.',
+	'explication_tables_absentes' => 'Les tables de ce plugin n’existent pas en base : son installation ne s’est pas terminée. Désinstallez le plugin depuis « Configuration → Gestion des plugins » (désinstaller, pas seulement désactiver), puis réactivez-le : les tables seront créées.',
 
 	// J
 	'journal_caption' => 'Requêtes reçues par l’agent, de la plus récente à la plus ancienne.',
