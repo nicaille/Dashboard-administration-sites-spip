@@ -48,6 +48,18 @@ function autoriser_dashboard_site_supprimer_dist($faire, $type, $id, $qui, $opt)
 }
 
 /**
+ * Changer le statut de supervision d'un site.
+ *
+ * `objet_instituer()` contrôle ce droit à part : sans cette fonction, le champ
+ * statut du formulaire serait silencieusement ignoré.
+ *
+ * @see autoriser_dashboard_site_creer_dist()
+ */
+function autoriser_dashboard_site_instituer_dist($faire, $type, $id, $qui, $opt) {
+	return autoriser_dashboard_site_creer_dist($faire, $type, $id, $qui, $opt);
+}
+
+/**
  * Déclencher une opération de lecture (inventaire) sur un site.
  */
 function autoriser_dashboard_site_synchroniser_dist($faire, $type, $id, $qui, $opt) {

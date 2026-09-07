@@ -59,12 +59,17 @@ Le détail est dans [docs/installation.md](docs/installation.md).
 
 ## Tests
 
-Les fonctions critiques (signature, filtrage IP, validation des archives,
-protection contre les chemins traversants) sont vérifiables sans installation SPIP :
+Deux suites, exécutables sans installation SPIP :
 
 ```bash
-php tests/test_protocole.php
+php tests/test_protocole.php   # signature partagée, filtrage IP, validation des archives
+php tests/test_structure.php   # manifestes, pipelines, menus, actions, clefs de langue
 ```
+
+La seconde attrape la classe d'erreurs qui ne se voit sinon qu'à l'installation
+du plugin ou au premier clic dans l'espace privé : balise inconnue dans un
+`paquet.xml`, pipeline pointant sur une fonction absente, icône ou page de menu
+introuvable, chaîne de langue non traduite.
 
 ## Compatibilité
 
