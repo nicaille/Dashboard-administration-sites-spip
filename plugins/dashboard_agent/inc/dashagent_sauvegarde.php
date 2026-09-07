@@ -120,8 +120,12 @@ function dashagent_sauvegarde_ecrire($chemin, $tables) {
 		. '-- Date   : ' . date('c') . "\n"
 		. '-- SPIP   : ' . ($GLOBALS['spip_version_branche'] ?? '?') . "\n"
 		. '-- Tables : ' . count($tables) . "\n\n"
-		. 'SET NAMES ' . dashagent_charset_connexion() . ";\n"
-		. "SET FOREIGN_KEY_CHECKS=0;\n\n";
+		. '-- Moteur : ' . (dashagent_moteur_sql() ?: '?') . "\n\n";
+
+	if (strncmp(dashagent_moteur_sql(), 'sqlite', 6) !== 0) {
+		$entete .= 'SET NAMES ' . dashagent_charset_connexion() . ";\n"
+			. "SET FOREIGN_KEY_CHECKS=0;\n\n";
+	}
 	gzwrite($gz, $entete);
 
 	foreach ($tables as $table) {
@@ -133,7 +137,9 @@ function dashagent_sauvegarde_ecrire($chemin, $tables) {
 		}
 	}
 
-	gzwrite($gz, "SET FOREIGN_KEY_CHECKS=1;\n");
+	if (strncmp(dashagent_moteur_sql(), 'sqlite', 6) !== 0) {
+		gzwrite($gz, "SET FOREIGN_KEY_CHECKS=1;\n");
+	}
 	gzclose($gz);
 
 	return '';
@@ -171,9 +177,10 @@ function dashagent_sauvegarde_table($gz, $table) {
 
 	$creation = dashagent_sauvegarde_structure($table);
 	if ($creation === null) {
-		return 'Structure illisible pour la table ' . $table;
+		return 'Structure illisible pour la table ' . $table
+			. ' (moteur ' . (dashagent_moteur_sql() ?: 'inconnu') . ' non pris en charge par la sauvegarde)';
 	}
-	gzwrite($gz, 'DROP TABLE IF EXISTS `' . $table . "`;\n" . $creation . ";\n\n");
+	gzwrite($gz, 'DROP TABLE IF EXISTS ' . dashagent_identifiant_sql($table) . ";\n" . $creation . ";\n\n");
 
 	// Sans clef primaire, la pagination par offset n'est pas stable (une ligne
 	// pourrait être dupliquée ou sautée) : on lit alors la table d'un seul tenant.
@@ -241,12 +248,46 @@ function dashagent_sauvegarde_clef_primaire($table) {
 }
 
 /**
- * Récupère l'ordre CREATE TABLE.
+ * Moteur SQL du site : « mysql », « sqlite3 »… selon la connexion en cours.
+ *
+ * @return string
+ */
+function dashagent_moteur_sql() {
+	$type = $GLOBALS['connexions'][0]['type'] ?? '';
+	if (!$type) {
+		$type = $GLOBALS['connexions']['']['type'] ?? '';
+	}
+
+	return strtolower((string) $type);
+}
+
+/**
+ * Récupère l'ordre CREATE TABLE, quel que soit le moteur.
+ *
+ * MySQL répond à SHOW CREATE TABLE, SQLite stocke l'ordre d'origine dans
+ * sqlite_master. Sans ce double chemin, la sauvegarde échouait purement et
+ * simplement sur un site SQLite.
  *
  * @param string $table
  * @return string|null
  */
 function dashagent_sauvegarde_structure($table) {
+	$moteur = dashagent_moteur_sql();
+
+	if (strncmp($moteur, 'sqlite', 6) === 0) {
+		$res = sql_query('SELECT sql FROM sqlite_master WHERE type = ' . sql_quote('table')
+			. ' AND name = ' . sql_quote($table), '', 'continue');
+		if ($res) {
+			$ligne = sql_fetch($res, '');
+			sql_free($res, '');
+			if (is_array($ligne) && !empty($ligne['sql'])) {
+				return (string) $ligne['sql'];
+			}
+		}
+
+		return null;
+	}
+
 	$res = sql_query('SHOW CREATE TABLE `' . $table . '`', '', 'continue');
 	if ($res) {
 		$ligne = sql_fetch($res, '');
@@ -261,6 +302,18 @@ function dashagent_sauvegarde_structure($table) {
 	}
 
 	return null;
+}
+
+/**
+ * Échappe un nom de table ou de colonne selon le moteur.
+ *
+ * @param string $nom
+ * @return string
+ */
+function dashagent_identifiant_sql($nom) {
+	return (strncmp(dashagent_moteur_sql(), 'sqlite', 6) === 0)
+		? '"' . str_replace('"', '""', $nom) . '"'
+		: '`' . str_replace('`', '``', $nom) . '`';
 }
 
 /**
@@ -290,9 +343,13 @@ function dashagent_sauvegarde_insert($table, $colonnes, $lignes) {
 	if (!$lignes) {
 		return '';
 	}
-	$entete = $colonnes ? '(`' . implode('`,`', $colonnes) . '`) ' : '';
+	$entete = '';
+	if ($colonnes) {
+		$entete = '(' . implode(',', array_map('dashagent_identifiant_sql', $colonnes)) . ') ';
+	}
 
-	return 'INSERT INTO `' . $table . '` ' . $entete . 'VALUES ' . implode(",\n", $lignes) . ";\n";
+	return 'INSERT INTO ' . dashagent_identifiant_sql($table) . ' ' . $entete
+		. 'VALUES ' . implode(",\n", $lignes) . ";\n";
 }
 
 /**

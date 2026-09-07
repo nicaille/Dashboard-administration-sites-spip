@@ -59,7 +59,7 @@ Le détail est dans [docs/installation.md](docs/installation.md).
 
 ## Tests
 
-Deux suites, exécutables sans installation SPIP :
+### Sans installation SPIP
 
 ```bash
 php tests/test_protocole.php   # signature partagée, filtrage IP, validation des archives
@@ -72,10 +72,22 @@ du plugin ou au premier clic dans l'espace privé : balise inconnue dans un
 introuvable, chaîne de langue non traduite.
 
 Elle vérifie en particulier que **toute fonction du core SPIP appelée figure
-dans un contrat explicite**, déclaré en tête du test. Appeler une API supposée
-exister casse le test au lieu de casser l'espace privé. La même liste est
-contrôlée à l'exécution : *Configuration → Dashboard : configuration* signale
-les fonctions attendues qui manqueraient sur l'installation réelle.
+dans un contrat explicite**, avec le `include_spip()` qui la fournit. Appeler
+une API supposée exister, ou l'appeler sans son inclusion, casse le test au lieu
+de casser l'espace privé. La même liste est contrôlée à l'exécution :
+*Configuration → Dashboard : configuration* signale les fonctions attendues qui
+manqueraient sur l'installation réelle.
+
+### Sur un SPIP réel
+
+```bash
+tests/integration/executer.sh /chemin/vers/SPIP-v4.4.23.zip
+```
+
+Installe un SPIP en SQLite, y active les deux plugins, et déroule le parcours
+complet dans un navigateur : création d'un site, appairage, synchronisation
+signée, purge de cache, sauvegarde de base et restauration du dump obtenu. Voir
+[tests/integration/README.md](tests/integration/README.md).
 
 ## Compatibilité
 
