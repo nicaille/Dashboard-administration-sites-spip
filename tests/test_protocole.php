@@ -139,20 +139,23 @@ verifier(
 	'dépôt sans conteneur d’archives : pas d’URL',
 	dashagent_url_archive_depot(['url_archives' => '', 'nom_archive' => 'gis.zip']) === ''
 );
+// Le `type` du dépôt décrit ses sources, pas le transport de l'archive :
+// choisir_teleporteur() retourne « http » par défaut, y compris pour un dépôt
+// git ou svn. Filtrer là-dessus écarterait plugins.spip.net.
 verifier(
-	'dépôt git : pas d’archive téléchargeable',
+	'dépôt git : archive tout de même servie en http',
 	dashagent_url_archive_depot(['url_archives' => 'https://exemple.org/zips',
-		'nom_archive' => 'gis.zip', 'type_depot' => 'git']) === ''
+		'nom_archive' => 'gis.zip', 'type_depot' => 'git']) === 'https://exemple.org/zips/gis.zip'
 );
 verifier(
-	'dépôt svn : pas d’archive téléchargeable',
+	'dépôt svn : archive tout de même servie en http',
 	dashagent_url_archive_depot(['url_archives' => 'https://exemple.org/zips',
-		'nom_archive' => 'gis.zip', 'type_depot' => 'svn']) === ''
+		'nom_archive' => 'gis.zip', 'type_depot' => 'svn']) === 'https://exemple.org/zips/gis.zip'
 );
 verifier(
-	'type de dépôt non renseigné : traité comme http',
+	'type de dépôt non renseigné : sans effet',
 	dashagent_url_archive_depot(['url_archives' => 'https://exemple.org/zips',
-		'nom_archive' => 'gis.zip']) !== ''
+		'nom_archive' => 'gis.zip']) === 'https://exemple.org/zips/gis.zip'
 );
 
 echo "\n== Extraction ZIP : refus des chemins hors répertoire ==\n";
