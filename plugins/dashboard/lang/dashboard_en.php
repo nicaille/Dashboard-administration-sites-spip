@@ -16,6 +16,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'action_sauvegarder'       => 'Back up the database',
 	'action_sauvegarder_legere' => 'Back up without statistics',
 	'action_installer'         => 'Create the tables now',
+	'action_reparer'           => 'Check the installation and clear caches',
 	'action_supprimer_site'    => 'Remove this site from the fleet',
 	'action_sync'              => 'Synchronise',
 	'action_telecharger'       => 'Download',
@@ -68,6 +69,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'explication_sync_lot'     => 'How many sites are polled on each cron pass. Least recently synchronised sites go first.',
 	'explication_timeout_long' => 'Applies to backups and upgrades, which can take several minutes.',
 	'explication_tables_absentes' => 'This plugin’s tables do not exist in the database: its installation did not complete. The button below creates them directly.',
+	'explication_maintenance'  => 'Recreates missing tables, resets what SPIP remembers of the schema and clears compiled templates. No effect if everything is already in order.',
 	'explication_url_agent'    => 'Entry point of the "Dashboard: agent" plugin on the managed site, shown on its settings page.',
 	'explication_versions_manuelles' => 'One line per branch, formatted <code>4.2 = 4.2.16</code>. These values take precedence over the official archive index.',
 
@@ -168,6 +170,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'titre_dashboard'    => 'SPIP site fleet',
 	'titre_etat'         => 'Site state',
 	'titre_journal'      => 'Operations log',
+	'titre_maintenance'  => 'Plugin maintenance',
 	'titre_plugins'      => 'Plugins',
 	'titre_sauvegardes'  => 'Backups',
 	'titre_site'         => 'Managed site',

@@ -168,6 +168,11 @@ function dashboard_declarer_tables_principales($tables) {
  * @return array
  */
 function dashboard_declarer_tables_interfaces($interfaces) {
+	// L'objet « site géré » devrait se déclarer tout seul, mais le compilateur
+	// ne retrouve pas toujours le nom de boucle d'un type composé : on lui donne
+	// la correspondance explicitement. Redondant sur une installation saine,
+	// déterminant sur les autres.
+	$interfaces['table_des_tables']['dashboard_sites']      = 'dashboard_sites';
 	$interfaces['table_des_tables']['dashboard_plugins']    = 'dashboard_plugins';
 	$interfaces['table_des_tables']['dashboard_journal']    = 'dashboard_journal';
 	$interfaces['table_des_tables']['dashboard_sauvegardes'] = 'dashboard_sauvegardes';

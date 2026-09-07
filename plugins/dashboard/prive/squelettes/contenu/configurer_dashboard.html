@@ -4,3 +4,14 @@
 <h1 class="grostitre"><:dashboard:titre_configurer:></h1>
 
 #FORMULAIRE_CONFIGURER_DASHBOARD
+
+<div class="dashboard-fiche">
+	<h2><:dashboard:titre_maintenance:></h2>
+	<p class="explication"><:dashboard:explication_maintenance:></p>
+	[<p><:dashboard:tables_manquantes:> <code>(#VAL|dashboard_tables_absentes)</code></p>]
+	<p class="boutons">
+		<a class="dashboard-bouton" href="[(#URL_ACTION_AUTEUR{dashboard_installer,installer,#SELF})]">
+			<:dashboard:action_reparer:>
+		</a>
+	</p>
+</div>

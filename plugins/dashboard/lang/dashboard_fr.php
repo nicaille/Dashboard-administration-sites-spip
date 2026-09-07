@@ -16,6 +16,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'action_sauvegarder'       => 'Sauvegarder la base',
 	'action_sauvegarder_legere' => 'Sauvegarder sans les statistiques',
 	'action_installer'         => 'Créer les tables maintenant',
+	'action_reparer'           => 'Vérifier l’installation et vider les caches',
 	'action_supprimer_site'    => 'Retirer ce site du parc',
 	'action_sync'              => 'Synchroniser',
 	'action_telecharger'       => 'Télécharger',
@@ -68,6 +69,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'explication_sync_lot'     => 'Nombre de sites interrogés à chaque passage du cron. Les sites les moins récemment synchronisés passent en premier.',
 	'explication_timeout_long' => 'S’applique aux sauvegardes et aux mises à jour, qui peuvent durer plusieurs minutes.',
 	'explication_tables_absentes' => 'Les tables de ce plugin n’existent pas en base : son installation ne s’est pas terminée. Le bouton ci-dessous les crée directement.',
+	'explication_maintenance'  => 'Recrée les tables manquantes, réinitialise ce que SPIP a mémorisé du schéma et vide les squelettes compilés. Sans effet si tout est déjà en ordre.',
 	'explication_url_agent'    => 'Point d’entrée du plugin « Dashboard : agent » sur le site géré, affiché sur sa page de configuration.',
 	'explication_versions_manuelles' => 'Une ligne par branche, au format <code>4.2 = 4.2.16</code>. Ces valeurs priment sur l’index des archives officielles.',
 
@@ -168,6 +170,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'titre_dashboard'    => 'Parc de sites SPIP',
 	'titre_etat'         => 'État du site',
 	'titre_journal'      => 'Journal des opérations',
+	'titre_maintenance'  => 'Maintenance du plugin',
 	'titre_plugins'      => 'Plugins',
 	'titre_sauvegardes'  => 'Sauvegardes',
 	'titre_site'         => 'Site géré',

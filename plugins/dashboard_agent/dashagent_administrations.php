@@ -31,6 +31,12 @@ function dashagent_upgrade($nom_meta_base_version, $version_cible) {
 		['dashagent_initialiser_configuration'],
 	];
 
+	// Voir dashboard_administrations.php : les caches doivent être réinitialisés
+	// après création des tables, sinon le compilateur garde une vue périmée.
+	$maj['1.0.3'] = [
+		['dashagent_creer_tables'],
+	];
+
 	include_spip('base/upgrade');
 	maj_plugin($nom_meta_base_version, $version_cible, $maj);
 }
@@ -79,6 +85,15 @@ function dashagent_creer_tables() {
 	}
 
 	$restantes = dashagent_tables_manquantes($noms);
+
+	$trouver_table = charger_fonction('trouver_table', 'base', true);
+	if ($trouver_table) {
+		$trouver_table('');
+	}
+	include_spip('inc/flock');
+	if (function_exists('purger_repertoire') && defined('_DIR_CACHE') && is_dir(_DIR_CACHE)) {
+		purger_repertoire(_DIR_CACHE, ['subdir' => true]);
+	}
 
 	if ($restantes) {
 		spip_log('installation : tables toujours absentes après création : ' . implode(', ', $restantes), 'dashagent');

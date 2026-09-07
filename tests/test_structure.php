@@ -236,7 +236,32 @@ foreach ($plugins as $plugin) {
 
 	foreach ($declarees as $table) {
 		verifier("$nom_court : $table supprimée par la désinstallation", strpos($install, "sql_drop_table('$table')") !== false);
+
+		// Sans correspondance nom de boucle -> table, le compilateur répond
+		// « Table SQL inconnue » alors que la table existe bel et bien. Seules
+		// les tables réellement parcourues par un squelette sont concernées.
+		$boucle = preg_replace('/^spip_/', '', $table);
+		$bouclee = false;
+		foreach (fichiers($plugin, ['html']) as $squelette) {
+			if (preg_match('/<BOUCLE[a-z0-9_]*\\(' . strtoupper($boucle) . '\\)/i', file_get_contents($squelette))) {
+				$bouclee = true;
+				break;
+			}
+		}
+		if ($bouclee) {
+			verifier(
+				"$nom_court : <BOUCLE(" . strtoupper($boucle) . ")> associée à $table",
+				strpos($base, "['table_des_tables']['$boucle']") !== false
+			);
+		}
 	}
+
+	// Créer des tables sans réinitialiser les caches laisse le compilateur sur
+	// une vue périmée du schéma.
+	verifier(
+		"$nom_court : la création réinitialise les caches de schéma",
+		strpos($install, "charger_fonction('trouver_table', 'base'") !== false
+	);
 
 	// « create » n'étant jamais rejouée, il faut une étape versionnée au niveau
 	// du schéma pour rattraper une installation restée incomplète.

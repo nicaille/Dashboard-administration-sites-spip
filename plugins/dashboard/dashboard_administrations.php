@@ -32,6 +32,12 @@ function dashboard_upgrade($nom_meta_base_version, $version_cible) {
 		['dashboard_initialiser_configuration'],
 	];
 
+	// 1.0.2 créait les tables sans prévenir le compilateur : les squelettes
+	// gardaient une vue du schéma antérieure à leur création.
+	$maj['1.0.3'] = [
+		['dashboard_creer_tables'],
+	];
+
 	include_spip('base/upgrade');
 	maj_plugin($nom_meta_base_version, $version_cible, $maj);
 }
@@ -80,6 +86,11 @@ function dashboard_creer_tables() {
 
 	$restantes = dashboard_tables_manquantes($noms);
 
+	// Créer des tables sans réinitialiser les caches laisse le compilateur sur
+	// une vue périmée du schéma, et les boucles échouent sur une table qui
+	// existe pourtant.
+	dashboard_vider_caches();
+
 	if ($restantes) {
 		spip_log('installation : tables toujours absentes après création : ' . implode(', ', $restantes), 'dashboard');
 	} elseif ($manquantes) {
@@ -123,6 +134,29 @@ function dashboard_table_autoincrement($description) {
 
 	// Une clef composite ou textuelle ne s'auto-incrémente pas.
 	return (strpos($primaire, ',') === false) && (strncmp($primaire, 'id_', 3) === 0);
+}
+
+/**
+ * Réinitialise ce que SPIP a mémorisé du schéma et des squelettes compilés.
+ *
+ * @return void
+ */
+function dashboard_vider_caches() {
+	// Cache des descriptions de tables, consulté par le compilateur.
+	$trouver_table = charger_fonction('trouver_table', 'base', true);
+	if ($trouver_table) {
+		$trouver_table('');
+	}
+
+	// Squelettes compilés et pages calculées.
+	include_spip('inc/flock');
+	if (function_exists('purger_repertoire') && defined('_DIR_CACHE') && is_dir(_DIR_CACHE)) {
+		purger_repertoire(_DIR_CACHE, ['subdir' => true]);
+	}
+
+	if (function_exists('ecrire_meta')) {
+		ecrire_meta('derniere_modif', (string) time());
+	}
 }
 
 /**
