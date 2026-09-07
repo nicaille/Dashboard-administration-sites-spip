@@ -33,7 +33,9 @@ function dashboard_schema_sites() {
 			// Dernier état connu, alimenté par la synchronisation.
 			'etat'              => "varchar(16) DEFAULT 'inconnu' NOT NULL",
 			'erreur'            => "text DEFAULT '' NOT NULL",
-			'spip_version'      => "varchar(32) DEFAULT '' NOT NULL",
+			// Surtout pas « spip_version » : la couche SQL de SPIP réécrit tout
+			// identifiant préfixé spip_ en nom de table, et la requête devient invalide.
+			'version_spip'      => "varchar(32) DEFAULT '' NOT NULL",
 			'php_version'       => "varchar(32) DEFAULT '' NOT NULL",
 			'sql_version'       => "varchar(64) DEFAULT '' NOT NULL",
 			'agent_version'     => "varchar(32) DEFAULT '' NOT NULL",

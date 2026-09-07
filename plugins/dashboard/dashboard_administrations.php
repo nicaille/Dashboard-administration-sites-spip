@@ -45,6 +45,13 @@ function dashboard_upgrade($nom_meta_base_version, $version_cible) {
 		['dashboard_creer_tables'],
 	];
 
+	// 1.0.4 échouait encore : la colonne « spip_version » était réécrite en nom
+	// de table par la couche SQL de SPIP, rendant le CREATE TABLE invalide.
+	// Elle s'appelle désormais « version_spip ».
+	$maj['1.0.5'] = [
+		['dashboard_creer_tables'],
+	];
+
 	include_spip('base/upgrade');
 	maj_plugin($nom_meta_base_version, $version_cible, $maj);
 }
