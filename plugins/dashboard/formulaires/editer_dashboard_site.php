@@ -42,6 +42,12 @@ function formulaires_editer_dashboard_site_charger_dist($id_dashboard_site = 'ne
 	$valeurs['generer_secret']   = '';
 	$valeurs['_hidden'] = ($valeurs['_hidden'] ?? '');
 
+	// `objet_inserer()` crée le site en « prepa » ; on ajoute un site pour le
+	// superviser, donc c'est « supervisé » qui est proposé à la création.
+	if (!is_numeric($id_dashboard_site) || empty($valeurs['statut'])) {
+		$valeurs['statut'] = 'publie';
+	}
+
 	return $valeurs;
 }
 

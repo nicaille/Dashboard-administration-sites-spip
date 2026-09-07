@@ -20,7 +20,8 @@ function dashboard_declarer_tables_objets_sql($tables) {
 	$tables['spip_dashboard_sites'] = [
 		'type'          => 'dashboard_site',
 		'principale'    => 'oui',
-		'table_objet_surnoms' => ['dashboardsite'],
+		// Objet purement interne à l'espace privé : pas de page publique.
+		'page'          => '',
 
 		'field' => [
 			'id_dashboard_site' => 'bigint(21) NOT NULL',
@@ -57,36 +58,26 @@ function dashboard_declarer_tables_objets_sql($tables) {
 			'KEY groupe'   => 'groupe',
 		],
 
-		'titre'   => 'titre AS titre, "" AS lang',
+		'titre'   => "titre, '' AS lang",
 		'date'    => 'date',
-		'champs_editables'  => ['titre', 'url_site', 'url_agent', 'groupe', 'notes'],
+		'champs_editables'  => ['titre', 'url_site', 'url_agent', 'groupe', 'notes', 'statut'],
 		'champs_versionnes' => [],
 		'rechercher_champs' => ['titre' => 8, 'url_site' => 4, 'notes' => 1],
 
 		'statut_textes_instituer' => [
-			'publie' => 'dashboard:statut_supervise',
-			'prepa'  => 'dashboard:statut_pause',
+			'prepa'    => 'dashboard:statut_pause',
+			'publie'   => 'dashboard:statut_supervise',
 			'poubelle' => 'dashboard:statut_poubelle',
 		],
-		'statut' => [[
-			'champ'     => 'statut',
-			'publie'    => 'publie',
-			'previsu'   => 'publie,prepa',
-			'exception' => ['statut', 'tout'],
-		]],
 
 		'texte_retour'         => 'icone_retour',
 		'texte_modifier'       => 'dashboard:icone_modifier_site',
 		'texte_creer'          => 'dashboard:icone_creer_site',
 		'texte_objets'         => 'dashboard:titre_sites',
 		'texte_objet'          => 'dashboard:titre_site',
-		'texte_signale_edition' => 'texte_travail_article',
 		'info_aucun_objet'     => 'dashboard:info_aucun_site',
 		'info_1_objet'         => 'dashboard:info_1_site',
 		'info_nb_objets'       => 'dashboard:info_nb_sites',
-		'icone_objet'          => 'dashboard',
-
-		'tables_jointures' => ['spip_dashboard_plugins'],
 	];
 
 	return $tables;
