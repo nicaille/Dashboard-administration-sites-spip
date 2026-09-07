@@ -59,6 +59,13 @@ Sans la seconde, la table n'est simplement jamais créée. Le schéma vit dans
 `dashboard_schema_sites()` pour que les deux déclarations ne puissent pas
 diverger.
 
+Le plugin ne définit **aucune** fonction `dashboard_site_inserer()`,
+`dashboard_site_modifier()` ni équivalent : ce sont les noms que
+`objet_inserer()` et `objet_modifier()` cherchent par convention pour ce type
+d'objet. En définir une et y appeler l'API générique fait s'appeler les deux
+sans fin. Le plugin n'ayant pas de logique d'insertion propre, il s'en tient à
+l'API générique.
+
 Aucune colonne ne peut porter un nom préfixé `spip_` : la couche SQL de SPIP
 réécrit ces identifiants en noms de tables, et le `CREATE TABLE` devient
 invalide. D'où `version_spip` plutôt que `spip_version`.
