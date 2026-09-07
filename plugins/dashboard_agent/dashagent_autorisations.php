@@ -36,6 +36,17 @@ function autoriser_dashagent_configurer_dist($faire, $type, $id, $qui, $opt) {
 }
 
 /**
+ * Nom attendu par SPIP pour la page `configurer_dashagent` : le type et le
+ * verbe y sont concaténés sans souligné.
+ *
+ * Aucune de ces variantes n'en appelle une autre : une délégation entre deux
+ * noms que la chaîne de résolution essaie tour à tour boucle à l'infini.
+ */
+function autoriser_configurerdashagent_dist($faire, $type, $id, $qui, $opt) {
+	return !empty($qui['webmestre']) && $qui['webmestre'] === 'oui';
+}
+
+/**
  * Alias : selon les versions de SPIP, le type transmis pour une page
  * `configurer_xxx` conserve ou non son souligné initial.
  *
@@ -47,5 +58,5 @@ function autoriser_dashagent_configurer_dist($faire, $type, $id, $qui, $opt) {
  * @return bool
  */
 function autoriser__dashagent_configurer_dist($faire, $type, $id, $qui, $opt) {
-	return autoriser_dashagent_configurer_dist($faire, $type, $id, $qui, $opt);
+	return !empty($qui['webmestre']) && $qui['webmestre'] === 'oui';
 }

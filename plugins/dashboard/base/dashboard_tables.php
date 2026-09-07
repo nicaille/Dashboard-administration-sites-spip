@@ -79,7 +79,10 @@ function dashboard_declarer_tables_objets_sql($tables) {
 
 		'titre'   => "titre, '' AS lang",
 		'date'    => 'date',
-		'champs_editables'  => ['titre', 'url_site', 'url_agent', 'groupe', 'notes', 'statut'],
+		// « statut » n'y figure pas volontairement : objet_modifier() le routerait
+		// vers objet_instituer(), en plus de l'écrire lui-même. Le formulaire
+		// l'institue explicitement.
+		'champs_editables'  => ['titre', 'url_site', 'url_agent', 'groupe', 'notes'],
 		'champs_versionnes' => [],
 		'rechercher_champs' => ['titre' => 8, 'url_site' => 4, 'notes' => 1],
 
