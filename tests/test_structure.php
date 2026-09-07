@@ -340,6 +340,38 @@ foreach ($plugins as $plugin) {
 	}
 }
 
+echo "\n== Conventions de nommage des objets ==\n";
+
+foreach ($plugins as $plugin) {
+	$nom_court = basename($plugin);
+	$prefixe   = (string) simplexml_load_file($plugin . '/paquet.xml')['prefix'];
+	$fichier   = $plugin . "/base/{$prefixe}_tables.php";
+	if (!is_file($fichier)) {
+		continue;
+	}
+	preg_match_all("/'type'\s*=>\s*'([a-z0-9_]+)'/", file_get_contents($fichier), $types);
+	if (empty($types[1])) {
+		continue;
+	}
+
+	$code = '';
+	foreach (fichiers($plugin, ['php']) as $f) {
+		$code .= file_get_contents($f);
+	}
+
+	// objet_inserer('x', …) appelle x_inserer() si elle existe, objet_modifier()
+	// appelle x_modifier(), etc. Définir ces fonctions et y appeler l'API
+	// générique produit une récursion infinie : chacune rappelle l'autre.
+	foreach (array_unique($types[1]) as $type) {
+		foreach (['inserer', 'modifier', 'instituer', 'supprimer', 'dupliquer'] as $verbe) {
+			verifier(
+				"$nom_court : pas de fonction {$type}_{$verbe}() en collision avec l’API générique",
+				strpos($code, "function {$type}_{$verbe}(") === false
+			);
+		}
+	}
+}
+
 echo "\n== Champs éditables ==\n";
 
 foreach ($plugins as $plugin) {

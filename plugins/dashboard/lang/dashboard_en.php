@@ -51,6 +51,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'derniere_erreur' => 'Last error:',
 
 	// E
+	'erreur_creation_site'     => 'Could not create the site.',
 	'erreur_non_autorise'      => 'Operation restricted to webmasters.',
 	'erreur_secret_court'      => 'The shared secret must be at least @min@ characters long.',
 	'erreur_secret_obligatoire' => 'Provide the agent secret, or ask for a new one to be generated.',
@@ -152,6 +153,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'sauvegardes_vide'    => 'No backup for this site.',
 	'secret_a_copier'     => 'New shared secret (shown only once): @secret@',
 	'secret_absent'       => 'No secret stored: this site cannot be polled.',
+	'site_sans_nom'       => 'Unnamed site @id@',
 	'secret_configure'    => 'A secret is stored for this site.',
 	'statut_pause'        => 'Paused',
 	'statut_poubelle'     => 'Removed from the fleet',

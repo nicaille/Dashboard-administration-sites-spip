@@ -51,6 +51,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'derniere_erreur' => 'Dernière erreur :',
 
 	// E
+	'erreur_creation_site'     => 'Création du site impossible.',
 	'erreur_non_autorise'      => 'Opération réservée aux webmestres.',
 	'erreur_secret_court'      => 'Le secret doit faire au moins @min@ caractères.',
 	'erreur_secret_obligatoire' => 'Renseignez le secret de l’agent, ou demandez la génération d’un nouveau secret.',
@@ -152,6 +153,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'sauvegardes_vide'    => 'Aucune sauvegarde pour ce site.',
 	'secret_a_copier'     => 'Nouveau secret partagé (affiché une seule fois) : @secret@',
 	'secret_absent'       => 'Aucun secret enregistré : ce site ne peut pas être interrogé.',
+	'site_sans_nom'       => 'Site sans nom @id@',
 	'secret_configure'    => 'Un secret est enregistré pour ce site.',
 	'statut_pause'        => 'En pause',
 	'statut_poubelle'     => 'Retiré du parc',
