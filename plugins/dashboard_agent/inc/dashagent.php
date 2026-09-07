@@ -6,6 +6,9 @@
  * @package SPIP\Dashagent\Inc
  */
 
+use Spip\Chiffrer\Chiffrement;
+use Spip\Chiffrer\SpipCles;
+
 if (!defined('_ECRIRE_INC_VERSION')) {
 	return;
 }
@@ -37,12 +40,41 @@ function dashagent_chiffrer($valeur) {
 	if ($valeur === '') {
 		return '';
 	}
-	include_spip('inc/chiffrer');
-	if (function_exists('chiffrer')) {
-		return 'c1:' . chiffrer($valeur);
+
+	$clef = dashagent_clef_chiffrement();
+	if ($clef !== '') {
+		$chiffre = Chiffrement::chiffrer($valeur, $clef);
+		if (is_string($chiffre) && $chiffre !== '') {
+			return 'c2:' . $chiffre;
+		}
 	}
 
+	spip_log('secret stocké en clair : chiffrement du core indisponible', 'dashagent');
+
 	return 'p0:' . $valeur;
+}
+
+/**
+ * Clef de chiffrement du site, ou chaîne vide si le core ne la fournit pas.
+ *
+ * @return string
+ */
+function dashagent_clef_chiffrement() {
+	if (!class_exists(Chiffrement::class) || !class_exists(SpipCles::class)) {
+		return '';
+	}
+	$clef = SpipCles::secret_du_site();
+
+	return is_string($clef) ? $clef : '';
+}
+
+/**
+ * Le chiffrement du secret partagé est-il opérationnel ici ?
+ *
+ * @return bool
+ */
+function dashagent_chiffrement_disponible() {
+	return dashagent_clef_chiffrement() !== '';
 }
 
 /**
@@ -55,12 +87,12 @@ function dashagent_dechiffrer($valeur) {
 	if (!is_string($valeur) || $valeur === '') {
 		return '';
 	}
-	if (strncmp($valeur, 'c1:', 3) === 0) {
-		include_spip('inc/chiffrer');
-		if (!function_exists('dechiffrer')) {
+	if (strncmp($valeur, 'c2:', 3) === 0) {
+		$clef = dashagent_clef_chiffrement();
+		if ($clef === '') {
 			return '';
 		}
-		$clair = dechiffrer(substr($valeur, 3));
+		$clair = Chiffrement::dechiffrer(substr($valeur, 3), $clef);
 
 		return is_string($clair) ? $clair : '';
 	}

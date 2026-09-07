@@ -56,6 +56,8 @@ function dashagent_upgrade($nom_meta_base_version, $version_cible) {
  * @return void
  */
 function dashagent_vider_tables($nom_meta_base_version) {
+	include_spip('inc/meta');
+
 	sql_drop_table('spip_dashagent_journal');
 	sql_drop_table('spip_dashagent_nonces');
 
@@ -93,6 +95,9 @@ function dashagent_creer_tables() {
 	}
 
 	$restantes = dashagent_tables_manquantes($noms);
+
+	include_spip('inc/invalideur');
+	include_spip('inc/meta');
 
 	$trouver_table = charger_fonction('trouver_table', 'base', true);
 	if ($trouver_table) {

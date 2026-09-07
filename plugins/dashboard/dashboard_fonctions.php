@@ -14,6 +14,108 @@ include_spip('inc/dashboard_operations');
 include_spip('inc/dashboard_versions');
 
 /**
+ * Fonctions de SPIP dont le plugin dépend, par fichier qui les fournit.
+ *
+ * Sert de contrat explicite : toute API du core appelée par le plugin figure
+ * ici, et la page de configuration signale celles qui manquent sur cette
+ * installation. Une API absente devient un message lisible au lieu d'une
+ * erreur fatale au milieu d'un enregistrement.
+ *
+ * @return array
+ */
+function dashboard_api_requise() {
+	return [
+		''                     => ['include_spip', 'charger_fonction', '_T', '_request', 'spip_log',
+			'parametre_url', 'url_de_base', 'generer_url_ecrire'],
+		'inc/headers'          => ['redirige_par_entete'],
+		'inc/autoriser'        => ['autoriser'],
+		'inc/config'           => ['lire_config', 'ecrire_config'],
+		'inc/distant'          => ['recuperer_url'],
+		'inc/flock'            => ['sous_repertoire'],
+		'inc/invalideur'       => ['purger_repertoire'],
+		'inc/meta'             => ['ecrire_meta', 'effacer_meta'],
+		'inc/plugin'           => ['spip_version_compare'],
+		'inc/session'          => ['session_get'],
+		'inc/editer'           => ['formulaires_editer_objet_charger', 'formulaires_editer_objet_verifier',
+			'formulaires_editer_objet_traiter'],
+		'action/editer_objet'  => ['objet_inserer', 'objet_modifier', 'objet_instituer'],
+		'base/abstract_sql'    => ['sql_alltable', 'sql_create', 'sql_query', 'sql_showtable',
+			'sql_version', 'sql_error'],
+		'base/create'          => ['maj_tables'],
+		'base/upgrade'         => ['maj_plugin'],
+	];
+}
+
+/**
+ * Fonctions optionnelles : leur absence dégrade une fonctionnalité sans casser
+ * le plugin.
+ *
+ * @return array
+ */
+function dashboard_api_optionnelle() {
+	return [];
+}
+
+/**
+ * Le chiffrement des secrets fonctionne-t-il ? Sinon, ils sont stockés en clair.
+ *
+ * @filtre
+ * @param string $rien
+ * @return bool
+ */
+function dashboard_secrets_chiffres($rien = '') {
+	include_spip('inc/dashboard_client');
+
+	return function_exists('dashboard_chiffrement_disponible') && dashboard_chiffrement_disponible();
+}
+
+/**
+ * Parmi les API attendues, lesquelles manquent sur cette installation ?
+ *
+ * @filtre
+ * @param string $rien
+ * @return string Liste lisible, vide si tout est présent
+ */
+function dashboard_api_manquantes($rien = '') {
+	$manquantes = [];
+
+	foreach (dashboard_api_requise() as $fichier => $fonctions) {
+		if ($fichier !== '') {
+			include_spip($fichier);
+		}
+		foreach ($fonctions as $fonction) {
+			if (!function_exists($fonction)) {
+				$manquantes[] = $fonction . '()' . ($fichier ? ' [' . $fichier . ']' : '');
+			}
+		}
+	}
+
+	return implode(', ', $manquantes);
+}
+
+/**
+ * Idem pour les API optionnelles.
+ *
+ * @filtre
+ * @param string $rien
+ * @return string
+ */
+function dashboard_api_optionnelle_manquantes($rien = '') {
+	$manquantes = [];
+
+	foreach (dashboard_api_optionnelle() as $fichier => $fonctions) {
+		include_spip($fichier);
+		foreach ($fonctions as $fonction) {
+			if (!function_exists($fonction)) {
+				$manquantes[] = $fonction . '()';
+			}
+		}
+	}
+
+	return implode(', ', $manquantes);
+}
+
+/**
  * Les tables du plugin sont-elles réellement présentes en base ?
  *
  * Une activation ratée peut laisser la version enregistrée en meta sans que les

@@ -8,6 +8,9 @@
  * @package SPIP\Dashboard\Inc
  */
 
+use Spip\Chiffrer\Chiffrement;
+use Spip\Chiffrer\SpipCles;
+
 if (!defined('_ECRIRE_INC_VERSION')) {
 	return;
 }
@@ -22,12 +25,44 @@ function dashboard_chiffrer($valeur) {
 	if ($valeur === '') {
 		return '';
 	}
-	include_spip('inc/chiffrer');
-	if (function_exists('chiffrer')) {
-		return 'c1:' . chiffrer($valeur);
+
+	$clef = dashboard_clef_chiffrement();
+	if ($clef !== '') {
+		$chiffre = Chiffrement::chiffrer($valeur, $clef);
+		if (is_string($chiffre) && $chiffre !== '') {
+			return 'c2:' . $chiffre;
+		}
 	}
 
+	// Stockage en clair : le plugin reste utilisable, mais la page de
+	// configuration le signale — un secret de site géré en clair en base est
+	// une dégradation qu'il ne faut pas laisser passer inaperçue.
+	spip_log('secret stocké en clair : chiffrement du core indisponible', 'dashboard');
+
 	return 'p0:' . $valeur;
+}
+
+/**
+ * Clef de chiffrement du site, ou chaîne vide si le core ne la fournit pas.
+ *
+ * @return string
+ */
+function dashboard_clef_chiffrement() {
+	if (!class_exists(Chiffrement::class) || !class_exists(SpipCles::class)) {
+		return '';
+	}
+	$clef = SpipCles::secret_du_site();
+
+	return is_string($clef) ? $clef : '';
+}
+
+/**
+ * Le chiffrement des secrets est-il opérationnel sur cette installation ?
+ *
+ * @return bool
+ */
+function dashboard_chiffrement_disponible() {
+	return dashboard_clef_chiffrement() !== '';
 }
 
 /**
@@ -40,12 +75,12 @@ function dashboard_dechiffrer($valeur) {
 	if (!is_string($valeur) || $valeur === '') {
 		return '';
 	}
-	if (strncmp($valeur, 'c1:', 3) === 0) {
-		include_spip('inc/chiffrer');
-		if (!function_exists('dechiffrer')) {
+	if (strncmp($valeur, 'c2:', 3) === 0) {
+		$clef = dashboard_clef_chiffrement();
+		if ($clef === '') {
 			return '';
 		}
-		$clair = dechiffrer(substr($valeur, 3));
+		$clair = Chiffrement::dechiffrer(substr($valeur, 3), $clef);
 
 		return is_string($clair) ? $clair : '';
 	}

@@ -66,7 +66,8 @@ function dashagent_cibles_cache() {
  * @return array{cibles: array, fichiers: int, erreurs: array}
  */
 function dashagent_purger($cibles) {
-	include_spip('inc/flock');
+	include_spip('inc/invalideur');
+	include_spip('inc/meta');
 
 	$definitions = dashagent_cibles_cache();
 
@@ -92,10 +93,9 @@ function dashagent_purger($cibles) {
 				$rapport['erreurs'][] = 'Répertoire non inscriptible : ' . $dir;
 				continue;
 			}
-			// Compté avant purge : après, le répertoire est vide par construction,
-			// et un second parcours complet doublerait le coût sur les gros caches.
-			$supprimes += dashagent_compter_fichiers($dir);
-			purger_repertoire($dir, ['subdir' => true]);
+			// purger_repertoire() retourne le nombre de fichiers supprimés :
+			// inutile de parcourir l'arborescence une seconde fois pour compter.
+			$supprimes += (int) purger_repertoire($dir, ['subdir' => true]);
 		}
 		$rapport['cibles'][$cible] = $supprimes;
 		$rapport['fichiers'] += $supprimes;
@@ -109,15 +109,3 @@ function dashagent_purger($cibles) {
 	return $rapport;
 }
 
-/**
- * Compte les fichiers d'un répertoire, récursivement et sans exploser la mémoire.
- *
- * @param string $dir
- * @return int
- */
-function dashagent_compter_fichiers($dir) {
-	include_spip('inc/dashagent_fs');
-	$mesure = dashagent_mesurer_repertoire($dir, 200000);
-
-	return $mesure['fichiers'];
-}
