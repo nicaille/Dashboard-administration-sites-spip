@@ -443,6 +443,124 @@ foreach ($plugins as $plugin) {
 	}
 }
 
+echo "\n== Surface d’API SPIP utilisée ==\n";
+
+/**
+ * Fonctions du core SPIP que ce projet s’autorise à appeler.
+ *
+ * Toute fonction absente de cette liste fait échouer le test : c’est le seul
+ * garde-fou contre l’appel d’une API supposée exister. Ajouter une entrée doit
+ * être un geste délibéré, fait après avoir vérifié la fonction.
+ */
+$api_spip = [
+	// Noyau, disponible sans inclusion
+	'include_spip', 'charger_fonction', '_T', '_request', 'spip_log', 'ecrire_meta',
+	'effacer_meta', 'parametre_url', 'redirige_par_entete', 'url_de_base', 'generer_url_ecrire',
+	// inc/
+	'autoriser', 'lire_config', 'ecrire_config', 'recuperer_url', 'purger_repertoire',
+	'sous_repertoire', 'spip_version_compare', 'session_get', 'chiffrer', 'dechiffrer',
+	'liste_plugin_actifs', 'ecrire_plugin_actifs',
+	// formulaires CVT sur objet
+	'formulaires_editer_objet_charger', 'formulaires_editer_objet_verifier',
+	'formulaires_editer_objet_traiter',
+	// action/editer_objet — objet_modifier_champs() n’en fait pas partie :
+	// elle n’est pas exposée, et l’avoir appelée provoquait une erreur fatale.
+	'objet_inserer', 'objet_modifier', 'objet_instituer',
+	// base/
+	'maj_plugin', 'maj_tables',
+	// abstract_sql
+	'sql_allfetsel', 'sql_alltable', 'sql_countsel', 'sql_create', 'sql_delete',
+	'sql_drop_table', 'sql_error', 'sql_fetch', 'sql_fetsel', 'sql_free', 'sql_insertq',
+	'sql_query', 'sql_quote', 'sql_select', 'sql_showtable', 'sql_updateq', 'sql_version',
+];
+
+$definies = [];
+$appels   = [];
+foreach ($plugins as $plugin) {
+	foreach (fichiers($plugin, ['php']) as $fichier) {
+		$source = file_get_contents($fichier);
+		$affiche = basename($plugin) . '/' . str_replace($plugin . '/', '', $fichier);
+
+		// Analyse sur les jetons PHP : les commentaires et les chaînes ne sont
+		// pas du code, et un extracteur textuel y ramasse n'importe quoi.
+		$jetons = token_get_all($source);
+		$nb = count($jetons);
+		for ($i = 0; $i < $nb; $i++) {
+			$jeton = $jetons[$i];
+			if (!is_array($jeton) || $jeton[0] !== T_STRING) {
+				continue;
+			}
+
+			// Ce qui précède : une déclaration, une méthode, une instanciation ?
+			$avant = null;
+			for ($j = $i - 1; $j >= 0; $j--) {
+				if (is_array($jetons[$j]) && in_array($jetons[$j][0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+					continue;
+				}
+				$avant = $jetons[$j];
+				break;
+			}
+			if (is_array($avant) && in_array($avant[0], [T_FUNCTION, T_NEW, T_OBJECT_OPERATOR, T_DOUBLE_COLON], true)) {
+				if ($avant[0] === T_FUNCTION) {
+					$definies[strtolower($jeton[1])] = true;
+				}
+				continue;
+			}
+
+			// Ce qui suit : une parenthèse ouvrante, sinon c'est une constante.
+			$apres = null;
+			for ($j = $i + 1; $j < $nb; $j++) {
+				if (is_array($jetons[$j]) && $jetons[$j][0] === T_WHITESPACE) {
+					continue;
+				}
+				$apres = $jetons[$j];
+				break;
+			}
+			if ($apres !== '(') {
+				continue;
+			}
+
+			$appels[strtolower($jeton[1])] = $affiche;
+		}
+	}
+}
+
+$natives   = array_flip(get_defined_functions()['internal']);
+$structures = array_flip(['if', 'for', 'foreach', 'while', 'switch', 'catch', 'return', 'echo',
+	'array', 'isset', 'unset', 'empty', 'list', 'print', 'exit', 'die', 'include', 'require',
+	'include_once', 'require_once', 'elseif', 'fn', 'match', 'and', 'or', 'xor', 'clone', 'yield', 'use']);
+$autorisees = array_flip(array_map('strtolower', $api_spip));
+
+$inconnues = [];
+foreach ($appels as $nom => $ou) {
+	if (isset($definies[$nom]) || isset($natives[$nom]) || isset($structures[$nom]) || isset($autorisees[$nom])) {
+		continue;
+	}
+	$inconnues[$nom] = $ou;
+}
+
+verifier(count($appels) . ' appels de fonction analysés, aucun hors contrat', !$inconnues);
+foreach ($inconnues as $nom => $ou) {
+	echo "         fonction non déclarée au contrat : $nom() dans $ou\n";
+}
+
+// Le diagnostic affiché à l’utilisateur doit couvrir la même surface.
+$fonctions = file_get_contents($racine . '/plugins/dashboard/dashboard_fonctions.php');
+if (preg_match('/function dashboard_api_requise\(.*?\n}/s', $fonctions, $bloc)) {
+	preg_match_all("/'([a-z_][a-z0-9_]*)'/", $bloc[0], $t);
+	$declarees = array_diff($t[1], ['inc', 'action', 'base']);
+	$hors = [];
+	foreach ($declarees as $nom) {
+		if (strpos($nom, '/') === false && !isset($autorisees[$nom]) && !isset($natives[$nom])) {
+			$hors[] = $nom;
+		}
+	}
+	verifier('le diagnostic d’API n’annonce que des fonctions du contrat', !$hors);
+	foreach ($hors as $nom) {
+		echo "         annoncée mais hors contrat : $nom\n";
+	}
+}
+
 echo "\n== Clefs de langue référencées ==\n";
 
 $modules = [];

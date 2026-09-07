@@ -63,13 +63,19 @@ Deux suites, exécutables sans installation SPIP :
 
 ```bash
 php tests/test_protocole.php   # signature partagée, filtrage IP, validation des archives
-php tests/test_structure.php   # manifestes, pipelines, menus, actions, tables, filtres, langue
+php tests/test_structure.php   # manifestes, tables, autorisations, API SPIP appelée, langue
 ```
 
 La seconde attrape la classe d'erreurs qui ne se voit sinon qu'à l'installation
 du plugin ou au premier clic dans l'espace privé : balise inconnue dans un
 `paquet.xml`, pipeline pointant sur une fonction absente, icône ou page de menu
 introuvable, chaîne de langue non traduite.
+
+Elle vérifie en particulier que **toute fonction du core SPIP appelée figure
+dans un contrat explicite**, déclaré en tête du test. Appeler une API supposée
+exister casse le test au lieu de casser l'espace privé. La même liste est
+contrôlée à l'exécution : *Configuration → Dashboard : configuration* signale
+les fonctions attendues qui manqueraient sur l'installation réelle.
 
 ## Compatibilité
 

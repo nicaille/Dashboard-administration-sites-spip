@@ -9,6 +9,20 @@
 	<h2><:dashboard:titre_maintenance:></h2>
 	<p class="explication"><:dashboard:explication_maintenance:></p>
 	[<p><:dashboard:tables_manquantes:> <code>(#VAL|dashboard_tables_absentes)</code></p>]
+
+	#SET{api_manquantes,#VAL|dashboard_api_manquantes}
+	#SET{api_optionnelle,#VAL|dashboard_api_optionnelle_manquantes}
+	[(#GET{api_manquantes}|oui)
+		<p class="reponse_formulaire reponse_formulaire_erreur">
+			<:dashboard:api_manquante:> <code>[(#GET{api_manquantes})]</code>
+		</p>
+	]
+	[(#GET{api_manquantes}|non)
+		<p><:dashboard:api_complete:></p>
+	]
+	[(#GET{api_optionnelle}|oui)
+		<p class="explication"><:dashboard:api_optionnelle_manquante:> <code>[(#GET{api_optionnelle})]</code></p>
+	]
 	<p class="boutons">
 		<a class="dashboard-bouton" href="[(#URL_ACTION_AUTEUR{dashboard_installer,installer,#SELF})]">
 			<:dashboard:action_reparer:>

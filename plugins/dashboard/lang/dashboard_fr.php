@@ -20,6 +20,9 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'action_supprimer_site'    => 'Retirer ce site du parc',
 	'action_sync'              => 'Synchroniser',
 	'action_telecharger'       => 'Télécharger',
+	'api_complete'             => 'Toutes les fonctions de SPIP attendues par le plugin sont disponibles.',
+	'api_manquante'            => 'Fonctions de SPIP attendues mais absentes sur cette installation :',
+	'api_optionnelle_manquante' => 'Fonctions optionnelles absentes (le plugin fonctionne, avec une capacité en moins) :',
 	'articles'                 => 'articles',
 
 	// C
