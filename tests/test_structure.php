@@ -303,6 +303,37 @@ foreach ($plugins as $plugin) {
 	}
 }
 
+echo "\n== Noms de colonnes ==\n";
+
+foreach ($plugins as $plugin) {
+	$nom_court = basename($plugin);
+	$prefixe   = (string) simplexml_load_file($plugin . '/paquet.xml')['prefix'];
+	$fichier   = $plugin . "/base/{$prefixe}_tables.php";
+	if (!is_file($fichier)) {
+		continue;
+	}
+
+	// La couche SQL de SPIP réécrit tout identifiant préfixé « spip_ » en nom de
+	// table : une colonne ainsi nommée casse le CREATE TABLE, et la table n'est
+	// jamais créée. Le symptôme est une erreur de syntaxe SQL sans rapport
+	// apparent avec la colonne fautive.
+	preg_match_all("/^\t+'(spip_[a-z0-9_]+)'\s*=>\s*[\"']/m", file_get_contents($fichier), $trouves);
+	$suspectes = [];
+	foreach ($trouves[1] as $nom) {
+		// Les clefs de premier niveau sont des noms de tables, elles sont légitimes.
+		if (strpos(file_get_contents($fichier), "\$tables['$nom']") === false) {
+			$suspectes[] = $nom;
+		}
+	}
+	verifier(
+		"$nom_court : aucune colonne préfixée « spip_ »",
+		!$suspectes
+	);
+	foreach ($suspectes as $nom) {
+		echo "         colonne fautive : $nom\n";
+	}
+}
+
 echo "\n== Filtres appelés par les squelettes ==\n";
 
 foreach ($plugins as $plugin) {

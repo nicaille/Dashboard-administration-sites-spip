@@ -58,7 +58,7 @@ function dashboard_synchroniser($id_dashboard_site, $options = []) {
 	sql_updateq('spip_dashboard_sites', [
 		'etat'           => 'ok',
 		'erreur'         => '',
-		'spip_version'   => $version_spip,
+		'version_spip'   => $version_spip,
 		'php_version'    => (string) ($infos['serveur']['php'] ?? ''),
 		'sql_version'    => (string) ($infos['base']['version'] ?? ''),
 		'agent_version'  => (string) ($reponse['agent'] ?? ''),

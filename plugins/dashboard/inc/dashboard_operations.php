@@ -273,7 +273,7 @@ function dashboard_operation_core_maj($id_dashboard_site, $version = '', $option
 		return ['ok' => false, 'message' => 'Site inconnu', 'data' => []];
 	}
 
-	$version = trim((string) $version) ?: dashboard_version_cible((string) $site['spip_version']);
+	$version = trim((string) $version) ?: dashboard_version_cible((string) $site['version_spip']);
 	if ($version === '') {
 		return ['ok' => false, 'message' => 'Aucune version cible connue pour la branche installée', 'data' => []];
 	}

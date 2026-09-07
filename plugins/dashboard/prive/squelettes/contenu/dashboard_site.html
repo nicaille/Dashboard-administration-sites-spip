@@ -11,7 +11,7 @@
 
 <BOUCLE_site(DASHBOARD_SITES){id_dashboard_site}{statut != poubelle}>
 
-#SET{version_cible,#SPIP_VERSION|dashboard_version_disponible}
+#SET{version_cible,#VERSION_SPIP|dashboard_version_disponible}
 
 <h1 class="grostitre">#TITRE</h1>
 
@@ -34,7 +34,7 @@
 			<tr><th scope="row"><:dashboard:label_url_site:></th><td>[<a href="(#URL_SITE)" rel="noreferrer">(#URL_SITE)</a>]</td></tr>
 			<tr><th scope="row"><:dashboard:label_url_agent:></th><td><code>[(#URL_AGENT|couper{90})]</code></td></tr>
 			<tr><th scope="row"><:dashboard:col_spip:></th><td>
-				[<code>(#SPIP_VERSION)</code>]
+				[<code>(#VERSION_SPIP)</code>]
 				[(#CORE_MAJ|=={oui}|oui)<span class="dashboard-badge dashboard-badge-maj">&rarr; #GET{version_cible}</span>]
 			</td></tr>
 			<tr><th scope="row">PHP</th><td>[<code>(#PHP_VERSION)</code>] [(#INFOS|dashboard_info{serveur/memory_limit}) <:dashboard:memoire:>]</td></tr>
@@ -183,7 +183,7 @@
 <div class="dashboard-fiche dashboard-fiche-alerte">
 	<h2><:dashboard:titre_core_maj:></h2>
 	<p>
-		<:dashboard:core_maj_texte{version_actuelle=#SPIP_VERSION,version_cible=#GET{version_cible}}:>
+		<:dashboard:core_maj_texte{version_actuelle=#VERSION_SPIP,version_cible=#GET{version_cible}}:>
 	</p>
 	<p class="explication"><:dashboard:core_maj_avertissement:></p>
 	<p class="boutons">

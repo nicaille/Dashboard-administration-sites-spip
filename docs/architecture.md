@@ -59,6 +59,10 @@ Sans la seconde, la table n'est simplement jamais créée. Le schéma vit dans
 `dashboard_schema_sites()` pour que les deux déclarations ne puissent pas
 diverger.
 
+Aucune colonne ne peut porter un nom préfixé `spip_` : la couche SQL de SPIP
+réécrit ces identifiants en noms de tables, et le `CREATE TABLE` devient
+invalide. D'où `version_spip` plutôt que `spip_version`.
+
 Quatre tables :
 
 - `spip_dashboard_sites` — l'objet éditorial « site géré », avec le dernier état connu ;
