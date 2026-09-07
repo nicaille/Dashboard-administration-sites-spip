@@ -51,6 +51,14 @@ Installé une seule fois, sur la tour de contrôle.
 | `inc/dashboard_journal.php` | journal des opérations, côté tour de contrôle |
 | `genie/dashboard_sync.php` | synchronisation périodique, par lots |
 
+La table `spip_dashboard_sites` est déclarée **deux fois** : dans
+`declarer_tables_objets_sql`, qui lui donne la machinerie d'objet éditorial
+(statut, titre, formulaire d'édition), et dans `declarer_tables_principales`,
+qui est le registre consulté par `maj_tables()` au moment de créer la base.
+Sans la seconde, la table n'est simplement jamais créée. Le schéma vit dans
+`dashboard_schema_sites()` pour que les deux déclarations ne puissent pas
+diverger.
+
 Quatre tables :
 
 - `spip_dashboard_sites` — l'objet éditorial « site géré », avec le dernier état connu ;

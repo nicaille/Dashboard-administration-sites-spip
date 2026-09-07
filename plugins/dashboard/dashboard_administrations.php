@@ -38,6 +38,13 @@ function dashboard_upgrade($nom_meta_base_version, $version_cible) {
 		['dashboard_creer_tables'],
 	];
 
+	// 1.0.3 ne créait pas la table de l'objet « site géré » : elle n'était
+	// déclarée que comme objet éditorial, registre que maj_tables() ne consulte
+	// pas. Elle est désormais aussi déclarée en table principale.
+	$maj['1.0.4'] = [
+		['dashboard_creer_tables'],
+	];
+
 	include_spip('base/upgrade');
 	maj_plugin($nom_meta_base_version, $version_cible, $maj);
 }
@@ -66,7 +73,7 @@ function dashboard_vider_tables($nom_meta_base_version) {
  * pas encore peuplé, elle ne fait rien — sans le signaler. On repasse donc
  * derrière avec les descripteurs du plugin lui-même, qui ne dépendent de rien.
  *
- * @return array Tables encore absentes après coup (vide si tout va bien)
+ * @return array {restantes: array, erreurs: array}
  */
 function dashboard_creer_tables() {
 	include_spip('base/create');
@@ -80,8 +87,12 @@ function dashboard_creer_tables() {
 	}
 
 	$manquantes = dashboard_tables_manquantes($noms);
+	$erreurs = [];
 	foreach ($manquantes as $nom) {
-		dashboard_creer_table($nom, $descriptions[$nom]);
+		$erreur = dashboard_creer_table($nom, $descriptions[$nom]);
+		if ($erreur !== '') {
+			$erreurs[$nom] = $erreur;
+		}
 	}
 
 	$restantes = dashboard_tables_manquantes($noms);
@@ -93,11 +104,14 @@ function dashboard_creer_tables() {
 
 	if ($restantes) {
 		spip_log('installation : tables toujours absentes après création : ' . implode(', ', $restantes), 'dashboard');
+		foreach ($erreurs as $nom => $erreur) {
+			spip_log("installation : $nom refusée par le serveur SQL : $erreur", 'dashboard');
+		}
 	} elseif ($manquantes) {
 		spip_log('installation : tables créées directement depuis les descripteurs : ' . implode(', ', $manquantes), 'dashboard');
 	}
 
-	return $restantes;
+	return ['restantes' => $restantes, 'erreurs' => $erreurs];
 }
 
 /**
@@ -105,11 +119,14 @@ function dashboard_creer_tables() {
  *
  * @param string $nom
  * @param array $description
- * @return void
+ * @return string Message d'erreur du serveur SQL, vide si tout s'est bien passé
  */
 function dashboard_creer_table($nom, $description) {
-	if (!function_exists('sql_create') || empty($description['field'])) {
-		return;
+	if (!function_exists('sql_create')) {
+		return 'sql_create() indisponible';
+	}
+	if (empty($description['field'])) {
+		return 'descripteur sans colonnes';
 	}
 
 	sql_create(
@@ -121,6 +138,17 @@ function dashboard_creer_table($nom, $description) {
 		'',
 		'continue'
 	);
+
+	// Sans cette remontée, un refus du serveur (droits, type de colonne) reste
+	// parfaitement invisible et l'installation semble avoir réussi.
+	if (function_exists('sql_error')) {
+		$erreur = sql_error();
+		if ($erreur) {
+			return (string) $erreur;
+		}
+	}
+
+	return '';
 }
 
 /**

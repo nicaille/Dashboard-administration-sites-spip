@@ -256,6 +256,21 @@ foreach ($plugins as $plugin) {
 		}
 	}
 
+	// Une table déclarée seulement comme objet éditorial n'est pas créée :
+	// maj_tables() ne consulte pas ce registre-là.
+	if (preg_match_all('/\\$tables\\[\'(spip_[a-z0-9_]+)\'\\]/', $base, $t)
+		&& preg_match('/function ' . $prefixe . '_declarer_tables_objets_sql\\(.*?\\n}/s', $base, $bloc)
+	) {
+		preg_match_all('/\\$tables\\[\'(spip_[a-z0-9_]+)\'\\]/', $bloc[0], $objets);
+		preg_match('/function ' . $prefixe . '_declarer_tables_principales\\(.*?\\n}/s', $base, $bloc_principales);
+		foreach (array_unique($objets[1]) as $table) {
+			verifier(
+				"$nom_court : $table déclarée aussi comme table principale",
+				!empty($bloc_principales[0]) && strpos($bloc_principales[0], $table) !== false
+			);
+		}
+	}
+
 	// Créer des tables sans réinitialiser les caches laisse le compilateur sur
 	// une vue périmée du schéma.
 	verifier(

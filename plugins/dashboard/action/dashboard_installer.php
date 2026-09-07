@@ -28,11 +28,15 @@ function action_dashboard_installer_dist() {
 	}
 
 	include_spip('dashboard_administrations');
-	$restantes = dashboard_creer_tables();
+	$rapport = dashboard_creer_tables();
 	dashboard_initialiser_configuration();
 
+	$restantes = $rapport['restantes'];
 	$message = $restantes
-		? _T('dashboard:installation_echouee', ['tables' => implode(', ', $restantes)])
+		? _T('dashboard:installation_echouee', [
+			'tables' => implode(', ', $restantes),
+			'erreur' => implode(' | ', $rapport['erreurs']),
+		])
 		: _T('dashboard:installation_reussie');
 
 	$redirect = parametre_url($redirect, 'dashboard_message', $message, '&');

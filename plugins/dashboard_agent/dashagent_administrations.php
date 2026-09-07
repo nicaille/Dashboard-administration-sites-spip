@@ -37,6 +37,10 @@ function dashagent_upgrade($nom_meta_base_version, $version_cible) {
 		['dashagent_creer_tables'],
 	];
 
+	$maj['1.0.4'] = [
+		['dashagent_creer_tables'],
+	];
+
 	include_spip('base/upgrade');
 	maj_plugin($nom_meta_base_version, $version_cible, $maj);
 }
