@@ -31,6 +31,17 @@ if (!defined('_DASHAGENT_DIR_TRAVAIL')) {
 	define('_DASHAGENT_DIR_TRAVAIL', _DIR_TMP . 'dashagent/');
 }
 
+/**
+ * Autorise le téléchargement d'archives en http non chiffré.
+ *
+ * À laisser à false partout ailleurs qu'en développement local : une archive
+ * récupérée en clair est modifiable en transit, ce qui revient à offrir
+ * l'exécution de code arbitraire sur le site. Se définit dans `mes_options.php`.
+ */
+if (!defined('_DASHAGENT_ARCHIVES_HTTP')) {
+	define('_DASHAGENT_ARCHIVES_HTTP', false);
+}
+
 /** Taille maximale d'un fichier téléchargé par l'agent (archives de mise à jour). */
 if (!defined('_DASHAGENT_TAILLE_MAX_ARCHIVE')) {
 	define('_DASHAGENT_TAILLE_MAX_ARCHIVE', 128 * 1024 * 1024);

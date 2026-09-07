@@ -372,6 +372,30 @@ foreach ($plugins as $plugin) {
 	}
 }
 
+echo "\n== Recalcul de la liste des plugins ==\n";
+
+foreach ($plugins as $plugin) {
+	$nom_court = basename($plugin);
+	$code = '';
+	foreach (fichiers($plugin, ['php']) as $f) {
+		$code .= file_get_contents($f);
+	}
+	if (strpos($code, 'ecrire_plugin_actifs(') === false) {
+		continue;
+	}
+	// ecrire_plugin_actifs() en mode « raz » écrit la liste telle qu'on la lui
+	// donne : appelée avec autre chose que la liste complète des chemins, elle
+	// désactive les plugins absents de l'argument — y compris l'appelant.
+	verifier(
+		"$nom_court : ecrire_plugin_actifs() n’est jamais appelée en mode « raz »",
+		!preg_match("/ecrire_plugin_actifs\\([^;]*'raz'/", $code)
+	);
+	verifier(
+		"$nom_court : recalcul par « ajoute » sur liste vide",
+		(bool) preg_match("/ecrire_plugin_actifs\\(\\s*\\[\\s*\\]\\s*,[^;]*'ajoute'/", $code)
+	);
+}
+
 echo "\n== Champs éditables ==\n";
 
 foreach ($plugins as $plugin) {
@@ -458,6 +482,7 @@ $api_spip = [
 	'effacer_meta', 'parametre_url', 'redirige_par_entete', 'url_de_base', 'generer_url_ecrire',
 	// inc/
 	'autoriser', 'lire_config', 'ecrire_config', 'recuperer_url', 'purger_repertoire',
+	'lire_metas', 'plugin_installes_meta',
 	'sous_repertoire', 'spip_version_compare', 'session_get',
 	'liste_plugin_actifs', 'ecrire_plugin_actifs',
 	// formulaires CVT sur objet
@@ -574,6 +599,8 @@ $fournisseur = [
 	'ecrire_config'        => 'inc/config',
 	'lire_config'          => 'inc/config',
 	'ecrire_meta'          => 'inc/meta',
+	'lire_metas'           => 'inc/meta',
+	'plugin_installes_meta' => 'inc/plugin',
 	'effacer_meta'         => 'inc/meta',
 	'purger_repertoire'    => 'inc/invalideur',
 	'sous_repertoire'      => 'inc/flock',

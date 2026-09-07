@@ -78,6 +78,57 @@ if ! curl -s --noproxy '*' "$BASE/zz-activer.php" | grep -q PLUGINS_ACTIFS; then
 fi
 rm -f "$SITE/zz-activer.php"
 
+echo "== Plugin de test et dépôt local (pour la mise à jour)"
+mkdir -p "$SITE/plugins/zzztest" "$SITE/zzztest-archives"
+cat > "$SITE/plugins/zzztest/paquet.xml" <<'XMLEOF'
+<paquet prefix="zzztest" categorie="outil" version="1.0.0" etat="test" compatibilite="[4.1.0;4.*]">
+	<nom>Plugin de test</nom>
+	<auteur>Test</auteur>
+	<licence>GPL 3</licence>
+</paquet>
+XMLEOF
+echo 'VERSION 1.0.0' > "$SITE/plugins/zzztest/marqueur.txt"
+# La version 1.0.1, servie en zip par le serveur local
+rm -rf "$TRAVAIL/paquet"; mkdir -p "$TRAVAIL/paquet/zzztest"
+sed 's/version="1.0.0"/version="1.0.1"/' "$SITE/plugins/zzztest/paquet.xml" > "$TRAVAIL/paquet/zzztest/paquet.xml"
+echo 'VERSION 1.0.1' > "$TRAVAIL/paquet/zzztest/marqueur.txt"
+(cd "$TRAVAIL/paquet" && zip -qr "$SITE/zzztest-archives/zzztest.zip" zzztest)
+# Le site de test sert ses archives en http sur la boucle locale.
+cat > "$SITE/config/mes_options.php" <<'OPTEOF'
+<?php
+define('_DASHAGENT_ARCHIVES_HTTP', true);
+OPTEOF
+
+cat > "$SITE/zz-depot.php" <<'PHPEOF'
+<?php
+use function SpipLeague\Component\Kernel\param;
+require_once __DIR__ . '/vendor/autoload.php';
+include_once param('spip.dirs.core') . 'inc_version.php';
+include_spip('inc/plugin');
+include_spip('inc/meta');
+header('Content-Type: text/plain; charset=utf-8');
+ecrire_plugin_actifs(['zzztest/'], false, 'ajoute');
+lire_metas();
+plugin_installes_meta();
+lire_metas();
+sql_delete('spip_depots', 'titre = ' . sql_quote('Dépôt de test'));
+$id_depot = sql_insertq('spip_depots', ['titre' => 'Dépôt de test', 'type' => 'http',
+	'url_archives' => url_de_base() . 'zzztest-archives']);
+$id_plugin = sql_getfetsel('id_plugin', 'spip_plugins', 'prefixe = ' . sql_quote('ZZZTEST'))
+	?: sql_insertq('spip_plugins', ['prefixe' => 'ZZZTEST', 'nom' => 'Plugin de test']);
+sql_delete('spip_paquets', 'id_depot = ' . intval($id_depot));
+sql_insertq('spip_paquets', ['id_plugin' => $id_plugin, 'id_depot' => $id_depot,
+	'version' => '1.0.1', 'etat' => 'test', 'nom_archive' => 'zzztest.zip',
+	'src_archive' => 'auto/zzztest/v1.0.1/']);
+echo "DEPOT_PRET\n";
+PHPEOF
+curl -s --noproxy '*' -o /dev/null "$BASE/spip.php"
+if ! curl -s --noproxy '*' "$BASE/zz-depot.php" | grep -q DEPOT_PRET; then
+	echo "dépôt de test non créé" >&2
+	exit 1
+fi
+rm -f "$SITE/zz-depot.php"
+
 echo "== Parcours fonctionnel"
 BASE_URL="$BASE" SITE_DIR="$SITE" TRAVAIL_DIR="$TRAVAIL" node "$TRAVAIL/scenario.mjs"
 CODE=$?
