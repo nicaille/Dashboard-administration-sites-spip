@@ -39,13 +39,19 @@ for (let etape = 1; etape <= 10; etape++) {
 		if (await champ.count()) { await champ.first().fill('spip').catch(() => {}); }
 	}
 
-	const texte = await page.locator('body').innerText();
-	if (etape > 2 && /C.est termin/i.test(texte)) { console.log('installation terminée'); break; }
-
 	const submit = page.locator('input[type=submit], button[type=submit]');
 	if (!(await submit.count())) { break; }
 	await Promise.all([page.waitForLoadState('domcontentloaded'), submit.last().click()]);
 	await page.waitForTimeout(400);
+
+	// Le fil d'Ariane de l'installeur affiche « Étape 4 : C'est terminé ! » dès
+	// la première page : s'arrêter sur ce texte sautait la création du compte
+	// administrateur. C'est l'apparition du formulaire de connexion qui dit que
+	// l'installation est réellement finie.
+	if (await page.locator('input[name="var_login"]').count()) {
+		console.log('installation terminée');
+		break;
+	}
 }
 
 await nav.close();

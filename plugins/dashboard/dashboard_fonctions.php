@@ -158,6 +158,67 @@ function dashboard_tables_absentes($rien = '') {
 }
 
 /**
+ * Capacités fournies au site géré : extensions PHP et bibliothèques.
+ *
+ * Elles sont rangées à part des plugins parce qu'elles ne se mettent pas à jour
+ * depuis ici : leur version relève de l'hébergement, pas de la maintenance
+ * applicative. Les mêler aux plugins noyait ces derniers.
+ *
+ * @filtre
+ * @param string $json Inventaire mémorisé
+ * @return array
+ */
+function dashboard_procures($json) {
+	$procures = dashboard_info($json, 'procures', []);
+	if (!is_array($procures)) {
+		return [];
+	}
+
+	// L'origine se déduit ici plutôt que côté agent : un agent d'une version
+	// antérieure reste ainsi affichable, et les libellés restent traduisibles.
+	foreach ($procures as $rang => $procure) {
+		$fournie_par = (string) ($procure['fournie_par'] ?? '');
+		if ($fournie_par !== '') {
+			$origine = 'plugin';
+		} elseif (!empty($procure['php']) or dashboard_est_une_extension_php($procure)) {
+			$origine = 'php';
+		} else {
+			$origine = 'spip';
+		}
+		$procures[$rang]['origine'] = $origine;
+	}
+
+	return $procures;
+}
+
+/**
+ * Une capacité est-elle une extension du PHP lui-même ?
+ *
+ * Le drapeau vient de l'agent, mais un agent plus ancien ne l'envoie pas :
+ * le nom (« php », « php:curl ») suffit alors à trancher, sans confondre
+ * avec une bibliothèque comme « phpmailer ».
+ *
+ * @param array $procure
+ * @return bool
+ */
+function dashboard_est_une_extension_php($procure) {
+	$nom = strtolower((string) ($procure['nom'] ?? ''));
+
+	return $nom === 'php' || strncmp($nom, 'php:', 4) === 0;
+}
+
+/**
+ * Combien de capacités fournies ce site déclare-t-il ?
+ *
+ * @filtre
+ * @param string $json
+ * @return int
+ */
+function dashboard_compter_procures($json) {
+	return count(dashboard_procures($json));
+}
+
+/**
  * Date lisible, ou chaîne vide si la date n'a jamais été renseignée.
  *
  * Le squelette affiche alors un libellé de repli dans un bloc voisin : imbriquer

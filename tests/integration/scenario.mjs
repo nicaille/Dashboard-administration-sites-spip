@@ -213,6 +213,35 @@ for (const [nom, url] of [
 	dit(`${nom} : rien d’étranger à l’écran`, trouves.length === 0, trouves.join(' | '));
 }
 
+console.log('\n### Onglets « Plugins » et « PHP »');
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+const panneauPlugins = page.locator('#panneau-plugins');
+const panneauPhp = page.locator('#panneau-php');
+dit('deux onglets présents', (await page.locator('[data-dashboard-onglets] [role="tab"]').count()) === 2);
+dit('« Plugins » ouvert par défaut', (await panneauPlugins.isVisible()) && !(await panneauPhp.isVisible()));
+
+await page.locator('#onglet-php').click();
+await page.waitForTimeout(200);
+dit('le clic bascule sur « PHP »', !(await panneauPlugins.isVisible()) && (await panneauPhp.isVisible()));
+dit('onglet « PHP » marqué sélectionné', (await page.locator('#onglet-php').getAttribute('aria-selected')) === 'true');
+
+const nbPhp = await page.locator('#panneau-php tbody tr').count();
+dit('extensions PHP listées', nbPhp > 0, nbPhp + ' ligne(s)');
+const compteurPhp = (await page.locator('#onglet-php .dashboard-compteur').innerText()).trim();
+dit('compteur cohérent avec le tableau', compteurPhp === String(nbPhp), compteurPhp + ' vs ' + nbPhp);
+
+const origines = await page.locator('#panneau-php tbody tr td:last-child').evaluateAll(
+	(l) => [...new Set(l.map((c) => c.innerText.replace(/\s+/g, ' ').trim()))]);
+dit('chaque ligne porte une origine', origines.length > 0 && !origines.includes(''), origines.slice(0, 3).join(' / '));
+
+// La flèche gauche revient sur l'onglet précédent : la navigation au clavier
+// fait partie du contrat d'un jeu d'onglets.
+await page.locator('#onglet-php').press('ArrowLeft');
+await page.waitForTimeout(200);
+dit('flèche gauche : retour à « Plugins »', (await panneauPlugins.isVisible()) && !(await panneauPhp.isVisible()));
+dit('aucune extension PHP dans l’onglet « Plugins »',
+	!/\bphp:/i.test(await panneauPlugins.innerText()));
+
 console.log('\n### Restauration du dump');
 try {
 	const verdict = execFileSync('php', ['-r', `

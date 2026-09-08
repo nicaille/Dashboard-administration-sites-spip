@@ -29,6 +29,7 @@ function dashagent_infos_collecter($args = []) {
 	];
 
 	$infos['plugins'] = $avec_plugins ? dashagent_infos_plugins() : null;
+	$infos['procures'] = $avec_plugins ? dashagent_infos_procures() : null;
 	$infos['caches']  = $avec_caches ? dashagent_infos_caches() : null;
 	$infos['capacites'] = dashagent_infos_capacites();
 
@@ -216,6 +217,56 @@ function dashagent_est_un_plugin($plugin) {
 		['_DIR_PLUGINS', '_DIR_PLUGINS_DIST', '_DIR_PLUGINS_SUPPL', '_DIR_EXTENSIONS'],
 		true
 	);
+}
+
+/**
+ * Capacités fournies au site : extensions PHP et bibliothèques.
+ *
+ * Ce sont les entrées `procure:` de la meta « plugin ». Elles n'ont ni
+ * répertoire ni mise à jour possible, mais savoir quelle version de gd, de
+ * sodium ou d'intl tourne sur chaque site du parc est précisément le genre
+ * d'information qu'on vient chercher ici. D'où une liste séparée, plutôt que
+ * mêlée aux plugins.
+ *
+ * @return array
+ */
+function dashagent_infos_procures() {
+	$actifs = unserialize($GLOBALS['meta']['plugin'] ?? '');
+	if (!is_array($actifs)) {
+		return [];
+	}
+
+	$procures = [];
+	foreach ($actifs as $prefixe => $entree) {
+		$dir = (string) ($entree['dir'] ?? '');
+		$position = strpos($dir, 'procure:');
+		if ($position === false) {
+			continue;
+		}
+
+		$nom = substr($dir, $position + strlen('procure:'));
+		// « compresseur/procure:csstidy » : la capacité est fournie par un plugin.
+		$fournie_par = $position > 0 ? rtrim(substr($dir, 0, $position), '/') : '';
+
+		$procures[] = [
+			'prefixe'     => strtoupper((string) $prefixe),
+			'nom'         => $nom !== '' ? $nom : strtolower((string) $prefixe),
+			'version'     => (string) ($entree['version'] ?? ''),
+			'fournie_par' => $fournie_par,
+			'php'         => (strncasecmp((string) $prefixe, 'PHP', 3) === 0),
+		];
+	}
+
+	usort($procures, function ($a, $b) {
+		// Les extensions PHP d'abord, puis les bibliothèques, chacune triée.
+		if ($a['php'] !== $b['php']) {
+			return $a['php'] ? -1 : 1;
+		}
+
+		return strcasecmp($a['nom'], $b['nom']);
+	});
+
+	return $procures;
 }
 
 /**

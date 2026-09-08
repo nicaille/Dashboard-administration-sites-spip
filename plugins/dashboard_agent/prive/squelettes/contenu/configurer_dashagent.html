@@ -2,6 +2,13 @@
 
 <h1 class="grostitre"><:dashagent:titre_configurer:></h1>
 
+#SET{alerte_autorites,#VAL|dashagent_alerte_autorites}
+[(#GET{alerte_autorites}|oui)
+<p class="reponse_formulaire reponse_formulaire_erreur">
+	<:dashagent:alerte_autorites:> [(#GET{alerte_autorites}|textebrut)]
+</p>
+]
+
 #FORMULAIRE_CONFIGURER_DASHAGENT
 
 <div class="ajax">
