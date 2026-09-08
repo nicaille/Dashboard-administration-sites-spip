@@ -44,8 +44,13 @@ function formulaires_configurer_dashboard_verifier_dist() {
 	if ((int) _request('timeout_long') < 30 || (int) _request('timeout_long') > 900) {
 		$erreurs['timeout_long'] = _T('dashboard:erreur_timeout_long');
 	}
+	// Le http n'est toléré que si la case de développement local est cochée, et
+	// il ne suffit pas : l'agent refuse de son côté toute archive en clair tant
+	// que son propre `mes_options.php` ne l'autorise pas. Deux accords
+	// explicites, sur deux sites différents, pour télécharger sans chiffrement.
 	$url = trim((string) _request('url_archives_spip'));
-	if ($url !== '' && !preg_match('#^https://#i', $url)) {
+	$schemas = _request('autoriser_http') ? '#^https?://#i' : '#^https://#i';
+	if ($url !== '' && !preg_match($schemas, $url)) {
 		$erreurs['url_archives_spip'] = _T('dashboard:erreur_url_archives');
 	}
 

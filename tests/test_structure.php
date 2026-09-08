@@ -446,6 +446,17 @@ foreach ($plugins as $plugin) {
 	}
 }
 
+/**
+ * Première occurrence d'un motif, pour que l'échec dise où regarder.
+ *
+ * @param string $motif
+ * @param string $sujet
+ * @return string
+ */
+function premiere_occurrence($motif, $sujet) {
+	return preg_match($motif, $sujet, $m) ? trim($m[0]) : '';
+}
+
 echo "\n== Crochets des squelettes ==\n";
 
 foreach ($plugins as $plugin) {
@@ -467,6 +478,34 @@ foreach ($plugins as $plugin) {
 			"$affiche : pas de <:…:> dans un argument entre quotes",
 			!preg_match("/\\|[a-z_?]+\\{[^}]*'[^']*<:/i", $source)
 		);
+
+		// Une balise à accolades placée dans un argument *composite* — collée à
+		// d'autres balises ou à du texte par des « / », comme dans
+		// `operation/#ID_TRUC/#GET{cible}` — désorganise l'analyse des
+		// arguments : les balises voisines arrivent littéralement dans la
+		// sortie. Dans une URL d'action, cela donne un identifiant qui vaut
+		// « #ID_… » et un « Site inconnu » muet, sans la moindre erreur.
+		// Une balise qui constitue à elle seule un argument, elle, va bien :
+		// `#AUTORISER{voir, truc, #ENV{id_truc}}` est l'idiome courant.
+		$compose = '/#[A-Z_]+\\{[^{}]*[^,{\\s]\\/#[A-Z_]+\\{/';
+		verifier(
+			"$affiche : pas de balise à accolades dans un argument composite",
+			!preg_match($compose, $source),
+			premiere_occurrence($compose, $source)
+		);
+
+		// SPIP compile les balises jusque dans les commentaires HTML : une
+		// syntaxe de balise écrite là pour l'explication est évaluée pour de
+		// bon, et une balise invalide emporte silencieusement le bloc entier.
+		$commentaires = [];
+		preg_match_all('/<!--.*?-->/s', $source, $commentaires);
+		foreach ($commentaires[0] as $commentaire) {
+			verifier(
+				"$affiche : pas de syntaxe de balise dans un commentaire HTML",
+				!preg_match('/#[A-Z_]{3,}|#(GET|SET|ENV|VAL)\\{/', $commentaire),
+				premiere_occurrence('/#[A-Z_]{3,}|#(GET|SET|ENV|VAL)\\{/', $commentaire)
+			);
+		}
 	}
 }
 

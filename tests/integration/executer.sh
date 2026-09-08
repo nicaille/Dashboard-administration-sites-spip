@@ -12,6 +12,8 @@ TRAVAIL="${DASHBOARD_TEST_DIR:-${TMPDIR:-/tmp}/dashboard-integration}"
 SITE="$TRAVAIL/site"
 BASE="http://127.0.0.1:$PORT"
 export BDD="$SITE/config/bases/spip.sqlite"
+# Version de branche annoncée par l’archive de core factice.
+CORE_CIBLE="4.4.99"
 
 if [ -z "$ZIP" ] || [ ! -f "$ZIP" ]; then
 	echo "usage : $0 /chemin/vers/SPIP-vX.Y.Z.zip [port]" >&2
@@ -162,8 +164,24 @@ if ! curl -s --noproxy '*' "$BASE/zz-depot.php" | grep -q DEPOT_PRET; then
 fi
 rm -f "$SITE/zz-depot.php"
 
+echo "== Archive de core factice (pour la mise à jour du noyau)"
+# L'archive officielle est réutilisée telle quelle, avec deux retouches : la
+# version de branche annoncée, et un témoin dans ecrire/ qui prouve que ce sont
+# bien les fichiers de l'archive qui sont arrivés sur le site. Le contenu reste
+# celui d'un SPIP valide, donc le site fonctionne encore après le remplacement.
+mkdir -p "$SITE/core-archives"
+cp "$ZIP" "$SITE/core-archives/SPIP-v$CORE_CIBLE.zip"
+php "$RACINE/tests/integration/preparer-core.php" "$SITE/core-archives/SPIP-v$CORE_CIBLE.zip" "$CORE_CIBLE" \
+	|| { echo "archive de core non préparée" >&2; exit 1; }
+
+# Témoins dans les répertoires que la mise à jour ne doit jamais toucher.
+for garde in config IMG local squelettes plugins; do
+	mkdir -p "$SITE/$garde"
+	echo "temoin-$garde" > "$SITE/$garde/temoin-dashboard.txt"
+done
+
 echo "== Parcours fonctionnel"
-BASE_URL="$BASE" SITE_DIR="$SITE" TRAVAIL_DIR="$TRAVAIL" node "$TRAVAIL/scenario.mjs"
+BASE_URL="$BASE" SITE_DIR="$SITE" TRAVAIL_DIR="$TRAVAIL" CORE_CIBLE="$CORE_CIBLE" node "$TRAVAIL/scenario.mjs"
 CODE=$?
 
 echo

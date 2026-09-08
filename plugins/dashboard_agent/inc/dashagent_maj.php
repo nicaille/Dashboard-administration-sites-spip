@@ -601,6 +601,17 @@ function dashagent_core_deployer($source) {
 		$remplaces[] = $entree;
 	}
 
+	// Une archive dont aucune entrée ne correspond laisserait le site intact et
+	// la mise à jour se dirait réussie : c'est un échec, pas un succès muet.
+	if (!$remplaces) {
+		return [
+			'ok'        => false,
+			'erreur'    => 'Aucun fichier du core trouvé dans l’archive : rien n’a été remplacé',
+			'remplaces' => [],
+			'rollback'  => '',
+		];
+	}
+
 	return ['ok' => true, 'erreur' => '', 'remplaces' => $remplaces, 'rollback' => $suffixe];
 }
 

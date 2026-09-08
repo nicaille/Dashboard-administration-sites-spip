@@ -7,6 +7,7 @@
  */
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import { execFileSync } from 'node:child_process';
+import { readFileSync, readdirSync } from 'node:fs';
 
 const base = process.env.BASE_URL || 'http://127.0.0.1:8321';
 const site = process.env.SITE_DIR;
@@ -241,6 +242,115 @@ await page.waitForTimeout(200);
 dit('flèche gauche : retour à « Plugins »', (await panneauPlugins.isVisible()) && !(await panneauPhp.isVisible()));
 dit('aucune extension PHP dans l’onglet « Plugins »',
 	!/\bphp:/i.test(await panneauPlugins.innerText()));
+
+/**
+ * Une balise laissée non compilée arrive dans l'URL sous la forme %23NOM, et
+ * l'opération reçoit un nom de balise en guise d'identifiant. Le symptôme est
+ * muet : la page revient avec « Site inconnu ». Le piège se tend tout seul —
+ * une balise à accolades imbriquée dans les arguments d'une autre suffit — donc
+ * on inspecte toutes les URL d'action plutôt qu'un bouton à la fois.
+ */
+async function urlsDActions(page, nom, url) {
+	await page.goto(base + url, { waitUntil: 'domcontentloaded' });
+	const liens = await page.locator('a.dashboard-bouton').evaluateAll((l) => l.map((a) => a.getAttribute('href') || ''));
+	const brutes = liens.filter((h) => /%23|#[A-Z_]{3,}/.test(h));
+	dit(`${nom} : aucune balise non compilée dans les URL d’action`, brutes.length === 0,
+		brutes.map((h) => (h.match(/%23[A-Za-z_:]+|#[A-Z_]{3,}/) || [''])[0]).join(', '));
+	const args = liens.map((h) => decodeURIComponent((h.match(/[?&]arg=([^&]*)/) || ['', ''])[1]))
+		.filter((a) => /^(core_maj|plugin_maj|plugin_maj_tous|sync|purger|sauvegarde)\b/.test(a));
+	const malFormes = args.filter((a) => !/^[a-z_]+\/\d+(\/|$)/.test(a));
+	dit(`${nom} : chaque URL d’action porte un identifiant numérique`, malFormes.length === 0, malFormes.join(', '));
+	return liens;
+}
+
+console.log('\n### URL des boutons d’action');
+await urlsDActions(page, 'parc', '/ecrire/?exec=dashboard');
+await urlsDActions(page, 'fiche du site', '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
+
+console.log('\n### Mise à jour du core SPIP');
+const coreCible = process.env.CORE_CIBLE || '4.4.99';
+const lu = (relatif) => { try { return readFileSync(`${site}/${relatif}`, 'utf8'); } catch { return null; } };
+
+// Le dépôt d'archives de core est local et en http : le tableau de bord ne
+// l'accepte qu'avec l'autorisation explicite déjà cochée, et l'agent qu'avec
+// _DASHAGENT_ARCHIVES_HTTP dans son mes_options.php. Deux accords distincts.
+// Sur le site géré, la mise à jour du core est refusée par défaut : c'est une
+// case à cocher à part, et le test la coche comme le ferait l'administrateur.
+await page.goto(base + '/ecrire/?exec=configurer_dashagent', { waitUntil: 'domcontentloaded' });
+await page.check('[name="op_core_maj"]').catch(() => {});
+await page.locator('form input[type=submit]').last().click();
+await page.waitForTimeout(700);
+dit('mise à jour du core autorisée sur le site géré',
+	await page.locator('[name="op_core_maj"]').isChecked().catch(() => false));
+
+await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
+await page.fill('[name="url_archives_spip"]', base + '/core-archives/');
+await page.fill('[name="versions_manuelles"]', `4.4 = ${coreCible}`);
+await page.locator('form input[type=submit]').first().click();
+await page.waitForLoadState('domcontentloaded').catch(() => {});
+await page.waitForTimeout(500);
+dit('dépôt d’archives de core configuré', (await page.locator('body').innerText()).includes('enregistrée'));
+
+// Le retard de core est décidé à la synchronisation : il faut la rejouer pour
+// que la nouvelle version cible soit prise en compte.
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await bouton(page, 'Synchroniser');
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await urlsDActions(page, 'fiche du site, mise à jour du core proposée',
+	'/ecrire/?exec=dashboard_site&id_dashboard_site=1');
+const boutonCore = page.locator('a.dashboard-bouton-danger').first();
+dit('mise à jour du core proposée', (await boutonCore.count()) > 0);
+
+// État d'avant, pour prouver ensuite que ce sont bien les fichiers de l'archive
+// qui sont arrivés, et que rien d'autre n'a bougé.
+const gardes = ['config', 'IMG', 'local', 'squelettes', 'plugins'];
+const avant = Object.fromEntries(gardes.map((g) => [g, lu(`${g}/temoin-dashboard.txt`)]));
+dit('témoins en place avant la mise à jour', Object.values(avant).every((v) => v !== null),
+	JSON.stringify(Object.entries(avant).filter(([, v]) => v === null).map(([k]) => k)));
+dit('témoin du core absent avant', lu('ecrire/temoin-core.txt') === null);
+
+page.once('dialog', (d) => d.accept());
+await boutonCore.click();
+await page.waitForLoadState('domcontentloaded').catch(() => {});
+await page.waitForTimeout(4000);
+
+dit('mise à jour du core sans erreur', (await erreurs(page)).length === 0, (await erreurs(page)).join(' ; '));
+
+// Le compte rendu de l'opération, et lui seul : le tableau de la fiche affiche
+// « 4.4.23 → 4.4.99 » de toute façon, y compris quand rien ne s'est passé.
+const retour = decodeURIComponent((page.url().match(/dashboard_message=([^&]*)/) || ['', ''])[1]).replace(/\+/g, ' ');
+const statut = (page.url().match(/dashboard_statut=(\w+)/) || ['', ''])[1];
+dit('l’opération rend un compte rendu de succès', statut === 'ok', statut + ' : ' + retour);
+dit(`compte rendu 4.4.23 → ${coreCible}`,
+	new RegExp(`4\\.4\\.23\\s*→\\s*${coreCible.replace(/\./g, '\\.')}`).test(retour), retour);
+
+dit('fichiers de l’archive réellement déployés', (lu('ecrire/temoin-core.txt') || '').includes(coreCible),
+	String(lu('ecrire/temoin-core.txt')));
+dit('version de branche remplacée sur le disque',
+	new RegExp(`spip_version_branche\\s*=\\s*['"]${coreCible.replace(/\./g, '\\.')}`).test(lu('ecrire/inc_version.php') || ''));
+
+const rollback = readdirSync(site).filter((n) => /^ecrire\.dashagent-\d{14}$/.test(n));
+dit('ancien core conservé pour rollback', rollback.length === 1, rollback.join(', '));
+
+for (const g of gardes) {
+	dit(`${g}/ préservé`, lu(`${g}/temoin-dashboard.txt`) === avant[g]);
+}
+dit('plugin mis à jour non écrasé', (lu('plugins/zzztest/paquet.xml') || '').includes('1.0.1'));
+dit('secret de l’agent préservé', (lu('config/mes_options.php') || '').includes('_DASHAGENT_ARCHIVES_HTTP'));
+
+// Le site tourne désormais sur les fichiers déployés : s'il ne répondait plus,
+// la mise à jour aurait « réussi » en cassant le site.
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+dit('l’espace privé répond encore après le remplacement', (await erreurs(page)).length === 0,
+	(await erreurs(page)).join(' ; '));
+// « la page contient 4.4.99 » ne prouverait rien : le badge « 4.4.23 → 4.4.99 »
+// l'affiche aussi quand rien ne s'est passé. C'est la version enregistrée qui
+// compte, et la disparition de la proposition de mise à jour.
+const apres = JSON.parse(sql('SELECT version_spip, core_maj FROM spip_dashboard_sites WHERE id_dashboard_site = 1'))[0];
+dit('version du site mise à jour dans le parc', apres.version_spip === coreCible, JSON.stringify(apres));
+dit('plus de retard de core signalé', apres.core_maj === 'non', apres.core_maj);
+dit('plus de mise à jour de core proposée',
+	(await page.locator('a.dashboard-bouton-danger').count()) === 0);
 
 console.log('\n### Restauration du dump');
 try {

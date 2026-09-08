@@ -229,10 +229,17 @@
 		<:dashboard:core_maj_texte{version_actuelle=#VERSION_SPIP,version_cible=#GET{version_cible}}:>
 	</p>
 	<p class="explication"><:dashboard:core_maj_avertissement:></p>
-	#SET{url_core_maj,#URL_ACTION_AUTEUR{dashboard_operation,core_maj/#ID_DASHBOARD_SITE/#GET{version_cible},#SELF}}
 	<p class="boutons">
+		<!-- La version cible n'est volontairement pas passee dans l'URL : une
+		     balise a accolades imbriquee dans les arguments d'une autre balise
+		     desorganise l'analyse des arguments, et l'identifiant du site
+		     arrivait litteralement dans l'adresse — d'ou un « Site inconnu »
+		     muet. L'operation rededuit la version cible, de la meme
+		     configuration et au moment de l'execution.
+		     Ne pas ecrire de syntaxe de balise dans un commentaire : SPIP la
+		     compile quand meme, et une balise invalide emporte le bloc. -->
 		<a class="dashboard-bouton dashboard-bouton-danger"
-		   href="#GET{url_core_maj}"
+		   href="[(#URL_ACTION_AUTEUR{dashboard_operation,core_maj/#ID_DASHBOARD_SITE,#SELF})]"
 		   data-confirmation="<:dashboard:core_maj_confirmation:>"
 		   onclick="return confirm(this.dataset.confirmation);">
 			<:dashboard:action_core_maj:>

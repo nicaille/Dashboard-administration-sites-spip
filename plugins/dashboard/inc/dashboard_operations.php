@@ -305,10 +305,23 @@ function dashboard_operation_core_maj($id_dashboard_site, $version = '', $option
 		return ['ok' => false, 'message' => $message, 'data' => $reponse['data']];
 	}
 
-	$message = 'SPIP ' . (string) ($reponse['data']['version_avant'] ?? '?') . ' → ' . (string) ($reponse['data']['version_apres'] ?? $version);
+	$version_apres = (string) ($reponse['data']['version_apres'] ?? $version);
+	$message = 'SPIP ' . (string) ($reponse['data']['version_avant'] ?? '?') . ' → ' . $version_apres;
 	dashboard_journaliser($id_dashboard_site, 'core_maj', 'ok', $message, $reponse['data'], $reponse['duree_ms']);
 
 	dashboard_synchroniser($id_dashboard_site);
+
+	// La synchronisation qui suit immédiatement le remplacement interroge un
+	// PHP qui a déjà chargé l'ancien inc_version.php : il annonce encore la
+	// version d'avant, et la fiche continuerait de proposer une mise à jour
+	// déjà faite. La version déployée, elle, est connue avec certitude —
+	// l'agent l'a lue dans l'archive qu'il vient d'installer.
+	if ($version_apres !== '') {
+		sql_updateq('spip_dashboard_sites', [
+			'version_spip' => $version_apres,
+			'core_maj'     => dashboard_version_cible($version_apres) ? 'oui' : 'non',
+		], 'id_dashboard_site = ' . (int) $id_dashboard_site);
+	}
 
 	return ['ok' => true, 'message' => $message, 'data' => $reponse['data']];
 }

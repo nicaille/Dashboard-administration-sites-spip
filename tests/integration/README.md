@@ -5,9 +5,10 @@ installe un vrai SPIP, y active les deux plugins, et déroule le parcours comple
 dans un navigateur : création d'un site, appairage, synchronisation signée,
 purge de cache, sauvegarde de base et restauration du dump obtenu.
 
-C'est elle qui a mis au jour l'incompatibilité SQLite de la sauvegarde et le
-recalcul de liste qui désactivait les plugins — deux défauts que la seule
-analyse statique ne pouvait pas voir.
+C'est elle qui a mis au jour l'incompatibilité SQLite de la sauvegarde, le
+recalcul de liste qui désactivait les plugins, et un bouton de mise à jour du
+core qui n'a jamais pu fonctionner — des défauts que la seule analyse statique
+ne pouvait pas voir.
 
 ## Pré-requis
 
@@ -61,4 +62,6 @@ DASHBOARD_TEST_SANS_PREPARATION=1 tests/integration/executer.sh <zip> 8321
 | Mise à jour de plugin | un dépôt SVP local propose une 1.0.1 : l'archive est téléchargée, déployée, et aucun plugin n'est désactivé au passage |
 | Rendu | aucune chaîne de langue brute, aucun bloc de squelette non compilé, aucun nom multilingue ni version normalisée à l'écran |
 | Onglets | « Plugins » et « PHP » se répondent au clic et aux flèches, le compteur suit le tableau, chaque capacité porte son origine, aucune extension PHP n'apparaît parmi les plugins |
+| URL des boutons | aucune balise non compilée (`%23NOM`) dans une URL d'action, et chaque opération porte un identifiant numérique |
+| Mise à jour du core | une archive de core « plus récente » est servie localement : les fichiers de `ecrire/` sont réellement remplacés, l'ancien core est conservé pour rollback, `config/`, `IMG/`, `local/`, `squelettes/` et `plugins/` sont intacts, l'espace privé répond encore, et le parc enregistre la nouvelle version |
 | Restauration | le dump se rejoue dans une base neuve, contenu intact |
