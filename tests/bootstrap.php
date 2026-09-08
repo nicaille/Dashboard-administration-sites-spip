@@ -65,3 +65,4 @@ function url_de_base() {
 
 require_once __DIR__ . '/../plugins/dashboard/inc/dashboard_client.php';
 require_once __DIR__ . '/../plugins/dashboard/inc/dashboard_operations.php';
+require_once __DIR__ . '/../plugins/dashboard/dashboard_fonctions.php';

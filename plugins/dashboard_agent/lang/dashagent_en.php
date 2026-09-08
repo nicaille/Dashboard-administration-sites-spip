@@ -7,6 +7,9 @@ if (!defined('_ECRIRE_INC_VERSION')) {
 
 $GLOBALS[$GLOBALS['idx_lang']] = [
 
+	// A
+	'alerte_autorites' => 'HTTPS downloads cannot work on this server:',
+
 	// C
 	'col_date'      => 'Date',
 	'col_duree'     => 'Duration',

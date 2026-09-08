@@ -1,7 +1,7 @@
 <paquet
 	prefix="dashagent"
 	categorie="maintenance"
-	version="1.0.5"
+	version="1.0.6"
 	etat="test"
 	compatibilite="[4.1.0;4.*]"
 	schema="1.0.5"

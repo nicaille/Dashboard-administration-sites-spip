@@ -95,53 +95,96 @@
 ]
 
 <div class="dashboard-fiche">
-	<h2><:dashboard:titre_plugins:> <small>[(#NB_PLUGINS)]</small></h2>
+	<div class="dashboard-onglets" data-dashboard-onglets>
+		<ul class="dashboard-onglets-liste" role="tablist">
+			<li>
+				<button type="button" role="tab" id="onglet-plugins" aria-controls="panneau-plugins" aria-selected="true">
+					<:dashboard:titre_plugins:> <span class="dashboard-compteur">#NB_PLUGINS</span>
+				</button>
+			</li>
+			<li>
+				<button type="button" role="tab" id="onglet-php" aria-controls="panneau-php" aria-selected="false">
+					<:dashboard:titre_php:> <span class="dashboard-compteur">[(#INFOS|dashboard_compter_procures)]</span>
+				</button>
+			</li>
+		</ul>
 
+		<section id="panneau-plugins" role="tabpanel" aria-labelledby="onglet-plugins">
 	[(#NB_PLUGINS_MAJ|>{0}|oui)
-		[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
-		<p class="boutons">
-			<a class="dashboard-bouton dashboard-bouton-primaire" href="[(#URL_ACTION_AUTEUR{dashboard_operation,plugin_maj_tous/#ID_DASHBOARD_SITE,#SELF})]">
-				<:dashboard:action_maj_tous:> ([(#NB_PLUGINS_MAJ)])
-			</a>
-		</p>
+			[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+			<p class="boutons">
+				<a class="dashboard-bouton dashboard-bouton-primaire" href="[(#URL_ACTION_AUTEUR{dashboard_operation,plugin_maj_tous/#ID_DASHBOARD_SITE,#SELF})]">
+					<:dashboard:action_maj_tous:> ([(#NB_PLUGINS_MAJ)])
+				</a>
+			</p>
+			]
 		]
-	]
 
 	<B_plugins>
-	<table class="spip liste">
-		<thead><tr>
-			<th scope="col"><:dashboard:col_plugin:></th>
-			<th scope="col"><:dashboard:col_version:></th>
-			<th scope="col"><:dashboard:col_disponible:></th>
-			<th scope="col"><:dashboard:col_source:></th>
-			<th scope="col"><:dashboard:col_actions:></th>
-		</tr></thead>
-		<tbody>
-		<BOUCLE_plugins(DASHBOARD_PLUGINS){id_dashboard_site}{par prefixe}>
-			<tr class="[(#MAJ_DISPONIBLE|=={oui}|?{dashboard-ligne-maj,})]">
-				<th scope="row">[(#NOM|dashboard_nom_lisible|sinon{#PREFIXE})] <small><code>#PREFIXE</code></small></th>
-				<td><code>#VERSION</code></td>
-				<td>[<code>(#VERSION_DISPONIBLE)</code>]</td>
-				<td>
-					[(#DISTRIBUE|=={oui}|oui)<em><:dashboard:plugin_distribue:></em>]
-					[(#DISTRIBUE|=={non}|oui)#SOURCE]
-				</td>
-				<td>
-					[(#MAJ_DISPONIBLE|=={oui}|oui)
-						[(#DISTRIBUE|=={non}|oui)
-							[(#AUTORISER{operer,dashboard_site,#_site:ID_DASHBOARD_SITE})
-								<a class="dashboard-bouton" href="[(#URL_ACTION_AUTEUR{dashboard_operation,plugin_maj/#_site:ID_DASHBOARD_SITE/#PREFIXE,#SELF})]"><:dashboard:action_maj:></a>
+		<table class="spip liste">
+			<thead><tr>
+				<th scope="col"><:dashboard:col_plugin:></th>
+				<th scope="col"><:dashboard:col_version:></th>
+				<th scope="col"><:dashboard:col_disponible:></th>
+				<th scope="col"><:dashboard:col_source:></th>
+				<th scope="col"><:dashboard:col_actions:></th>
+			</tr></thead>
+			<tbody>
+			<BOUCLE_plugins(DASHBOARD_PLUGINS){id_dashboard_site}{par prefixe}>
+				<tr class="[(#MAJ_DISPONIBLE|=={oui}|?{dashboard-ligne-maj,})]">
+					<th scope="row">[(#NOM|dashboard_nom_lisible|sinon{#PREFIXE})] <small><code>#PREFIXE</code></small></th>
+					<td><code>#VERSION</code></td>
+					<td>[<code>(#VERSION_DISPONIBLE)</code>]</td>
+					<td>
+						[(#DISTRIBUE|=={oui}|oui)<em><:dashboard:plugin_distribue:></em>]
+						[(#DISTRIBUE|=={non}|oui)#SOURCE]
+					</td>
+					<td>
+						[(#MAJ_DISPONIBLE|=={oui}|oui)
+							[(#DISTRIBUE|=={non}|oui)
+								[(#AUTORISER{operer,dashboard_site,#_site:ID_DASHBOARD_SITE})
+									<a class="dashboard-bouton" href="[(#URL_ACTION_AUTEUR{dashboard_operation,plugin_maj/#_site:ID_DASHBOARD_SITE/#PREFIXE,#SELF})]"><:dashboard:action_maj:></a>
+								]
 							]
 						]
-					]
-				</td>
-			</tr>
-		</BOUCLE_plugins>
-		</tbody>
-	</table>
-	</B_plugins>
-	<p class="petition"><:dashboard:plugins_vide:></p>
-	<//B_plugins>
+					</td>
+				</tr>
+			</BOUCLE_plugins>
+			</tbody>
+		</table>
+		</B_plugins>
+			<p class="petition"><:dashboard:plugins_vide:></p>
+			<//B_plugins>
+		</section>
+
+		<section id="panneau-php" role="tabpanel" aria-labelledby="onglet-php">
+			<p class="explication"><:dashboard:explication_php:></p>
+			<B_procures>
+			<table class="spip liste">
+				<thead><tr>
+					<th scope="col"><:dashboard:col_composant:></th>
+					<th scope="col"><:dashboard:col_version:></th>
+					<th scope="col"><:dashboard:col_origine:></th>
+				</tr></thead>
+				<tbody>
+				<BOUCLE_procures(DATA){source table, #_site:INFOS|dashboard_procures}>
+					<tr>
+						<th scope="row"><code>[(#VALEUR|table_valeur{nom})]</code></th>
+						<td>[(#VALEUR|table_valeur{version})]</td>
+						<td>
+							[(#VALEUR|table_valeur{origine}|=={plugin}|oui)<:dashboard:origine_plugin:> <code>[(#VALEUR|table_valeur{fournie_par})]</code>]
+							[(#VALEUR|table_valeur{origine}|=={php}|oui)<:dashboard:origine_hebergement:>]
+							[(#VALEUR|table_valeur{origine}|=={spip}|oui)<:dashboard:origine_spip:>]
+						</td>
+					</tr>
+				</BOUCLE_procures>
+				</tbody>
+			</table>
+			</B_procures>
+			<p class="petition"><:dashboard:php_vide:></p>
+			<//B_procures>
+		</section>
+	</div>
 </div>
 
 [(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
@@ -227,6 +270,40 @@
 </div>
 
 </BOUCLE_site>
+
+<script type="text/javascript">
+/* Onglets : sans JavaScript, les deux panneaux restent visibles l'un sous
+   l'autre, ce qui reste parfaitement lisible. */
+(function () {
+	document.querySelectorAll('[data-dashboard-onglets]').forEach(function (groupe) {
+		var onglets = groupe.querySelectorAll('[role="tab"]');
+		var panneaux = groupe.querySelectorAll('[role="tabpanel"]');
+
+		function activer(index) {
+			onglets.forEach(function (onglet, i) {
+				onglet.setAttribute('aria-selected', i === index ? 'true' : 'false');
+				onglet.tabIndex = i === index ? 0 : -1;
+			});
+			panneaux.forEach(function (panneau, i) {
+				panneau.hidden = (i !== index);
+			});
+		}
+
+		onglets.forEach(function (onglet, i) {
+			onglet.addEventListener('click', function () { activer(i); });
+			onglet.addEventListener('keydown', function (e) {
+				if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') { return; }
+				e.preventDefault();
+				var suivant = (i + (e.key === 'ArrowRight' ? 1 : onglets.length - 1)) % onglets.length;
+				activer(suivant);
+				onglets[suivant].focus();
+			});
+		});
+
+		activer(0);
+	});
+})();
+</script>
 
 </BOUCLE_installe>
 <div class="dashboard-fiche dashboard-fiche-alerte">

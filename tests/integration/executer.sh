@@ -11,12 +11,21 @@ RACINE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TRAVAIL="${DASHBOARD_TEST_DIR:-${TMPDIR:-/tmp}/dashboard-integration}"
 SITE="$TRAVAIL/site"
 BASE="http://127.0.0.1:$PORT"
+export BDD="$SITE/config/bases/spip.sqlite"
 
 if [ -z "$ZIP" ] || [ ! -f "$ZIP" ]; then
 	echo "usage : $0 /chemin/vers/SPIP-vX.Y.Z.zip [port]" >&2
 	exit 2
 fi
 
+# Le serveur php -S garde le répertoire racine qu'il a résolu au démarrage :
+# effacer ce répertoire sous ses pieds le laisse servir un arbre fantôme, et
+# l'installation semble réussir sans rien écrire sur le disque. D'où ce
+# drapeau, pour préparer le site d'abord et ne démarrer le serveur qu'ensuite :
+#   DASHBOARD_TEST_PREPARATION_SEULE=1 tests/integration/executer.sh <zip> <port>
+#   cd <site> && php -S 127.0.0.1:<port> -t <site> &
+#   DASHBOARD_TEST_SANS_PREPARATION=1 tests/integration/executer.sh <zip> <port>
+if [ -z "${DASHBOARD_TEST_SANS_PREPARATION:-}" ]; then
 echo "== Préparation du site dans $SITE"
 rm -rf "$TRAVAIL"; mkdir -p "$SITE"
 unzip -q "$ZIP" -d "$SITE"
@@ -28,6 +37,12 @@ fi
 mkdir -p "$SITE/plugins" "$SITE/config/bases"
 cp -a "$RACINE/plugins/dashboard" "$RACINE/plugins/dashboard_agent" "$SITE/plugins/"
 chmod -R 777 "$SITE/tmp" "$SITE/local" "$SITE/config" "$SITE/IMG" "$SITE/plugins" 2>/dev/null
+fi
+
+if [ -n "${DASHBOARD_TEST_PREPARATION_SEULE:-}" ]; then
+	echo "== Site préparé, serveur à démarrer manuellement sur $BASE"
+	exit 0
+fi
 
 # Un serveur déjà en écoute est réutilisé tel quel : c'est plus rapide à
 # relancer, et certains environnements n'autorisent pas un démon lancé depuis
@@ -51,6 +66,14 @@ cp "$RACINE/tests/integration/aide-install.mjs" "$TRAVAIL/"
 cp "$RACINE/tests/integration/scenario.mjs" "$TRAVAIL/"
 BASE_URL="$BASE" node "$TRAVAIL/aide-install.mjs" || { echo "installation échouée" >&2; exit 1; }
 
+# Sans compte administrateur, tout le parcours se déroulerait déconnecté et les
+# vérifications passeraient sur des pages vides : on le constate tout de suite.
+auteurs="$(php -r '$d=new SQLite3(getenv("BDD"));echo (int)$d->querySingle("SELECT count(*) FROM spip_auteurs");' 2>/dev/null)"
+if [ "${auteurs:-0}" -lt 1 ]; then
+	echo "installation incomplète : aucun compte administrateur créé" >&2
+	exit 1
+fi
+
 # L'installeur laisse connect.tmp.php : c'est l'étape finale qui le renomme.
 [ -f "$SITE/config/connect.tmp.php" ] && cp "$SITE/config/connect.tmp.php" "$SITE/config/connect.php"
 rm -rf "$SITE"/tmp/cache/*
@@ -72,7 +95,17 @@ $actifs = array_keys(unserialize($GLOBALS['meta']['plugin'] ?? '') ?: []);
 echo in_array('DASHBOARD', $actifs, true) && in_array('DASHAGENT', $actifs, true)
 	? "PLUGINS_ACTIFS\n" : "ECHEC : " . implode(',', $actifs) . "\n";
 PHPEOF
-if ! curl -s --noproxy '*' "$BASE/zz-activer.php" | grep -q PLUGINS_ACTIFS; then
+# La toute première requête construit les caches de plugins ; la liste des
+# plugins actifs n'est visible qu'au passage suivant, exactement comme lorsqu'on
+# recharge la page des plugins dans un navigateur. D'où ces tentatives.
+active=""
+for _ in 1 2 3; do
+	if curl -s --noproxy '*' "$BASE/zz-activer.php" | grep -q PLUGINS_ACTIFS; then
+		active="oui"
+		break
+	fi
+done
+if [ -z "$active" ]; then
 	echo "activation des plugins échouée" >&2
 	exit 1
 fi

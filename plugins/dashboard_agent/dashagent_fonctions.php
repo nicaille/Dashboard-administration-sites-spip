@@ -30,3 +30,20 @@ function dashagent_tables_presentes($rien = '') {
 
 	return $presentes;
 }
+
+/**
+ * Ce serveur sait-il valider un certificat https ?
+ *
+ * Toutes les mises à jour passent par un téléchargement https. Sans magasin
+ * d'autorités lisible, aucune n'aboutira, quel que soit le dépôt : le dire sur
+ * la page de configuration évite de chercher la panne du côté du dépôt.
+ *
+ * @filtre
+ * @return string Chaîne vide si tout va bien, message d'alerte sinon
+ */
+function dashagent_alerte_autorites($rien = '') {
+	include_spip('inc/dashagent_fs');
+	$magasin = dashagent_magasin_autorites();
+
+	return $magasin['ok'] ? '' : dashagent_conseil_autorites();
+}

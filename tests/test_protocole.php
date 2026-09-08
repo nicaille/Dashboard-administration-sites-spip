@@ -266,6 +266,65 @@ verifier('deux branches lues', count($manuelles) === 2, json_encode($manuelles))
 verifier('branche 4.2 correcte', ($manuelles['4.2'] ?? '') === '4.2.16');
 verifier('ligne invalide ignorée', !isset($manuelles['ligne']));
 
+echo "\n== Magasin d’autorités de certification ==\n";
+
+/* Reproduit une pile locale pour Windows : OpenSSL annonce des chemins compilés
+   qui n'existent pas sur la machine, et alors aucun https ne passe. */
+$wamp = dashagent_magasin_autorites([
+	'default_cert_file' => 'C:\\ci\\ca-bundle.crt',
+	'default_cert_dir'  => 'C:\\ci\\certs',
+]);
+verifier('magasin annoncé mais absent : refusé', $wamp['ok'] === false);
+verifier('le chemin fautif est nommé', $wamp['chemin'] === 'C:\\ci\\ca-bundle.crt', $wamp['chemin']);
+
+$aucun = dashagent_magasin_autorites([]);
+verifier('aucun emplacement annoncé : refusé', $aucun['ok'] === false);
+verifier('aucun chemin à montrer', $aucun['chemin'] === '');
+
+$systeme = dashagent_magasin_autorites(['default_cert_dir' => '/usr/lib/ssl/certs']);
+verifier('répertoire système peuplé : accepté', $systeme['ok'] === true, json_encode($systeme));
+
+$vide = sys_get_temp_dir() . '/dashagent-ca-vide';
+@mkdir($vide);
+verifier('répertoire vide : refusé', dashagent_magasin_autorites(['default_cert_dir' => $vide])['ok'] === false);
+@rmdir($vide);
+
+$conseil = dashagent_conseil_autorites();
+verifier('le conseil est renseigné', is_string($conseil) && $conseil !== '');
+
+verifier('URL sans hôte diagnostiquée', dashagent_cause_echec_reseau('pas-une-url') === 'URL illisible',
+	dashagent_cause_echec_reseau('pas-une-url'));
+verifier('hôte inexistant diagnostiqué',
+	strpos(dashagent_cause_echec_reseau('https://hote-absent.invalid/x.zip'), 'DNS') !== false,
+	dashagent_cause_echec_reseau('https://hote-absent.invalid/x.zip'));
+
+echo "\n== Capacités PHP et bibliothèques ==\n";
+
+$inventaire = json_encode(['procures' => [
+	['prefixe' => 'PHP', 'nom' => 'php', 'version' => '8.2.6', 'fournie_par' => '', 'php' => true],
+	['prefixe' => 'PHP:CURL', 'nom' => 'php:curl', 'version' => '8.2.6', 'fournie_par' => '', 'php' => true],
+	['prefixe' => 'MEJS', 'nom' => 'mejs', 'version' => '4.2.7', 'fournie_par' => 'medias', 'php' => false],
+	['prefixe' => 'JQUERY', 'nom' => 'jquery', 'version' => '3.6.4', 'fournie_par' => '', 'php' => false],
+]]);
+$procures = dashboard_procures($inventaire);
+verifier('quatre capacités relues', count($procures) === 4, count($procures));
+verifier('capacités comptées', dashboard_compter_procures($inventaire) === 4);
+verifier('extension PHP rattachée à l’hébergement', ($procures[1]['origine'] ?? '') === 'php', $procures[1]['origine'] ?? '');
+verifier('bibliothèque rattachée à son plugin', ($procures[2]['origine'] ?? '') === 'plugin', $procures[2]['origine'] ?? '');
+verifier('bibliothèque sans fournisseur rattachée à SPIP', ($procures[3]['origine'] ?? '') === 'spip', $procures[3]['origine'] ?? '');
+
+/* Un agent d'une version antérieure n'envoie pas le drapeau « php ». */
+$ancien = json_encode(['procures' => [
+	['nom' => 'php:gd', 'version' => '8.2.6', 'fournie_par' => ''],
+	['nom' => 'phpmailer', 'version' => '6.9.1', 'fournie_par' => ''],
+]]);
+$anciens = dashboard_procures($ancien);
+verifier('agent ancien : extension PHP reconnue au nom', ($anciens[0]['origine'] ?? '') === 'php', $anciens[0]['origine'] ?? '');
+verifier('agent ancien : phpmailer n’est pas une extension', ($anciens[1]['origine'] ?? '') === 'spip', $anciens[1]['origine'] ?? '');
+
+verifier('inventaire sans capacités', dashboard_procures(json_encode(['plugins' => []])) === []);
+verifier('inventaire illisible', dashboard_procures('pas du json') === []);
+
 echo "\n== Formatage des tailles ==\n";
 
 verifier('octets bruts', dashboard_octets(512) === '512 o', dashboard_octets(512));

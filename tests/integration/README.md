@@ -35,6 +35,17 @@ le script détecte un serveur déjà en écoute et le réutilise :
 cd <repertoire>/site && PHP_CLI_SERVER_WORKERS=4 php -S 127.0.0.1:8321 -t . &
 ```
 
+Attention : `php -S` retient le répertoire racine résolu à son démarrage.
+Réutiliser un serveur déjà lancé pendant que le script réinstalle le site le
+laisserait servir l'arbre effacé, et l'installation semblerait réussir sans rien
+écrire sur le disque. Deux drapeaux séparent donc les phases :
+
+```bash
+DASHBOARD_TEST_PREPARATION_SEULE=1 tests/integration/executer.sh <zip> 8321
+cd <repertoire>/site && PHP_CLI_SERVER_WORKERS=4 php -S 127.0.0.1:8321 -t . &
+DASHBOARD_TEST_SANS_PREPARATION=1 tests/integration/executer.sh <zip> 8321
+```
+
 ## Ce qui est vérifié
 
 | Étape | Contrôle |
@@ -49,4 +60,5 @@ cd <repertoire>/site && PHP_CLI_SERVER_WORKERS=4 php -S 127.0.0.1:8321 -t . &
 | Sauvegarde | le dump est créé, rapatrié, son empreinte SHA-256 vérifiée |
 | Mise à jour de plugin | un dépôt SVP local propose une 1.0.1 : l'archive est téléchargée, déployée, et aucun plugin n'est désactivé au passage |
 | Rendu | aucune chaîne de langue brute, aucun bloc de squelette non compilé, aucun nom multilingue ni version normalisée à l'écran |
+| Onglets | « Plugins » et « PHP » se répondent au clic et aux flèches, le compteur suit le tableau, chaque capacité porte son origine, aucune extension PHP n'apparaît parmi les plugins |
 | Restauration | le dump se rejoue dans une base neuve, contenu intact |
