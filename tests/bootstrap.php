@@ -56,6 +56,7 @@ require_once __DIR__ . '/../plugins/dashboard_agent/inc/dashagent_securite.php';
 require_once __DIR__ . '/../plugins/dashboard_agent/inc/dashagent_fs.php';
 require_once __DIR__ . '/../plugins/dashboard_agent/inc/dashagent_infos.php';
 require_once __DIR__ . '/../plugins/dashboard_agent/inc/dashagent_maj.php';
+require_once __DIR__ . '/../plugins/dashboard_agent/inc/dashagent_base.php';
 
 /* Le client du dashboard tire quelques fonctions du core SPIP : on les neutralise
    avant de le charger, pour ne garder que la partie protocole. */
@@ -65,4 +66,7 @@ function url_de_base() {
 
 require_once __DIR__ . '/../plugins/dashboard/inc/dashboard_client.php';
 require_once __DIR__ . '/../plugins/dashboard/inc/dashboard_operations.php';
+/* Le moteur de chantiers ne touche à la base que dans ses fonctions d'accès :
+   la logique d'enchaînement des étapes, elle, est vérifiable telle quelle. */
+require_once __DIR__ . '/../plugins/dashboard/inc/dashboard_chantiers.php';
 require_once __DIR__ . '/../plugins/dashboard/dashboard_fonctions.php';

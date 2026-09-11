@@ -70,10 +70,10 @@
 		<fieldset>
 			<legend><:dashboard:legend_securite_maj:></legend>
 			<ul>
-				<li class="editer editer_sauvegarder_avant_maj">
-					<input type="checkbox" name="sauvegarder_avant_maj" id="sauvegarder_avant_maj" value="on"[ (#ENV{sauvegarder_avant_maj}|=={on}|oui)checked="checked"] />
-					<label for="sauvegarder_avant_maj"><:dashboard:label_sauvegarder_avant_maj:></label>
-					<p class="explication"><:dashboard:explication_sauvegarder_avant_maj:></p>
+				<li class="editer editer_fraicheur_sauvegarde">
+					<label for="fraicheur_sauvegarde"><:dashboard:label_fraicheur_sauvegarde:></label>
+					<input type="number" class="text" name="fraicheur_sauvegarde" id="fraicheur_sauvegarde" min="0" step="60" value="[(#ENV{fraicheur_sauvegarde}|entites_html)]" />
+					<p class="explication"><:dashboard:explication_fraicheur_sauvegarde:></p>
 				</li>
 				<li class="editer editer_retention_sauvegardes">
 					<label for="retention_sauvegardes"><:dashboard:label_retention_sauvegardes:></label>

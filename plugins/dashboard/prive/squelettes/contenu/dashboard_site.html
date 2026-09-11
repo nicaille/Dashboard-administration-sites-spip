@@ -27,6 +27,36 @@
 	</p>
 ]
 
+<BOUCLE_chantier(DASHBOARD_CHANTIERS){id_dashboard_site}{statut IN attente,encours}{par date}{inverse}{0,1}>
+<div class="dashboard-fiche dashboard-chantier"
+     data-dashboard-chantier="[(#URL_ACTION_AUTEUR{dashboard_chantier,#ID_DASHBOARD_CHANTIER})]">
+	<h2><:dashboard:titre_chantier:></h2>
+	<p class="dashboard-chantier-libelle">[(#OPERATION|dashboard_libelle_operation{#CIBLE})]</p>
+	<p class="dashboard-chantier-etape">
+		<span class="dashboard-chantier-rang">[(#RANG|plus{1})]/#TOTAL</span>
+		<span class="dashboard-chantier-message">[(#MESSAGE|textebrut)]</span>
+	</p>
+	<p class="explication"><:dashboard:explication_chantier:></p>
+</div>
+</BOUCLE_chantier>
+
+[(#BASE_MAJ|=={oui}|oui)
+<div class="dashboard-fiche dashboard-fiche-alerte">
+	<h2><:dashboard:titre_base_maj:></h2>
+	<p><:dashboard:base_maj_texte:></p>
+	[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+	<p class="boutons">
+		<a class="dashboard-bouton dashboard-bouton-danger"
+		   href="[(#URL_ACTION_AUTEUR{dashboard_operation,base_maj/#ID_DASHBOARD_SITE,#SELF})]"
+		   data-confirmation="<:dashboard:base_maj_confirmation:>"
+		   onclick="return confirm(this.dataset.confirmation);">
+			<:dashboard:action_base_maj:>
+		</a>
+	</p>
+	]
+</div>
+]
+
 <div class="dashboard-fiche">
 	<h2><:dashboard:titre_etat:></h2>
 	<table class="spip">
@@ -309,6 +339,41 @@
 
 		activer(0);
 	});
+})();
+</script>
+
+<script type="text/javascript">
+/* Pilote de chantier : chaque appel fait avancer l'opération d'une étape et
+   rend son état. Sans JavaScript, rien ne se perd — la tâche de fond reprend
+   les chantiers laissés en plan, il suffit de recharger la page plus tard. */
+(function () {
+	var bloc = document.querySelector('[data-dashboard-chantier]');
+	if (!bloc) { return; }
+
+	var url = bloc.getAttribute('data-dashboard-chantier');
+	var rang = bloc.querySelector('.dashboard-chantier-rang');
+	var message = bloc.querySelector('.dashboard-chantier-message');
+
+	function avancer() {
+		fetch(url, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+			.then(function (r) { return r.json(); })
+			.then(function (etat) {
+				if (rang && etat.rang) { rang.textContent = etat.rang + '/' + etat.total; }
+				if (message && etat.message) { message.textContent = etat.message; }
+				if (etat.fini) {
+					// L'opération est terminée : la page rechargée montre le
+					// site dans son nouvel état, et le compte rendu au journal.
+					window.location.reload();
+					return;
+				}
+				avancer();
+			})
+			.catch(function () {
+				if (message) { message.textContent = message.textContent + ' — interrompu, reprise automatique en cours'; }
+			});
+	}
+
+	avancer();
 })();
 </script>
 

@@ -9,6 +9,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 
 	// A
 	'a_mettre_a_jour'          => 'à mettre à jour',
+	'action_base_maj' => 'Migrer la base maintenant',
 	'action_core_maj'          => 'Mettre à jour SPIP maintenant',
 	'action_maj'               => 'Mettre à jour',
 	'action_maj_tous'          => 'Tout mettre à jour',
@@ -26,6 +27,10 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'articles'                 => 'articles',
 
 	// C
+	'badge_base_maj' => 'base à migrer',
+	'base_maj_confirmation' => 'Lancer la migration de la base de ce site ? Une sauvegarde est prise au préalable.',
+	'base_maj_disponible' => 'La base de ce site attend sa migration : son espace privé est bloqué.',
+	'base_maj_texte' => 'Les fichiers de ce site attendent une migration de leur base de données. Tant qu’elle n’est pas jouée, SPIP bloque l’espace privé du site géré derrière sa page de mise à niveau.',
 	'col_actions'    => 'Actions',
 	'col_cache'      => 'Cache',
 	'col_composant'  => 'Composant',
@@ -68,9 +73,10 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'erreur_url_site'          => 'L’adresse publique doit commencer par http:// ou https://',
 	'erreur_versions_manuelles' => 'Ligne invalide : @ligne@ (format attendu : 4.2 = 4.2.16)',
 	'explication_autoriser_http' => 'À réserver au développement local : le secret partagé et les archives téléchargées circulent alors en clair. Le site géré doit en outre l’autoriser de son côté.',
+	'explication_chantier' => 'L’opération se déroule étape par étape. Vous pouvez quitter cette page : elle se poursuivra d’elle-même et son issue sera portée au journal.',
 	'explication_generer_secret' => 'Le secret est affiché une seule fois après enregistrement : recopiez-le aussitôt dans la configuration de l’agent, sur le site géré.',
 	'explication_groupe'       => 'Facultatif : sert à regrouper les sites d’un même client ou d’un même hébergement.',
-	'explication_sauvegarder_avant_maj' => 'Une sauvegarde rapatriée est exigée avant toute mise à jour du core. Décocher fait perdre le seul filet de sécurité sur les données.',
+	'explication_fraicheur_sauvegarde' => 'Toute mise à jour commence par une sauvegarde rapatriée du site géré, sans exception. Une sauvegarde plus récente que ce délai, en secondes, est réutilisée telle quelle plutôt que refaite. Zéro pour en exiger une neuve à chaque fois.',
 	'explication_secret_clair' => 'Collez ici le secret généré sur le site géré. Il n’est jamais réaffiché ensuite.',
 	'explication_sync_lot'     => 'Nombre de sites interrogés à chaque passage du cron. Les sites les moins récemment synchronisés passent en premier.',
 	'explication_timeout_long' => 'S’applique aux sauvegardes et aux mises à jour, qui peuvent durer plusieurs minutes.',
@@ -103,7 +109,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'label_notes'              => 'Notes',
 	'label_retention_journal'  => 'Conserver le journal (jours)',
 	'label_retention_sauvegardes' => 'Conserver les sauvegardes rapatriées (jours)',
-	'label_sauvegarder_avant_maj' => 'Sauvegarder la base avant toute mise à jour du core',
+	'label_fraicheur_sauvegarde' => 'Durée de validité d’une sauvegarde préalable (secondes)',
 	'label_secret_clair'       => 'Secret partagé',
 	'label_statut'             => 'Supervision',
 	'label_sync_auto'          => 'Synchroniser automatiquement le parc',
@@ -133,6 +139,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'nav_sites_en_erreur' => 'Sites injoignables',
 
 	// O
+	'operation_base_maj' => 'Migration de la base',
 	'operation_core_maj'        => 'Mise à jour du core',
 	'operation_plugin_maj'      => 'Mise à jour de plugin',
 	'operation_plugin_maj_tous' => 'Mise à jour des plugins',
@@ -169,12 +176,15 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'statut_pause'        => 'En pause',
 	'statut_poubelle'     => 'Retiré du parc',
 	'statut_supervise'    => 'Supervisé',
+	'synthese_base_retard' => 'base(s) à migrer',
 	'synthese_core_retard' => 'core à mettre à jour',
 	'synthese_erreurs'    => 'injoignables',
 	'synthese_plugins_maj' => 'plugins à mettre à jour',
 	'synthese_supervises' => 'sites supervisés',
 
 	// T
+	'titre_base_maj' => 'Base de données à migrer',
+	'titre_chantier' => 'Opération en cours',
 	'titre_configurer'   => 'Dashboard : configuration',
 	'tables_manquantes'  => 'Tables manquantes :',
 	'titre_tables_absentes' => 'Tables du plugin absentes',

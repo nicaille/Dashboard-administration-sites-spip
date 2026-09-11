@@ -266,6 +266,94 @@ verifier('deux branches lues', count($manuelles) === 2, json_encode($manuelles))
 verifier('branche 4.2 correcte', ($manuelles['4.2'] ?? '') === '4.2.16');
 verifier('ligne invalide ignorée', !isset($manuelles['ligne']));
 
+echo "\n== Schéma de base d’un site géré ==\n";
+
+/* `dashagent_base_etat()` lit deux globales de SPIP : ce que les fichiers
+   attendent, et ce que la base contient. */
+$etat_base = function ($attendue, $installee) {
+	$GLOBALS['spip_version_base'] = $attendue;
+	$GLOBALS['meta']['version_installee'] = $installee;
+
+	return dashagent_base_etat();
+};
+
+$a_jour = $etat_base('2026080300', '2026080300');
+verifier('schéma à jour : rien à faire', $a_jour['maj_requise'] === false);
+verifier('schéma à jour : base pas en avance', $a_jour['base_plus_recente'] === false);
+
+$retard = $etat_base('2026080300', '2026010100');
+verifier('schéma en retard : migration due', $retard['maj_requise'] === true);
+verifier('schéma en retard : versions rendues', $retard['version_base'] === '2026010100'
+	&& $retard['version_base_attendue'] === '2026080300');
+
+/* Une base plus récente que les fichiers signale une double installation ou un
+   retour arrière : migrer aggraverait les choses. */
+$avance = $etat_base('2026010100', '2026080300');
+verifier('base plus récente : signalée', $avance['base_plus_recente'] === true);
+verifier('base plus récente : préflight bloquant', dashagent_base_preflight()['ok'] === false);
+verifier('base plus récente : refus expliqué',
+	strpos(dashagent_base_preflight()['erreur'], 'plus récente') !== false,
+	dashagent_base_preflight()['erreur']);
+
+/* Certains hébergeurs enregistrent la version avec une virgule décimale. */
+$virgule = $etat_base('2026080300', '2026080300');
+$GLOBALS['meta']['version_installee'] = '2026080300';
+verifier('version à virgule tolérée', dashagent_base_etat()['maj_requise'] === false);
+
+echo "\n== Journal de migration ==\n";
+
+$brut = "<div>MAJ 2026080300 <span title='0'>.</span></div><br>MAJ 2026080400 .<br>"
+	. 'HTTP 302<br>Si votre navigateur n’est pas redirigé, cliquez ici pour continuer.';
+$lisible = dashagent_base_journal_lisible($brut);
+verifier('les paliers sont conservés', strpos($lisible, 'MAJ 2026080300') !== false, $lisible);
+verifier('le second palier aussi', strpos($lisible, 'MAJ 2026080400') !== false, $lisible);
+verifier('la redirection est coupée', strpos($lisible, 'cliquez ici') === false, $lisible);
+verifier('le balisage a disparu', strpos($lisible, '<span') === false);
+
+echo "\n== Étapes d’un chantier ==\n";
+
+foreach (['plugin_maj', 'plugin_maj_tous', 'core_maj', 'base_maj'] as $operation) {
+	$etapes = dashboard_chantier_etapes($operation);
+	verifier("$operation : commence par une sauvegarde", ($etapes[0] ?? '') === 'sauvegarde',
+		implode(' → ', $etapes));
+	verifier("$operation : finit par une synchronisation", end($etapes) === 'sync');
+}
+verifier('la mise à jour du core migre aussi le schéma',
+	in_array('base', dashboard_chantier_etapes('core_maj'), true),
+	implode(' → ', dashboard_chantier_etapes('core_maj')));
+verifier('les plugins sont relistés juste avant d’être mis à jour',
+	dashboard_chantier_etapes('plugin_maj_tous') === ['sauvegarde', 'sync', 'plugins', 'sync']);
+verifier('opération inconnue : aucune étape', dashboard_chantier_etapes('rm_rf') === []);
+verifier('opération inconnue : refusée', dashboard_chantier_operation_connue('rm_rf') === false);
+verifier('opération connue : acceptée', dashboard_chantier_operation_connue('core_maj') === true);
+
+echo "\n== État d’un chantier ==\n";
+
+$fabriquer = function ($champs = []) {
+	return array_merge([
+		'id_dashboard_chantier' => 7, 'id_dashboard_site' => 1, 'operation' => 'core_maj',
+		'cible' => '', 'etape' => 'sauvegarde', 'statut' => 'encours', 'rang' => 0,
+		'total' => 5, 'tentatives' => 1, 'message' => '', 'detail' => '', 'reste' => '',
+	], $champs);
+};
+
+verifier('un chantier en cours n’est pas fini', dashboard_chantier_fini($fabriquer()) === false);
+verifier('un chantier réussi est fini', dashboard_chantier_fini($fabriquer(['statut' => 'ok'])) === true);
+verifier('un chantier en échec est fini', dashboard_chantier_fini($fabriquer(['statut' => 'erreur'])) === true);
+verifier('un chantier absent est fini', dashboard_chantier_fini(null) === true);
+
+verifier('le résumé situe l’étape',
+	dashboard_chantier_resume($fabriquer(['rang' => 2])) === 'Mise à jour du core SPIP (étape 3/5)',
+	dashboard_chantier_resume($fabriquer(['rang' => 2])));
+verifier('le libellé nomme le plugin visé',
+	dashboard_chantier_libelle('plugin_maj', 'CEXTRAS') === 'Mise à jour du plugin CEXTRAS');
+
+verifier('aucun échec retenu au départ', dashboard_chantier_echecs($fabriquer()) === []);
+$avec_echec = $fabriquer(['detail' => json_encode(['echecs' => ['CEXTRAS' => 'HTTP 404']])]);
+verifier('les échecs sont relus', array_keys(dashboard_chantier_echecs($avec_echec)) === ['CEXTRAS']);
+verifier('un détail illisible ne casse rien',
+	dashboard_chantier_echecs($fabriquer(['detail' => 'pas du json'])) === []);
+
 echo "\n== Magasin d’autorités de certification ==\n";
 
 /* Reproduit une pile locale pour Windows : OpenSSL annonce des chemins compilés

@@ -144,6 +144,10 @@ function dashagent_operation_autorisee($operation) {
 		'plugin_maj_preflight'    => 'op_plugin_maj',
 		'core_maj'                => 'op_core_maj',
 		'core_maj_preflight'      => 'op_core_maj',
+		// La migration du schéma va de pair avec le remplacement des fichiers :
+		// l'une sans l'autre laisse le site à moitié à jour.
+		'base_maj'                => 'op_core_maj',
+		'base_maj_preflight'      => 'op_core_maj',
 	];
 
 	if (!isset($permissions[$operation])) {

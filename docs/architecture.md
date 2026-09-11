@@ -33,6 +33,7 @@ travail réel est réparti :
 | `inc/dashagent_cache.php` | purge des caches, cible par cible |
 | `inc/dashagent_sauvegarde.php` | export SQL gzip streamé, rétention, diffusion |
 | `inc/dashagent_maj.php` | mise à jour des plugins et du core, avec rollback |
+| `inc/dashagent_base.php` | migration du schéma de base du core, par tranches reprenables |
 | `inc/dashagent_fs.php` | mesure, copie, suppression, téléchargement, dézippage sûr |
 
 Deux tables seulement : `spip_dashagent_journal` (piste d'audit) et
@@ -50,6 +51,9 @@ Installé une seule fois, sur la tour de contrôle.
 | `inc/dashboard_versions.php` | quelle version de SPIP est disponible pour quelle branche |
 | `inc/dashboard_journal.php` | journal des opérations, côté tour de contrôle |
 | `genie/dashboard_sync.php` | synchronisation périodique, par lots |
+| `inc/dashboard_chantiers.php` | mises à jour menées par étapes : sauvegarde d'abord, un aller-retour par avancement |
+| `action/dashboard_chantier.php` | avancement d'une étape, appelé en boucle par la fiche du site |
+| `genie/dashboard_chantiers.php` | reprise des chantiers laissés en plan |
 
 La table `spip_dashboard_sites` est déclarée **deux fois** : dans
 `declarer_tables_objets_sql`, qui lui donne la machinerie d'objet éditorial
@@ -76,6 +80,28 @@ Quatre tables :
 - `spip_dashboard_plugins` — l'inventaire des plugins, remplacé à chaque synchronisation ;
 - `spip_dashboard_journal` — ce qui a été fait, par qui, quand, avec quel résultat ;
 - `spip_dashboard_sauvegardes` — le catalogue des sauvegardes, distantes ou rapatriées.
+
+## Pourquoi les mises à jour sont des chantiers
+
+Une purge de cache tient dans une requête ; le remplacement d'un noyau ou la
+migration d'un schéma, non. Aucune des deux extrémités ne peut garder une
+connexion ouverte pendant plusieurs minutes, et un `set_time_limit()` généreux
+ne fait que déplacer la coupure — sans jamais permettre de dire à quelle étape
+elle est survenue.
+
+Un chantier est donc une ligne de `spip_dashboard_chantiers` portant l'opération,
+son étape courante et ce qu'il reste à faire. Un *avancement* exécute une étape
+et une seule, avec au plus un aller-retour vers l'agent, puis rend la main. Deux
+moteurs poussent ces avancements : le navigateur de celui qui a lancé
+l'opération, ce qui donne une progression visible, et une tâche de fond qui
+reprend les chantiers abandonnés depuis plus de trois minutes, ce qui garantit
+l'aboutissement même si l'onglet est fermé.
+
+Deux étapes savent demander à rester en place plutôt qu'à avancer : la migration
+de schéma, que SPIP mène par paliers et interrompt d'elle-même, et la mise à jour
+de plusieurs plugins, traités un par un. C'est le même mécanisme — l'étape rend
+un drapeau `rester` — et il suffit à couvrir les opérations longues sans qu'aucun
+appel ne dépasse quelques dizaines de secondes.
 
 ## Flux d'une opération
 

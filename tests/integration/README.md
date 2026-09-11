@@ -6,9 +6,10 @@ dans un navigateur : création d'un site, appairage, synchronisation signée,
 purge de cache, sauvegarde de base et restauration du dump obtenu.
 
 C'est elle qui a mis au jour l'incompatibilité SQLite de la sauvegarde, le
-recalcul de liste qui désactivait les plugins, et un bouton de mise à jour du
-core qui n'a jamais pu fonctionner — des défauts que la seule analyse statique
-ne pouvait pas voir.
+recalcul de liste qui désactivait les plugins, un bouton de mise à jour du core
+qui n'a jamais pu fonctionner, et une migration de schéma qui s'exécutait sur le
+code d'avant le remplacement — des défauts que la seule analyse statique ne
+pouvait pas voir.
 
 ## Pré-requis
 
@@ -64,4 +65,6 @@ DASHBOARD_TEST_SANS_PREPARATION=1 tests/integration/executer.sh <zip> 8321
 | Onglets | « Plugins » et « PHP » se répondent au clic et aux flèches, le compteur suit le tableau, chaque capacité porte son origine, aucune extension PHP n'apparaît parmi les plugins |
 | URL des boutons | aucune balise non compilée (`%23NOM`) dans une URL d'action, et chaque opération porte un identifiant numérique |
 | Mise à jour du core | une archive de core « plus récente » est servie localement : les fichiers de `ecrire/` sont réellement remplacés, l'ancien core est conservé pour rollback, `config/`, `IMG/`, `local/`, `squelettes/` et `plugins/` sont intacts, l'espace privé répond encore, et le parc enregistre la nouvelle version |
+| Chantiers | chaque mise à jour commence par une sauvegarde neuve, affiche son encadré de progression, est menée à son terme par le pilote de la page, et porte au journal la transition de version comme sa conclusion |
+| Migration du schéma | l'archive annonce aussi une version de schéma plus récente et embarque un palier qui ajoute une colonne : le test vérifie que la colonne existe, que la meta a suivi, et que l'espace privé du site n'est plus bloqué |
 | Restauration | le dump se rejoue dans une base neuve, contenu intact |

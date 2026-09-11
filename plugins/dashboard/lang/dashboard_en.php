@@ -9,6 +9,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 
 	// A
 	'a_mettre_a_jour'          => 'to upgrade',
+	'action_base_maj' => 'Migrate the database now',
 	'action_core_maj'          => 'Upgrade SPIP now',
 	'action_maj'               => 'Upgrade',
 	'action_maj_tous'          => 'Upgrade all',
@@ -26,6 +27,10 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'articles'                 => 'articles',
 
 	// C
+	'badge_base_maj' => 'database to migrate',
+	'base_maj_confirmation' => 'Start migrating this site’s database? A backup is taken first.',
+	'base_maj_disponible' => 'This site’s database awaits migration: its private area is blocked.',
+	'base_maj_texte' => 'This site’s files expect a database migration. Until it is applied, SPIP keeps the managed site’s private area behind its upgrade page.',
 	'col_actions'    => 'Actions',
 	'col_cache'      => 'Cache',
 	'col_composant'  => 'Component',
@@ -68,9 +73,10 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'erreur_url_site'          => 'The public address must start with http:// or https://',
 	'erreur_versions_manuelles' => 'Invalid line: @ligne@ (expected format: 4.2 = 4.2.16)',
 	'explication_autoriser_http' => 'For local development only: the shared secret and the downloaded archives then travel in the clear. The managed site must allow it on its side too.',
+	'explication_chantier' => 'The operation runs step by step. You may leave this page: it carries on by itself and its outcome is recorded in the log.',
 	'explication_generer_secret' => 'The secret is displayed once after saving: copy it straight into the agent settings on the managed site.',
 	'explication_groupe'       => 'Optional: groups sites belonging to the same client or the same hosting.',
-	'explication_sauvegarder_avant_maj' => 'A downloaded backup is required before any core upgrade. Unticking this removes the only safety net for the data.',
+	'explication_fraicheur_sauvegarde' => 'Every update starts with a downloaded backup of the managed site, without exception. A backup newer than this delay, in seconds, is reused as is rather than taken again. Zero to require a fresh one every time.',
 	'explication_secret_clair' => 'Paste here the secret generated on the managed site. It is never displayed again.',
 	'explication_sync_lot'     => 'How many sites are polled on each cron pass. Least recently synchronised sites go first.',
 	'explication_timeout_long' => 'Applies to backups and upgrades, which can take several minutes.',
@@ -103,7 +109,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'label_notes'              => 'Notes',
 	'label_retention_journal'  => 'Keep the log (days)',
 	'label_retention_sauvegardes' => 'Keep downloaded backups (days)',
-	'label_sauvegarder_avant_maj' => 'Back up the database before every core upgrade',
+	'label_fraicheur_sauvegarde' => 'How long a preliminary backup stays valid (seconds)',
 	'label_secret_clair'       => 'Shared secret',
 	'label_statut'             => 'Supervision',
 	'label_sync_auto'          => 'Synchronise the fleet automatically',
@@ -133,6 +139,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'nav_sites_en_erreur' => 'Unreachable sites',
 
 	// O
+	'operation_base_maj' => 'Database migration',
 	'operation_core_maj'        => 'Core upgrade',
 	'operation_plugin_maj'      => 'Plugin upgrade',
 	'operation_plugin_maj_tous' => 'Plugins upgrade',
@@ -169,12 +176,15 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'statut_pause'        => 'Paused',
 	'statut_poubelle'     => 'Removed from the fleet',
 	'statut_supervise'    => 'Supervised',
+	'synthese_base_retard' => 'database(s) to migrate',
 	'synthese_core_retard' => 'cores to upgrade',
 	'synthese_erreurs'    => 'unreachable',
 	'synthese_plugins_maj' => 'plugins to upgrade',
 	'synthese_supervises' => 'supervised sites',
 
 	// T
+	'titre_base_maj' => 'Database awaiting migration',
+	'titre_chantier' => 'Operation in progress',
 	'titre_configurer'   => 'Dashboard: settings',
 	'tables_manquantes'  => 'Missing tables:',
 	'titre_tables_absentes' => 'Plugin tables missing',

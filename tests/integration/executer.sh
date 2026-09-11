@@ -14,6 +14,9 @@ BASE="http://127.0.0.1:$PORT"
 export BDD="$SITE/config/bases/spip.sqlite"
 # Version de branche annoncée par l’archive de core factice.
 CORE_CIBLE="4.4.99"
+# Version de schéma annoncée par cette archive : elle déclenche une vraie
+# migration de base après le remplacement des fichiers.
+BASE_CIBLE="2026090100"
 
 if [ -z "$ZIP" ] || [ ! -f "$ZIP" ]; then
 	echo "usage : $0 /chemin/vers/SPIP-vX.Y.Z.zip [port]" >&2
@@ -155,11 +158,21 @@ sql_delete('spip_paquets', 'id_depot = ' . intval($id_depot));
 sql_insertq('spip_paquets', ['id_plugin' => $id_plugin, 'id_depot' => $id_depot,
 	'version' => '1.0.1', 'etat' => 'test', 'nom_archive' => 'zzztest.zip',
 	'src_archive' => 'auto/zzztest/v1.0.1/']);
-echo "DEPOT_PRET\n";
+$actifs = array_keys(unserialize($GLOBALS['meta']['plugin'] ?? '') ?: []);
+echo in_array('ZZZTEST', $actifs, true) ? "DEPOT_PRET\n" : "ECHEC : zzztest inactif\n";
 PHPEOF
 curl -s --noproxy '*' -o /dev/null "$BASE/spip.php"
-if ! curl -s --noproxy '*' "$BASE/zz-depot.php" | grep -q DEPOT_PRET; then
-	echo "dépôt de test non créé" >&2
+# Comme pour l'activation initiale : la liste des plugins actifs n'est visible
+# qu'au passage suivant celui qui l'a recalculée.
+depot=""
+for _ in 1 2 3; do
+	if curl -s --noproxy '*' "$BASE/zz-depot.php" | grep -q DEPOT_PRET; then
+		depot="oui"
+		break
+	fi
+done
+if [ -z "$depot" ]; then
+	echo "dépôt de test non créé, ou plugin de test inactif" >&2
 	exit 1
 fi
 rm -f "$SITE/zz-depot.php"
@@ -171,7 +184,7 @@ echo "== Archive de core factice (pour la mise à jour du noyau)"
 # celui d'un SPIP valide, donc le site fonctionne encore après le remplacement.
 mkdir -p "$SITE/core-archives"
 cp "$ZIP" "$SITE/core-archives/SPIP-v$CORE_CIBLE.zip"
-php "$RACINE/tests/integration/preparer-core.php" "$SITE/core-archives/SPIP-v$CORE_CIBLE.zip" "$CORE_CIBLE" \
+php "$RACINE/tests/integration/preparer-core.php" "$SITE/core-archives/SPIP-v$CORE_CIBLE.zip" "$CORE_CIBLE" "$BASE_CIBLE" \
 	|| { echo "archive de core non préparée" >&2; exit 1; }
 
 # Témoins dans les répertoires que la mise à jour ne doit jamais toucher.
@@ -181,7 +194,7 @@ for garde in config IMG local squelettes plugins; do
 done
 
 echo "== Parcours fonctionnel"
-BASE_URL="$BASE" SITE_DIR="$SITE" TRAVAIL_DIR="$TRAVAIL" CORE_CIBLE="$CORE_CIBLE" node "$TRAVAIL/scenario.mjs"
+BASE_URL="$BASE" SITE_DIR="$SITE" TRAVAIL_DIR="$TRAVAIL" CORE_CIBLE="$CORE_CIBLE" BASE_CIBLE="$BASE_CIBLE" node "$TRAVAIL/scenario.mjs"
 CODE=$?
 
 echo

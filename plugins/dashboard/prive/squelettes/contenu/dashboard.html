@@ -16,6 +16,7 @@
 	<li><strong>[(#GET{synthese}|table_valeur{supervises})]</strong> <:dashboard:synthese_supervises:></li>
 	<li class="dashboard-erreur"><strong>[(#GET{synthese}|table_valeur{en_erreur})]</strong> <:dashboard:synthese_erreurs:></li>
 	<li class="dashboard-attention"><strong>[(#GET{synthese}|table_valeur{core_retard})]</strong> <:dashboard:synthese_core_retard:></li>
+	<li class="dashboard-attention"><strong>[(#GET{synthese}|table_valeur{base_retard})]</strong> <:dashboard:synthese_base_retard:></li>
 	<li class="dashboard-attention"><strong>[(#GET{synthese}|table_valeur{plugins_maj})]</strong> <:dashboard:synthese_plugins_maj:></li>
 </ul>
 
@@ -51,6 +52,11 @@
 				[(#CORE_MAJ|=={oui}|oui)
 					<span class="dashboard-badge dashboard-badge-maj" title="<:dashboard:core_maj_disponible:>">
 						&rarr; [(#VERSION_SPIP|dashboard_version_disponible)]
+					</span>
+				]
+				[(#BASE_MAJ|=={oui}|oui)
+					<span class="dashboard-badge dashboard-badge-alerte" title="<:dashboard:base_maj_disponible:>">
+						<:dashboard:badge_base_maj:>
 					</span>
 				]
 			</td>

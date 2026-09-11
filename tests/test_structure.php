@@ -546,7 +546,8 @@ $api_spip = [
 	// inc/
 	'autoriser', 'lire_config', 'ecrire_config', 'recuperer_url', 'purger_repertoire',
 	'lire_metas', 'plugin_installes_meta', 'affdate_heure', 'affdate_jourcourt',
-	'sous_repertoire', 'spip_version_compare', 'session_get',
+	'sous_repertoire', 'spip_unlink', 'spip_version_compare', 'session_get',
+	'auth_synchroniser_distant',
 	'liste_plugin_actifs', 'ecrire_plugin_actifs',
 	// formulaires CVT sur objet
 	'formulaires_editer_objet_charger', 'formulaires_editer_objet_verifier',
@@ -554,12 +555,14 @@ $api_spip = [
 	// action/editer_objet — objet_modifier_champs() n’en fait pas partie :
 	// elle n’est pas exposée, et l’avoir appelée provoquait une erreur fatale.
 	'objet_inserer', 'objet_modifier', 'objet_instituer',
-	// base/
-	'maj_plugin', 'maj_tables',
+	// base/ — creer_base() et maj_base() mènent la migration du schéma du core
+	// sur un site géré, ce que la page de mise à niveau de SPIP fait à la main.
+	'maj_plugin', 'maj_tables', 'creer_base', 'maj_base',
 	// abstract_sql
 	'sql_allfetsel', 'sql_alltable', 'sql_countsel', 'sql_create', 'sql_delete',
 	'sql_drop_table', 'sql_error', 'sql_fetch', 'sql_fetsel', 'sql_free', 'sql_insertq',
 	'sql_query', 'sql_quote', 'sql_select', 'sql_showtable', 'sql_updateq', 'sql_version',
+	'sql_in',
 ];
 
 $definies = [];

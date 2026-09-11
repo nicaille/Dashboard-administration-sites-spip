@@ -31,18 +31,21 @@ function dashboard_api_requise() {
 		'inc/autoriser'        => ['autoriser'],
 		'inc/config'           => ['lire_config', 'ecrire_config'],
 		'inc/distant'          => ['recuperer_url'],
-		'inc/flock'            => ['sous_repertoire'],
+		'inc/flock'            => ['sous_repertoire', 'spip_unlink'],
 		'inc/invalideur'       => ['purger_repertoire'],
 		'inc/meta'             => ['ecrire_meta', 'effacer_meta'],
 		'inc/plugin'           => ['spip_version_compare'],
 		'inc/session'          => ['session_get'],
+		// Appelée après une migration de schéma, comme le fait SPIP lui-même :
+		// les comptes d'authentification externes doivent être resynchronisés.
+		'inc/auth'             => ['auth_synchroniser_distant'],
 		'inc/editer'           => ['formulaires_editer_objet_charger', 'formulaires_editer_objet_verifier',
 			'formulaires_editer_objet_traiter'],
 		'action/editer_objet'  => ['objet_inserer', 'objet_modifier', 'objet_instituer'],
 		'base/abstract_sql'    => ['sql_alltable', 'sql_create', 'sql_query', 'sql_showtable',
-			'sql_version', 'sql_error'],
-		'base/create'          => ['maj_tables'],
-		'base/upgrade'         => ['maj_plugin'],
+			'sql_version', 'sql_error', 'sql_in'],
+		'base/create'          => ['maj_tables', 'creer_base'],
+		'base/upgrade'         => ['maj_plugin', 'maj_base'],
 	];
 }
 
@@ -355,7 +358,7 @@ function dashboard_version_disponible($version_actuelle) {
  * @param string $operation
  * @return string
  */
-function dashboard_libelle_operation($operation) {
+function dashboard_libelle_operation($operation, $cible = '') {
 	$libelles = [
 		'sync'            => 'dashboard:operation_sync',
 		'purger'          => 'dashboard:operation_purger',
@@ -363,9 +366,13 @@ function dashboard_libelle_operation($operation) {
 		'plugin_maj'      => 'dashboard:operation_plugin_maj',
 		'plugin_maj_tous' => 'dashboard:operation_plugin_maj_tous',
 		'core_maj'        => 'dashboard:operation_core_maj',
+		'base_maj'        => 'dashboard:operation_base_maj',
 	];
 
-	return isset($libelles[$operation]) ? _T($libelles[$operation]) : $operation;
+	$libelle = isset($libelles[$operation]) ? _T($libelles[$operation]) : $operation;
+	$cible = trim((string) $cible);
+
+	return $cible !== '' ? $libelle . ' : ' . $cible : $libelle;
 }
 
 /**
@@ -376,7 +383,8 @@ function dashboard_libelle_operation($operation) {
  */
 function dashboard_synthese($rien = '') {
 	if (!dashboard_tables_presentes()) {
-		return ['sites' => 0, 'supervises' => 0, 'en_erreur' => 0, 'core_a_jour' => 0, 'core_retard' => 0, 'plugins_maj' => 0];
+		return ['sites' => 0, 'supervises' => 0, 'en_erreur' => 0, 'core_a_jour' => 0, 'core_retard' => 0,
+			'base_retard' => 0, 'plugins_maj' => 0];
 	}
 
 	$synthese = [
@@ -385,6 +393,9 @@ function dashboard_synthese($rien = '') {
 		'en_erreur'    => (int) sql_countsel('spip_dashboard_sites', ['statut = ' . sql_quote('publie'), 'etat = ' . sql_quote('erreur')]),
 		'core_a_jour'  => 0,
 		'core_retard'  => (int) sql_countsel('spip_dashboard_sites', ['statut = ' . sql_quote('publie'), 'core_maj = ' . sql_quote('oui')]),
+		// Un site dont la base attend sa migration répond encore, mais son espace
+		// privé est bloqué : c'est un retard d'une autre nature que celui du core.
+		'base_retard'  => (int) sql_countsel('spip_dashboard_sites', ['statut = ' . sql_quote('publie'), 'base_maj = ' . sql_quote('oui')]),
 		'plugins_maj'  => 0,
 	];
 

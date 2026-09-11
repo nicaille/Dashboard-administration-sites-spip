@@ -153,3 +153,36 @@
 	font-weight: normal;
 	text-align: center;
 }
+
+/* Opération en cours : un encadré qui se met à jour tout seul pendant que le
+   chantier avance, plutôt qu'une page figée le temps d'une longue requête. */
+.dashboard-chantier {
+	border-left: 4px solid #2b6ca3;
+}
+.dashboard-chantier-libelle {
+	margin: 0 0 .3em;
+	font-weight: bold;
+}
+.dashboard-chantier-etape {
+	display: flex;
+	align-items: baseline;
+	gap: .6em;
+	margin: 0 0 .5em;
+}
+.dashboard-chantier-rang {
+	flex: none;
+	padding: .1em .5em;
+	border-radius: 10px;
+	background: rgba(43, 108, 163, .12);
+	font-variant-numeric: tabular-nums;
+}
+.dashboard-chantier-message {
+	color: inherit;
+}
+
+/* Une base en attente de migration n'est pas un simple retard de version :
+   l'espace privé du site géré est bloqué tant qu'elle n'est pas jouée. */
+.dashboard-badge-alerte {
+	background: #a4001c;
+	color: #fff;
+}

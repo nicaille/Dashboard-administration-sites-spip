@@ -17,6 +17,7 @@ if (!defined('_ECRIRE_INC_VERSION')) {
  */
 function action_dashboard_operation_dist() {
 	include_spip('inc/dashboard_client');
+	include_spip('inc/dashboard_chantiers');
 	include_spip('inc/dashboard_operations');
 	include_spip('inc/dashboard_sync');
 
@@ -38,6 +39,30 @@ function action_dashboard_operation_dist() {
 		dashboard_operation_retour($id_site, false, 'Opération non autorisée');
 	}
 
+	// Les opérations brèves répondent sur place. Les mises à jour, elles,
+	// s'ouvrent en chantier : elles commencent toutes par une sauvegarde, durent
+	// trop longtemps pour une requête, et doivent pouvoir rendre compte d'elles-
+	// mêmes pendant qu'elles se déroulent.
+	if (dashboard_chantier_operation_connue($operation)) {
+		if ($operation === 'plugin_maj' && $complement === '') {
+			dashboard_operation_retour($id_site, false, 'Aucun plugin indiqué');
+		}
+
+		$ouverture = dashboard_chantier_creer($id_site, $operation, $complement);
+		if (!$ouverture['ok']) {
+			dashboard_operation_retour($id_site, false, $ouverture['message']);
+		}
+
+		// Première étape jouée tout de suite : l'utilisateur voit l'opération
+		// démarrer plutôt qu'un chantier immobile en attente du prochain cron.
+		$chantier = dashboard_chantier_avancer($ouverture['id']);
+		dashboard_operation_retour(
+			$id_site,
+			!dashboard_chantier_fini($chantier) || (string) $chantier['statut'] === 'ok',
+			dashboard_chantier_message_depart($chantier)
+		);
+	}
+
 	switch ($operation) {
 		case 'sync':
 			$resultat = dashboard_synchroniser($id_site);
@@ -56,27 +81,28 @@ function action_dashboard_operation_dist() {
 			]);
 			break;
 
-		case 'plugin_maj':
-			$resultat = $complement === ''
-				? ['ok' => false, 'message' => 'Aucun plugin indiqué']
-				: dashboard_operation_plugin_maj($id_site, $complement);
-			break;
-
-		case 'plugin_maj_tous':
-			$resultat = dashboard_operation_plugin_maj_tous($id_site);
-			break;
-
-		case 'core_maj':
-			$resultat = dashboard_operation_core_maj($id_site, $complement, [
-				'sauvegarder_avant' => (dashboard_config('sauvegarder_avant_maj', 'on') === 'on'),
-			]);
-			break;
-
 		default:
 			$resultat = ['ok' => false, 'message' => 'Opération inconnue : ' . $operation];
 	}
 
 	dashboard_operation_retour($id_site, !empty($resultat['ok']), (string) ($resultat['message'] ?? ''));
+}
+
+/**
+ * Ce qu'on annonce au retour de la première étape d'un chantier.
+ *
+ * @param array|null $chantier
+ * @return string
+ */
+function dashboard_chantier_message_depart($chantier) {
+	if (!$chantier) {
+		return 'Opération non enregistrée';
+	}
+	if (dashboard_chantier_fini($chantier)) {
+		return (string) $chantier['message'];
+	}
+
+	return dashboard_chantier_resume($chantier) . ' : ' . (string) $chantier['message'];
 }
 
 /**

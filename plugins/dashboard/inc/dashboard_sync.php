@@ -65,6 +65,9 @@ function dashboard_synchroniser($id_dashboard_site, $options = []) {
 		'nb_plugins'     => count($plugins),
 		'nb_plugins_maj' => $nb_maj,
 		'core_maj'       => $cible ? 'oui' : 'non',
+		// Le site répond, mais son espace privé peut être bloqué derrière la
+		// page de mise à niveau tant que son schéma n'a pas été migré.
+		'base_maj'       => !empty($infos['spip']['base_maj_requise']) ? 'oui' : 'non',
 		'infos'          => json_encode($infos, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR),
 		'date_sync'      => $maintenant,
 		'date_sync_ok'   => $maintenant,

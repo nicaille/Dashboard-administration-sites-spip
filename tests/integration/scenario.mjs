@@ -181,11 +181,22 @@ const boutonMaj = ligneMaj.locator('a.dashboard-bouton').first();
 if (await boutonMaj.count()) {
 	await boutonMaj.click();
 	await page.waitForLoadState('domcontentloaded').catch(() => {});
-	await page.waitForTimeout(3000);
-	const t = await page.locator('body').innerText();
+	await page.waitForTimeout(1000);
 	dit('mise à jour sans erreur', (await erreurs(page)).length === 0, (await erreurs(page)).join(' ; '));
-	dit('version passée de 1.0.0 à 1.0.1', /ZZZTEST\s*:\s*1\.0\.0\s*→\s*1\.0\.1/.test(t),
-		(t.match(/ZZZTEST[^\n]{0,60}/) || [''])[0]);
+
+	// Une mise à jour de plugin est elle aussi un chantier : sauvegarde d'abord,
+	// remplacement ensuite, inventaire pour finir.
+	const issuePlugin = await attendreChantier(page, 120);
+	dit('le chantier du plugin arrive à son terme', issuePlugin.fini, 'dernière étape vue : ' + issuePlugin.dernier);
+	await page.waitForTimeout(1000);
+
+	// Deux lignes au journal : le remplacement, qui nomme la transition, puis la
+	// conclusion du chantier.
+	const lignesPlugin = JSON.parse(sql(
+		"SELECT message FROM spip_dashboard_journal WHERE operation = 'plugin_maj' ORDER BY id_dashboard_journal"
+	)).map((l) => String(l.message));
+	dit('version passée de 1.0.0 à 1.0.1', lignesPlugin.some((m) => /1\.0\.0\s*→\s*1\.0\.1/.test(m)),
+		lignesPlugin.join(' | '));
 } else {
 	dit('bouton de mise à jour présent', false);
 }
@@ -263,6 +274,28 @@ async function urlsDActions(page, nom, url) {
 	return liens;
 }
 
+/**
+ * Attend qu'un chantier arrive à son terme.
+ *
+ * C'est le pilote JavaScript de la page qui le fait avancer, un aller-retour à
+ * la fois. Après le remplacement du noyau, la page elle-même ne peut plus se
+ * rendre — SPIP bloque son espace privé tant que le schéma n'est pas migré —
+ * mais les actions, elles, continuent de passer : le chantier va au bout.
+ */
+async function attendreChantier(page, secondes = 180) {
+	const limite = Date.now() + secondes * 1000;
+	let dernier = '';
+	while (Date.now() < limite) {
+		if ((await page.locator('[data-dashboard-chantier]').count()) === 0) {
+			return { fini: true, dernier };
+		}
+		dernier = (await page.locator('.dashboard-chantier-rang').innerText().catch(() => '')).trim();
+		await page.waitForTimeout(500);
+	}
+
+	return { fini: false, dernier };
+}
+
 console.log('\n### URL des boutons d’action');
 await urlsDActions(page, 'parc', '/ecrire/?exec=dashboard');
 await urlsDActions(page, 'fiche du site', '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
@@ -286,6 +319,9 @@ dit('mise à jour du core autorisée sur le site géré',
 await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
 await page.fill('[name="url_archives_spip"]', base + '/core-archives/');
 await page.fill('[name="versions_manuelles"]', `4.4 = ${coreCible}`);
+// Zéro seconde de validité : une sauvegarde neuve est exigée, ce qui vérifie
+// que la règle « une sauvegarde avant toute mise à jour » n'a pas d'échappatoire.
+await page.fill('[name="fraicheur_sauvegarde"]', '0');
 await page.locator('form input[type=submit]').first().click();
 await page.waitForLoadState('domcontentloaded').catch(() => {});
 await page.waitForTimeout(500);
@@ -309,20 +345,48 @@ dit('témoins en place avant la mise à jour', Object.values(avant).every((v) =>
 	JSON.stringify(Object.entries(avant).filter(([, v]) => v === null).map(([k]) => k)));
 dit('témoin du core absent avant', lu('ecrire/temoin-core.txt') === null);
 
+const sauvegardesAvant = JSON.parse(sql('SELECT count(*) AS n FROM spip_dashboard_sauvegardes'))[0].n;
+
 page.once('dialog', (d) => d.accept());
 await boutonCore.click();
 await page.waitForLoadState('domcontentloaded').catch(() => {});
-await page.waitForTimeout(4000);
 
-dit('mise à jour du core sans erreur', (await erreurs(page)).length === 0, (await erreurs(page)).join(' ; '));
+// Le pilote de la page peut mener un chantier court en une poignée de secondes :
+// l'encadré est relevé tout de suite, avant qu'il n'ait eu le temps de partir.
+const encadreVu = (await page.locator('[data-dashboard-chantier]').count()) > 0;
+await page.waitForTimeout(1500);
 
-// Le compte rendu de l'opération, et lui seul : le tableau de la fiche affiche
-// « 4.4.23 → 4.4.99 » de toute façon, y compris quand rien ne s'est passé.
+dit('lancement sans erreur', (await erreurs(page)).length === 0, (await erreurs(page)).join(' ; '));
+
 const retour = decodeURIComponent((page.url().match(/dashboard_message=([^&]*)/) || ['', ''])[1]).replace(/\+/g, ' ');
 const statut = (page.url().match(/dashboard_statut=(\w+)/) || ['', ''])[1];
-dit('l’opération rend un compte rendu de succès', statut === 'ok', statut + ' : ' + retour);
-dit(`compte rendu 4.4.23 → ${coreCible}`,
-	new RegExp(`4\\.4\\.23\\s*→\\s*${coreCible.replace(/\./g, '\\.')}`).test(retour), retour);
+dit('l’opération démarre sans refus', statut === 'ok', statut + ' : ' + retour);
+dit('la première étape est une sauvegarde', /[Ss]auvegarde/.test(retour), retour);
+dit('un encadré de chantier est affiché', encadreVu);
+
+// Le pilote de la page mène l'opération à son terme, étape par étape.
+const issue = await attendreChantier(page);
+dit('le chantier arrive à son terme', issue.fini, 'dernière étape vue : ' + issue.dernier);
+await page.waitForTimeout(1500);
+
+const chantier = JSON.parse(sql(
+	"SELECT statut, etape, tentatives, message FROM spip_dashboard_chantiers WHERE operation = 'core_maj' ORDER BY id_dashboard_chantier DESC LIMIT 1"
+))[0] || {};
+dit('le chantier est enregistré comme réussi', chantier.statut === 'ok', JSON.stringify(chantier));
+// Le journal porte deux lignes pour l'opération : le remplacement lui-même, qui
+// nomme la transition, et la conclusion du chantier.
+const lignesCore = JSON.parse(sql(
+	"SELECT message FROM spip_dashboard_journal WHERE operation = 'core_maj' ORDER BY id_dashboard_journal"
+)).map((l) => String(l.message));
+dit(`le journal porte la transition 4.4.23 → ${coreCible}`,
+	lignesCore.some((m) => new RegExp(`4\\.4\\.23\\s*→\\s*${coreCible.replace(/\./g, '\\.')}`).test(m)),
+	lignesCore.join(' | '));
+dit('le journal porte la conclusion du chantier',
+	lignesCore.some((m) => /terminé/.test(m)), lignesCore.join(' | '));
+
+const sauvegardesApres = JSON.parse(sql('SELECT count(*) AS n FROM spip_dashboard_sauvegardes'))[0].n;
+dit('une sauvegarde neuve a précédé la mise à jour', Number(sauvegardesApres) > Number(sauvegardesAvant),
+	sauvegardesAvant + ' → ' + sauvegardesApres);
 
 dit('fichiers de l’archive réellement déployés', (lu('ecrire/temoin-core.txt') || '').includes(coreCible),
 	String(lu('ecrire/temoin-core.txt')));
@@ -346,9 +410,30 @@ dit('l’espace privé répond encore après le remplacement', (await erreurs(pa
 // « la page contient 4.4.99 » ne prouverait rien : le badge « 4.4.23 → 4.4.99 »
 // l'affiche aussi quand rien ne s'est passé. C'est la version enregistrée qui
 // compte, et la disparition de la proposition de mise à jour.
-const apres = JSON.parse(sql('SELECT version_spip, core_maj FROM spip_dashboard_sites WHERE id_dashboard_site = 1'))[0];
+const apres = JSON.parse(sql('SELECT version_spip, core_maj, base_maj FROM spip_dashboard_sites WHERE id_dashboard_site = 1'))[0];
 dit('version du site mise à jour dans le parc', apres.version_spip === coreCible, JSON.stringify(apres));
 dit('plus de retard de core signalé', apres.core_maj === 'non', apres.core_maj);
+
+console.log('\n### Migration du schéma de base');
+const baseCible = process.env.BASE_CIBLE || '2026090100';
+
+// Remplacer les fichiers du noyau ne suffit pas : l'archive annonce un schéma
+// plus récent, et SPIP bloque l'espace privé du site tant qu'il n'est pas migré.
+// C'est l'étape « base » du chantier qui l'a joué, sans intervention humaine.
+dit('la version de schéma attendue a bien changé',
+	new RegExp(`spip_version_base\\s*=\\s*${baseCible}`).test(lu('ecrire/inc_version.php') || ''));
+dit('le schéma enregistré en base a suivi',
+	JSON.parse(sql("SELECT valeur FROM spip_meta WHERE nom = 'version_installee'"))[0]?.valeur === baseCible,
+	JSON.parse(sql("SELECT valeur FROM spip_meta WHERE nom = 'version_installee'"))[0]?.valeur);
+
+// Le palier ajouté à l'archive crée une colonne : c'est la preuve que la
+// migration a réellement joué, et pas seulement écrit un numéro de version.
+const colonnes = JSON.parse(sql("SELECT name FROM pragma_table_info('spip_jobs')")).map((c) => c.name);
+dit('le palier de migration a bien été appliqué', colonnes.includes('temoin_dashboard'), colonnes.join(', '));
+
+dit('plus de migration de base en attente', apres.base_maj === 'non', apres.base_maj);
+dit('l’espace privé du site n’est plus bloqué',
+	!/procédure de mise à jour doit être lancée/.test(await page.locator('body').innerText()));
 dit('plus de mise à jour de core proposée',
 	(await page.locator('a.dashboard-bouton-danger').count()) === 0);
 

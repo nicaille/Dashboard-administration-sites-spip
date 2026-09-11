@@ -188,6 +188,40 @@ Chaque entrée est mise de côté par `rename()` avant d'être remplacée ; si u
 sécurité, suffixées `.dashagent-AAAAMMJJHHMMSS`, sont conservées sept jours puis
 supprimées par la tâche d'entretien.
 
+### `base_maj_preflight`
+
+Sans argument. Retourne l'état du schéma : `version` (la branche de SPIP que le
+site exécute *en ce moment*), `version_base` (ce que contient la base, meta
+`version_installee`), `version_base_attendue` (ce que réclament les fichiers,
+`spip_version_base`), `maj_requise` et `base_plus_recente`.
+
+`version` mérite une explication : après un remplacement de fichiers, PHP peut
+encore exécuter le code d'avant. Comparer cette valeur à celle qu'on vient de
+déployer est le seul moyen fiable de savoir si le nouveau noyau est réellement
+en service — migrer le schéma avant cela ne ferait rien, en silence.
+
+### `base_maj`
+
+Argument facultatif : `budget`, en secondes (5 à 120, 25 par défaut).
+
+Joue une **tranche** de la migration du schéma. SPIP mène ses migrations par
+paliers et écrit la meta `version_installee` après chacun ; l'agent lui impose
+le budget reçu et capture ce qu'elle écrit. La réponse porte :
+
+| Champ | Sens |
+|---|---|
+| `termine` | la migration est achevée ; sinon, rappeler `base_maj` |
+| `interrompu` | la tranche a rendu la main avant la fin de son travail |
+| `progresse` | au moins un palier a été franchi pendant cette tranche |
+| `journal` | les paliers joués, en clair |
+
+Rappeler tant que `termine` est faux : chaque appel reprend là où le précédent
+s'est arrêté. Une tranche qui n'avance pas et qui n'est pas `termine` signale un
+blocage, pas une lenteur.
+
+Cette opération relève de la même autorisation que `core_maj` (`op_core_maj`) :
+remplacer les fichiers sans migrer le schéma laisse le site à moitié à jour.
+
 ## Écrire un autre client
 
 Rien n'oblige à passer par le plugin dashboard. Un script suffit :

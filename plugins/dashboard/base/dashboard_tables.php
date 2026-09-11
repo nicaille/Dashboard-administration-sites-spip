@@ -42,6 +42,9 @@ function dashboard_schema_sites() {
 			'nb_plugins'        => 'int(11) DEFAULT 0 NOT NULL',
 			'nb_plugins_maj'    => 'int(11) DEFAULT 0 NOT NULL',
 			'core_maj'          => "varchar(3) DEFAULT 'non' NOT NULL",
+			// Le schéma de base attend sa migration : le site répond, mais son
+			// espace privé est bloqué derrière la page de mise à niveau.
+			'base_maj'          => "varchar(3) DEFAULT 'non' NOT NULL",
 			'infos'             => "mediumtext DEFAULT '' NOT NULL",
 
 			'date_sync'         => "datetime DEFAULT '0000-00-00 00:00:00' NOT NULL",
@@ -163,6 +166,38 @@ function dashboard_declarer_tables_principales($tables) {
 		],
 	];
 
+	// Une mise à jour distante ne tient pas dans une requête HTTP : elle se
+	// déroule en étapes, chacune bornée à un aller-retour avec l'agent. Cette
+	// table porte l'état entre deux étapes, ce qui permet aussi bien de rendre
+	// compte de l'avancement que de reprendre un chantier abandonné.
+	$tables['spip_dashboard_chantiers'] = [
+		'field' => [
+			'id_dashboard_chantier' => 'bigint(21) NOT NULL',
+			'id_dashboard_site'     => 'bigint(21) DEFAULT 0 NOT NULL',
+			'id_auteur'             => 'bigint(21) DEFAULT 0 NOT NULL',
+			'operation'             => "varchar(32) DEFAULT '' NOT NULL",
+			'cible'                 => "varchar(255) DEFAULT '' NOT NULL",
+			'etape'                 => "varchar(32) DEFAULT '' NOT NULL",
+			'statut'                => "varchar(16) DEFAULT 'attente' NOT NULL",
+			'rang'                  => 'int(11) DEFAULT 0 NOT NULL',
+			'total'                 => 'int(11) DEFAULT 0 NOT NULL',
+			'tentatives'            => 'int(11) DEFAULT 0 NOT NULL',
+			'message'               => "text DEFAULT '' NOT NULL",
+			'detail'                => "mediumtext DEFAULT '' NOT NULL",
+			'reste'                 => "mediumtext DEFAULT '' NOT NULL",
+			'date'                  => "datetime DEFAULT '0000-00-00 00:00:00' NOT NULL",
+			'date_etape'            => "datetime DEFAULT '0000-00-00 00:00:00' NOT NULL",
+			'date_fin'              => "datetime DEFAULT '0000-00-00 00:00:00' NOT NULL",
+			'maj'                   => 'TIMESTAMP',
+		],
+		'key' => [
+			'PRIMARY KEY'           => 'id_dashboard_chantier',
+			'KEY id_dashboard_site' => 'id_dashboard_site',
+			'KEY statut'            => 'statut',
+			'KEY date'              => 'date',
+		],
+	];
+
 	$tables['spip_dashboard_sauvegardes'] = [
 		'field' => [
 			'id_dashboard_sauvegarde' => 'bigint(21) NOT NULL',
@@ -202,6 +237,7 @@ function dashboard_declarer_tables_interfaces($interfaces) {
 	$interfaces['table_des_tables']['dashboard_plugins']    = 'dashboard_plugins';
 	$interfaces['table_des_tables']['dashboard_journal']    = 'dashboard_journal';
 	$interfaces['table_des_tables']['dashboard_sauvegardes'] = 'dashboard_sauvegardes';
+	$interfaces['table_des_tables']['dashboard_chantiers']  = 'dashboard_chantiers';
 
 	return $interfaces;
 }

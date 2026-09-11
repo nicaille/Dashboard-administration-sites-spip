@@ -669,7 +669,17 @@ function dashagent_nettoyer_rollback($suffixe) {
 function dashagent_apres_maj() {
 	include_spip('inc/dashagent_cache');
 
-	$rapport = ['cache_purge' => dashagent_purger(['pages', 'squelettes'])];
+	// Les fichiers viennent d'être remplacés, mais PHP garde en mémoire ceux
+	// qu'il a compilés : sans purge, les requêtes suivantes exécutent encore
+	// l'ancien code, et une migration de schéma enchaînée ne verrait rien à
+	// faire. C'est le geste que fait tout outil de déploiement.
+	clearstatcache(true);
+	$rapport = ['opcache_purge' => false];
+	if (function_exists('opcache_reset') && ini_get('opcache.enable')) {
+		$rapport['opcache_purge'] = (bool) @opcache_reset();
+	}
+
+	$rapport['cache_purge'] = dashagent_purger(['pages', 'squelettes']);
 
 	// « ajoute » avec une liste vide revalide depuis le disque les plugins déjà
 	// actifs, et rien d'autre : c'est le recalcul sûr après remplacement de
