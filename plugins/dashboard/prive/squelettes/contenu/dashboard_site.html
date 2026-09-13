@@ -137,6 +137,13 @@
 					<:dashboard:titre_php:> <span class="dashboard-compteur">[(#INFOS|dashboard_compter_procures)]</span>
 				</button>
 			</li>
+			[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+			<li>
+				<button type="button" role="tab" id="onglet-serveur" aria-controls="panneau-serveur" aria-selected="false">
+					<:dashboard:titre_serveur:>
+				</button>
+			</li>
+			]
 		</ul>
 
 		<section id="panneau-plugins" role="tabpanel" aria-labelledby="onglet-plugins">
@@ -214,6 +221,27 @@
 			<p class="petition"><:dashboard:php_vide:></p>
 			<//B_procures>
 		</section>
+
+		[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+		<section id="panneau-serveur" role="tabpanel" aria-labelledby="onglet-serveur"
+		         data-dashboard-serveur="[(#URL_ACTION_AUTEUR{dashboard_serveur,#ID_DASHBOARD_SITE})]">
+			<p class="explication"><:dashboard:explication_serveur:></p>
+
+			<div class="dashboard-serveur-sections">
+				<h3><:dashboard:titre_serveur_resume:></h3>
+				<div data-serveur-bloc="resume" class="dashboard-serveur-bloc"><p class="petition"><:dashboard:serveur_attente:></p></div>
+
+				<h3><:dashboard:titre_serveur_tables:></h3>
+				<div data-serveur-bloc="tables" class="dashboard-serveur-bloc"><p class="petition"><:dashboard:serveur_attente:></p></div>
+
+				<h3><:dashboard:titre_serveur_fichiers:></h3>
+				<div data-serveur-bloc="fichiers" class="dashboard-serveur-bloc"><p class="petition"><:dashboard:serveur_attente:></p></div>
+
+				<h3><:dashboard:titre_serveur_phpinfo:></h3>
+				<div data-serveur-bloc="phpinfo" class="dashboard-serveur-bloc"><p class="petition"><:dashboard:serveur_attente:></p></div>
+			</div>
+		</section>
+		]
 	</div>
 </div>
 
@@ -374,6 +402,370 @@
 	}
 
 	avancer();
+})();
+</script>
+
+<script type="text/javascript">
+/* Onglet « Serveur » : rempli au premier affichage, pas à la synchronisation.
+   Un phpinfo() pèse cent kilo-octets et le contenu d'une table bien davantage ;
+   rien de tout cela n'a de raison d'être recopié dans la base du tableau de
+   bord. On regarde, on ne conserve pas. */
+(function () {
+	var panneau = document.getElementById('panneau-serveur');
+	if (!panneau) { return; }
+
+	var gabarit = panneau.getAttribute('data-dashboard-serveur');
+	var charge = false;
+
+	function url(operation, parametres) {
+		var adresse = gabarit + '&operation=' + encodeURIComponent(operation);
+		Object.keys(parametres || {}).forEach(function (clef) {
+			if (parametres[clef] !== '' && parametres[clef] !== null) {
+				adresse += '&' + encodeURIComponent(clef) + '=' + encodeURIComponent(parametres[clef]);
+			}
+		});
+		return adresse;
+	}
+
+	function demander(operation, parametres) {
+		return fetch(url(operation, parametres), {
+			credentials: 'same-origin',
+			headers: { 'X-Requested-With': 'XMLHttpRequest' }
+		}).then(function (r) { return r.json(); });
+	}
+
+	function bloc(nom) { return panneau.querySelector('[data-serveur-bloc="' + nom + '"]'); }
+
+	function echouer(cible, message) {
+		cible.innerHTML = '';
+		var p = document.createElement('p');
+		p.className = 'reponse_formulaire reponse_formulaire_erreur';
+		p.textContent = message || 'Le site n’a pas répondu.';
+		cible.appendChild(p);
+	}
+
+	function attendre(cible) {
+		cible.innerHTML = '';
+		var p = document.createElement('p');
+		p.className = 'petition';
+		p.textContent = 'Interrogation du site…';
+		cible.appendChild(p);
+	}
+
+	/* --- tableau clé/valeur, construit sans concaténer de HTML --- */
+	function definitions(paires) {
+		var table = document.createElement('table');
+		table.className = 'spip';
+		var corps = document.createElement('tbody');
+		paires.forEach(function (paire) {
+			var tr = document.createElement('tr');
+			var th = document.createElement('th');
+			th.scope = 'row';
+			th.textContent = paire[0];
+			var td = document.createElement('td');
+			td.textContent = paire[1] === null || paire[1] === undefined ? '—' : String(paire[1]);
+			tr.appendChild(th); tr.appendChild(td); corps.appendChild(tr);
+		});
+		table.appendChild(corps);
+		return table;
+	}
+
+	function octets(n) {
+		if (n === null || n === undefined) { return '—'; }
+		var unites = ['o', 'Ko', 'Mo', 'Go'], rang = 0;
+		n = Number(n);
+		while (n >= 1024 && rang < unites.length - 1) { n = n / 1024; rang++; }
+		return (rang ? n.toFixed(1) : n) + ' ' + unites[rang];
+	}
+
+	/* --- résumé --- */
+	function rendreResume(cible, d) {
+		cible.innerHTML = '';
+		cible.appendChild(definitions([
+			['PHP', d.php.version + ' (' + d.php.sapi + ', ' + d.php.os + ')'],
+			['Mémoire', d.php.memory_limit],
+			['Temps d’exécution', d.php.max_execution_time + ' s'],
+			['Envoi de fichiers', d.php.upload_max_filesize + ' / ' + d.php.post_max_size],
+			['Cache d’opcodes', d.php.opcache ? 'actif' : 'inactif'],
+			['Base de données', (d.base.moteur || '?') + ' ' + (d.base.version || '')],
+			['Poids de la base', octets(d.base.octets) + ' — ' + d.base.nb_tables + ' tables'],
+			['Espace disque libre', octets(d.disque.libre)]
+		]));
+
+		var titre = document.createElement('p');
+		titre.className = 'explication';
+		titre.textContent = d.php.nb_extensions + ' extensions PHP chargées';
+		cible.appendChild(titre);
+
+		var liste = document.createElement('p');
+		liste.className = 'dashboard-serveur-extensions';
+		d.php.extensions.forEach(function (nom) {
+			var code = document.createElement('code');
+			code.textContent = nom;
+			liste.appendChild(code);
+			liste.appendChild(document.createTextNode(' '));
+		});
+		cible.appendChild(liste);
+	}
+
+	/* --- explorateur de tables --- */
+	var etatTable = { table: '', debut: 0, lot: 50, tri: '', sens: 'asc', filtre_colonne: '', filtre_valeur: '' };
+
+	function rendreTables(cible, d) {
+		cible.innerHTML = '';
+		var choix = document.createElement('select');
+		var vide = document.createElement('option');
+		vide.value = ''; vide.textContent = '— choisir une table —';
+		choix.appendChild(vide);
+		d.tables.forEach(function (t) {
+			var o = document.createElement('option');
+			o.value = t.nom;
+			o.textContent = t.nom + ' (' + (t.lignes === null ? '?' : t.lignes) + ' lignes'
+				+ (t.octets ? ', ' + octets(t.octets) : '') + ')';
+			choix.appendChild(o);
+		});
+
+		var barre = document.createElement('p');
+		barre.className = 'dashboard-serveur-barre';
+		barre.appendChild(choix);
+
+		var filtre = document.createElement('input');
+		filtre.type = 'search';
+		filtre.placeholder = 'filtrer…';
+		filtre.className = 'text';
+		var colonneFiltre = document.createElement('select');
+		barre.appendChild(colonneFiltre);
+		barre.appendChild(filtre);
+		cible.appendChild(barre);
+
+		var contenu = document.createElement('div');
+		contenu.className = 'dashboard-serveur-contenu';
+		cible.appendChild(contenu);
+
+		function recharger() {
+			if (!etatTable.table) { contenu.innerHTML = ''; return; }
+			attendre(contenu);
+			demander('serveur_table', etatTable).then(function (r) {
+				if (!r.ok) { echouer(contenu, r.message); return; }
+				rendreContenu(contenu, r, recharger);
+				majColonnesFiltre(r);
+			}).catch(function () { echouer(contenu); });
+		}
+
+		function majColonnesFiltre(r) {
+			if (colonneFiltre.dataset.table === r.table) { return; }
+			colonneFiltre.dataset.table = r.table;
+			colonneFiltre.innerHTML = '';
+			var aucune = document.createElement('option');
+			aucune.value = ''; aucune.textContent = '— colonne —';
+			colonneFiltre.appendChild(aucune);
+			r.colonnes.forEach(function (c) {
+				if (c.masquee) { return; }
+				var o = document.createElement('option');
+				o.value = c.nom; o.textContent = c.nom;
+				colonneFiltre.appendChild(o);
+			});
+			colonneFiltre.value = etatTable.filtre_colonne;
+		}
+
+		choix.addEventListener('change', function () {
+			etatTable = { table: choix.value, debut: 0, lot: 50, tri: '', sens: 'asc', filtre_colonne: '', filtre_valeur: '' };
+			filtre.value = '';
+			recharger();
+		});
+		colonneFiltre.addEventListener('change', function () {
+			etatTable.filtre_colonne = colonneFiltre.value;
+			etatTable.debut = 0;
+			if (filtre.value) { recharger(); }
+		});
+		var minuteur = null;
+		filtre.addEventListener('input', function () {
+			clearTimeout(minuteur);
+			minuteur = setTimeout(function () {
+				etatTable.filtre_valeur = filtre.value;
+				etatTable.debut = 0;
+				recharger();
+			}, 350);
+		});
+	}
+
+	function rendreContenu(cible, r, recharger) {
+		cible.innerHTML = '';
+
+		var table = document.createElement('table');
+		table.className = 'spip liste';
+		var tete = document.createElement('thead');
+		var ligneTete = document.createElement('tr');
+		r.colonnes.forEach(function (c) {
+			var th = document.createElement('th');
+			th.scope = 'col';
+			var bouton = document.createElement('button');
+			bouton.type = 'button';
+			bouton.className = 'dashboard-serveur-tri';
+			bouton.textContent = c.nom + (r.tri === c.nom ? (r.sens === 'desc' ? ' ↓' : ' ↑') : '');
+			bouton.addEventListener('click', function () {
+				etatTable.sens = (etatTable.tri === c.nom && etatTable.sens === 'asc') ? 'desc' : 'asc';
+				etatTable.tri = c.nom;
+				etatTable.debut = 0;
+				recharger();
+			});
+			th.appendChild(bouton);
+			if (c.masquee) {
+				var marque = document.createElement('span');
+				marque.className = 'dashboard-serveur-masquee';
+				marque.textContent = ' (masquée)';
+				th.appendChild(marque);
+			}
+			ligneTete.appendChild(th);
+		});
+		tete.appendChild(ligneTete);
+		table.appendChild(tete);
+
+		var corps = document.createElement('tbody');
+		r.lignes.forEach(function (l) {
+			var tr = document.createElement('tr');
+			r.colonnes.forEach(function (c) {
+				var td = document.createElement('td');
+				var v = l[c.nom];
+				td.textContent = (v === null || v === undefined) ? '' : String(v);
+				tr.appendChild(td);
+			});
+			corps.appendChild(tr);
+		});
+		table.appendChild(corps);
+
+		var enveloppe = document.createElement('div');
+		enveloppe.className = 'dashboard-serveur-defilement';
+		enveloppe.appendChild(table);
+		cible.appendChild(enveloppe);
+
+		if (!r.lignes.length) {
+			var rien = document.createElement('p');
+			rien.className = 'petition';
+			rien.textContent = 'Aucune ligne.';
+			cible.appendChild(rien);
+		}
+
+		var pagination = document.createElement('p');
+		pagination.className = 'dashboard-serveur-pagination';
+		var fin = r.debut + r.lignes.length;
+		var compte = document.createElement('span');
+		compte.textContent = r.lignes.length
+			? (r.debut + 1) + '–' + fin + (r.total === null ? '' : ' sur ' + r.total) + '  '
+			: '';
+		pagination.appendChild(compte);
+
+		[['‹ précédent', Math.max(0, r.debut - r.lot), r.debut > 0],
+		 ['suivant ›', r.debut + r.lot, r.total === null ? r.lignes.length === r.lot : fin < r.total]]
+			.forEach(function (p) {
+				var b = document.createElement('button');
+				b.type = 'button';
+				b.className = 'dashboard-bouton';
+				b.textContent = p[0];
+				b.disabled = !p[2];
+				b.addEventListener('click', function () { etatTable.debut = p[1]; recharger(); });
+				pagination.appendChild(b);
+				pagination.appendChild(document.createTextNode(' '));
+			});
+		cible.appendChild(pagination);
+	}
+
+	/* --- fichiers de configuration --- */
+	function rendreFichiers(cible) {
+		cible.innerHTML = '';
+		[['htaccess', '.htaccess'],
+		 ['mes_options', 'config/mes_options.php'],
+		 ['mes_fonctions', 'squelettes/mes_fonctions.php']].forEach(function (f) {
+			var details = document.createElement('details');
+			details.className = 'dashboard-serveur-fichier';
+			var resume = document.createElement('summary');
+			resume.textContent = f[1];
+			details.appendChild(resume);
+			var corps = document.createElement('div');
+			corps.appendChild(document.createTextNode(''));
+			details.appendChild(corps);
+			details.addEventListener('toggle', function () {
+				if (!details.open || details.dataset.charge) { return; }
+				details.dataset.charge = '1';
+				attendre(corps);
+				demander('serveur_fichier', { fichier: f[0] }).then(function (r) {
+					corps.innerHTML = '';
+					if (!r.ok) { echouer(corps, r.message); return; }
+					if (!r.existe) {
+						var absent = document.createElement('p');
+						absent.className = 'petition';
+						absent.textContent = 'Ce fichier n’existe pas sur le site.';
+						corps.appendChild(absent);
+						return;
+					}
+					var meta = document.createElement('p');
+					meta.className = 'explication';
+					meta.textContent = octets(r.octets) + ', modifié le ' + r.modifie
+						+ (r.tronque ? ' — affichage tronqué' : '');
+					corps.appendChild(meta);
+					var pre = document.createElement('pre');
+					pre.className = 'dashboard-serveur-source';
+					pre.textContent = r.contenu;
+					corps.appendChild(pre);
+				}).catch(function () { echouer(corps); });
+			});
+			cible.appendChild(details);
+		});
+	}
+
+	/* --- phpinfo, dans un cadre isolé pour que ses styles restent chez lui --- */
+	function rendrePhpinfo(cible) {
+		cible.innerHTML = '';
+		var details = document.createElement('details');
+		var resume = document.createElement('summary');
+		resume.textContent = 'Afficher le phpinfo() du site';
+		details.appendChild(resume);
+		var corps = document.createElement('div');
+		details.appendChild(corps);
+		details.addEventListener('toggle', function () {
+			if (!details.open || details.dataset.charge) { return; }
+			details.dataset.charge = '1';
+			attendre(corps);
+			demander('serveur_phpinfo', {}).then(function (r) {
+				corps.innerHTML = '';
+				if (!r.ok) { echouer(corps, r.erreur || r.message); return; }
+				var cadre = document.createElement('iframe');
+				cadre.className = 'dashboard-serveur-phpinfo';
+				cadre.setAttribute('sandbox', '');
+				cadre.setAttribute('title', 'phpinfo du site géré');
+				cadre.srcdoc = '<!doctype html><meta charset="utf-8">'
+					+ '<style>body{font:13px/1.4 sans-serif;margin:0}table{border-collapse:collapse;width:100%;margin:0 0 1em}'
+					+ 'td,th{border:1px solid #ccc;padding:.2em .4em;word-break:break-word}h2{font-size:1.1em}</style>'
+					+ r.html;
+				corps.appendChild(cadre);
+			}).catch(function () { echouer(corps); });
+		});
+		cible.appendChild(details);
+	}
+
+	function remplir() {
+		if (charge) { return; }
+		charge = true;
+
+		attendre(bloc('resume'));
+		demander('serveur_resume', {}).then(function (r) {
+			if (!r.ok) { echouer(bloc('resume'), r.message); return; }
+			rendreResume(bloc('resume'), r);
+		}).catch(function () { echouer(bloc('resume')); });
+
+		attendre(bloc('tables'));
+		demander('serveur_tables', {}).then(function (r) {
+			if (!r.ok) { echouer(bloc('tables'), r.message); return; }
+			rendreTables(bloc('tables'), r);
+		}).catch(function () { echouer(bloc('tables')); });
+
+		rendreFichiers(bloc('fichiers'));
+		rendrePhpinfo(bloc('phpinfo'));
+	}
+
+	// Rien n'est demandé au site tant que l'onglet n'est pas ouvert.
+	var onglet = document.getElementById('onglet-serveur');
+	if (onglet) { onglet.addEventListener('click', remplir); }
 })();
 </script>
 

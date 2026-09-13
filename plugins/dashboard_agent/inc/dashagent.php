@@ -148,6 +148,14 @@ function dashagent_operation_autorisee($operation) {
 		// l'une sans l'autre laisse le site à moitié à jour.
 		'base_maj'                => 'op_core_maj',
 		'base_maj_preflight'      => 'op_core_maj',
+		// Consultation de l'état du serveur : une autorisation à part, parce
+		// qu'elle expose des choses qu'aucune autre opération ne montre — la
+		// configuration de PHP, le contenu des tables, des fichiers de réglage.
+		'serveur_resume'          => 'op_serveur',
+		'serveur_phpinfo'         => 'op_serveur',
+		'serveur_tables'          => 'op_serveur',
+		'serveur_table'           => 'op_serveur',
+		'serveur_fichier'         => 'op_serveur',
 	];
 
 	if (!isset($permissions[$operation])) {

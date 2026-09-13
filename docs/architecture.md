@@ -34,6 +34,7 @@ travail réel est réparti :
 | `inc/dashagent_sauvegarde.php` | export SQL gzip streamé, rétention, diffusion |
 | `inc/dashagent_maj.php` | mise à jour des plugins et du core, avec rollback |
 | `inc/dashagent_base.php` | migration du schéma de base du core, par tranches reprenables |
+| `inc/dashagent_serveur.php` | consultation en lecture seule : phpinfo, tables, fichiers de réglage, avec masquage |
 | `inc/dashagent_fs.php` | mesure, copie, suppression, téléchargement, dézippage sûr |
 
 Deux tables seulement : `spip_dashagent_journal` (piste d'audit) et
@@ -54,6 +55,7 @@ Installé une seule fois, sur la tour de contrôle.
 | `inc/dashboard_chantiers.php` | mises à jour menées par étapes : sauvegarde d'abord, un aller-retour par avancement |
 | `action/dashboard_chantier.php` | avancement d'une étape, appelé en boucle par la fiche du site |
 | `genie/dashboard_chantiers.php` | reprise des chantiers laissés en plan |
+| `action/dashboard_serveur.php` | relais vers les consultations de l'agent, liste d'opérations fermée |
 
 La table `spip_dashboard_sites` est déclarée **deux fois** : dans
 `declarer_tables_objets_sql`, qui lui donne la machinerie d'objet éditorial

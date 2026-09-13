@@ -222,6 +222,39 @@ blocage, pas une lenteur.
 Cette opération relève de la même autorisation que `core_maj` (`op_core_maj`) :
 remplacer les fichiers sans migrer le schéma laisse le site à moitié à jour.
 
+### `serveur_resume`, `serveur_phpinfo`, `serveur_tables`
+
+Sans argument. Respectivement : l'état de PHP et de la base ; le `phpinfo()` du
+site en HTML, réduit au corps et expurgé ; l'inventaire des tables avec leur
+cardinalité et, quand le moteur le dit, leur poids.
+
+### `serveur_table`
+
+Arguments : `table` (obligatoire), `debut`, `lot` (200 au plus), `tri`, `sens`
+(`asc` ou `desc`), `filtre_colonne`, `filtre_valeur`.
+
+Le nom de la table et celui des colonnes sont retrouvés dans le schéma que rend
+le moteur ; ce qui ne s'y trouve pas est écarté sans erreur pour le tri, et
+refusé pour le filtre. La valeur du filtre passe par `sql_quote()`. Aucune
+portion de requête ne provient donc telle quelle de l'appelant.
+
+La réponse porte `colonnes` — chacune avec un drapeau `masquee` — et `lignes`,
+dont les colonnes sensibles sont déjà remplacées. Filtrer sur une colonne
+masquée est refusé.
+
+### `serveur_fichier`
+
+Argument : `fichier`, parmi `htaccess`, `mes_options`, `mes_fonctions`. Une
+liste fermée, pas un chemin : autrement l'opération deviendrait une lecture
+arbitraire du disque, `config/connect.php` compris.
+
+Le contenu est rendu expurgé : la valeur de toute affectation dont le nom
+désigne un identifiant est remplacée, le nom restant lisible.
+
+Ces cinq opérations relèvent de l'autorisation `op_serveur`, refusée par défaut.
+Voir `docs/securite.md` pour ce qu'elles exposent et ce qui reste malgré tout
+visible.
+
 ## Écrire un autre client
 
 Rien n'oblige à passer par le plugin dashboard. Un script suffit :

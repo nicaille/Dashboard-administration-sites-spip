@@ -1,7 +1,7 @@
 <paquet
 	prefix="dashboard"
 	categorie="maintenance"
-	version="1.0.7"
+	version="1.0.8"
 	etat="test"
 	compatibilite="[4.1.0;4.*]"
 	schema="1.0.6"

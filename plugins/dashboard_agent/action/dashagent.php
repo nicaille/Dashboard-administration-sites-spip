@@ -138,6 +138,31 @@ function dashagent_executer($op, $args) {
 
 			return dashagent_base_maj($args);
 
+		case 'serveur_resume':
+			include_spip('inc/dashagent_serveur');
+
+			return dashagent_serveur_resume();
+
+		case 'serveur_phpinfo':
+			include_spip('inc/dashagent_serveur');
+
+			return dashagent_serveur_phpinfo();
+
+		case 'serveur_tables':
+			include_spip('inc/dashagent_serveur');
+
+			return dashagent_serveur_tables();
+
+		case 'serveur_table':
+			include_spip('inc/dashagent_serveur');
+
+			return dashagent_serveur_table_contenu($args);
+
+		case 'serveur_fichier':
+			include_spip('inc/dashagent_serveur');
+
+			return dashagent_serveur_fichier($args);
+
 		default:
 			return ['ok' => false, 'erreur' => 'Opération non implémentée : ' . $op];
 	}

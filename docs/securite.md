@@ -69,10 +69,66 @@ Sur le **tour de contrôle**, trois niveaux :
 | Voir le parc et les fiches | administrateurs non restreints |
 | Synchroniser (lecture) | administrateurs non restreints |
 | Purger, sauvegarder, mettre à jour | webmestres |
+| Consulter l'état du serveur | webmestres |
 | Créer, modifier, supprimer un site | webmestres |
 
 Lire l'état d'un parc et agir dessus ne relèvent volontairement pas du même
 droit.
+
+## La consultation de l'état d'un serveur
+
+L'onglet *Serveur* d'une fiche lit, sur le site géré : la configuration de PHP
+(`phpinfo()`), l'état de la base, le contenu des tables, et trois fichiers de
+réglage — `.htaccess`, `config/mes_options.php`, `squelettes/mes_fonctions.php`.
+
+C'est, de loin, la capacité la plus indiscrète de l'outil, et elle est traitée
+comme telle.
+
+**Elle est refusée par défaut.** Il faut cocher *Consulter l'état du serveur*
+dans la configuration de l'agent, sur chaque site géré, séparément des autres
+autorisations. Aucune mise à jour n'en dépend : un parc entier peut être
+maintenu sans jamais l'accorder.
+
+**Rien n'est conservé sur le tour de contrôle.** Ces informations transitent à
+la demande, pour l'affichage, et ne sont écrites nulle part — ni dans
+l'inventaire, ni dans le journal. Recopier le `phpinfo()` d'un parc dans une
+seule base reviendrait à en faire une cible de choix.
+
+**Ce qui ressemble à un identifiant est masqué avant de partir**, par l'agent,
+donc avant que cela ne traverse le réseau. Deux critères :
+
+- le **nom** — `pass`, `secret`, `token`, `key`, `cle`, `salt`, `alea`,
+  `cookie`, `auth`, `dsn`, `private`, plus `low_sec` et `prefs` qui sont propres
+  à SPIP. C'est ce qui protège les empreintes de `spip_auteurs`, les aléas de
+  session, et les variables d'environnement où bien des hébergeurs déposent le
+  mot de passe de la base ;
+- la **forme** — une valeur du type `https://utilisateur:motdepasse@hôte/` est
+  masquée quel que soit le nom qui la porte.
+
+La table `spip_meta` reçoit un traitement particulier : ses deux colonnes, `nom`
+et `valeur`, n'ont rien de sensible en soi, mais certaines *lignes* le sont — le
+secret partagé de l'agent, les clés du site. C'est alors la ligne qui décide.
+
+**Filtrer sur une colonne masquée est refusé** : sans cela, on devinerait une
+empreinte caractère par caractère, et le masquage ne servirait plus à rien.
+
+**Tout est en lecture seule.** Aucune écriture, aucune suppression, aucun ordre
+SQL reçu de l'extérieur : le nom de la table et celui des colonnes sont
+retrouvés dans le schéma que rend le moteur, jamais repris du texte reçu ; la
+valeur d'un filtre passe par `sql_quote()` ; le sens du tri se réduit à deux mots
+choisis dans le code. La liste des fichiers lisibles est fermée — `connect.php`,
+qui porte les identifiants de la base, n'y figure pas et aucun chemin ne peut
+l'atteindre.
+
+Ces règles sont vérifiées par `tests/test_protocole.php`, et le parcours
+d'intégration contrôle qu'aucune empreinte ni aucun secret n'atteint l'écran.
+
+**Ce qui reste exposé, malgré tout.** Le masquage repose sur des noms : une clé
+d'API rangée dans une constante appelée `_REGLAGE_7` passera au travers. Un
+contenu éditorial confidentiel est lisible tel quel, puisque c'est précisément
+ce qu'on vient consulter. N'accordez cette autorisation qu'aux sites dont vous
+êtes responsable, et seulement le temps d'un diagnostic si le contenu est
+sensible.
 
 ## Ce qu'une mise à jour du core ne touche jamais
 

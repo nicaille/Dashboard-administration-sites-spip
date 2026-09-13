@@ -186,3 +186,80 @@
 	background: #a4001c;
 	color: #fff;
 }
+
+/* Onglet « Serveur ». Le contenu arrive par requête séparée : les blocs ont
+   donc une hauteur variable, et le tableau d'une table peut être très large. */
+.dashboard-serveur-sections h3 {
+	margin: 1.4em 0 .4em;
+	padding-bottom: .2em;
+	border-bottom: 1px solid rgba(0, 0, 0, .12);
+}
+.dashboard-serveur-extensions code {
+	display: inline-block;
+	margin: 0 .15em .3em 0;
+	padding: 0 .35em;
+	border-radius: 3px;
+	background: rgba(0, 0, 0, .06);
+	font-size: .9em;
+}
+.dashboard-serveur-barre {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .5em;
+	align-items: center;
+}
+.dashboard-serveur-defilement {
+	overflow-x: auto;
+	max-width: 100%;
+}
+.dashboard-serveur-defilement table {
+	white-space: nowrap;
+}
+.dashboard-serveur-defilement td {
+	max-width: 32em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.dashboard-serveur-tri {
+	padding: 0;
+	border: 0;
+	background: none;
+	font: inherit;
+	font-weight: bold;
+	color: inherit;
+	cursor: pointer;
+}
+.dashboard-serveur-masquee {
+	font-weight: normal;
+	font-size: .85em;
+	opacity: .7;
+}
+.dashboard-serveur-pagination {
+	display: flex;
+	align-items: center;
+	gap: .4em;
+	margin: .6em 0 0;
+}
+.dashboard-serveur-fichier {
+	margin: 0 0 .4em;
+}
+.dashboard-serveur-fichier summary {
+	cursor: pointer;
+	font-family: monospace;
+}
+.dashboard-serveur-source {
+	max-height: 32em;
+	overflow: auto;
+	padding: .6em .8em;
+	border: 1px solid rgba(0, 0, 0, .12);
+	background: rgba(0, 0, 0, .03);
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+/* Le phpinfo apporte ses propres styles : un cadre isolé les garde chez lui. */
+.dashboard-serveur-phpinfo {
+	width: 100%;
+	height: 34em;
+	border: 1px solid rgba(0, 0, 0, .15);
+	background: #fff;
+}

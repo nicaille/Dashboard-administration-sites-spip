@@ -229,7 +229,8 @@ console.log('\n### Onglets « Plugins » et « PHP »');
 await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
 const panneauPlugins = page.locator('#panneau-plugins');
 const panneauPhp = page.locator('#panneau-php');
-dit('deux onglets présents', (await page.locator('[data-dashboard-onglets] [role="tab"]').count()) === 2);
+dit('trois onglets présents', (await page.locator('[data-dashboard-onglets] [role="tab"]').count()) === 3,
+	(await page.locator('[data-dashboard-onglets] [role="tab"]').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim()).join(' | '));
 dit('« Plugins » ouvert par défaut', (await panneauPlugins.isVisible()) && !(await panneauPhp.isVisible()));
 
 await page.locator('#onglet-php').click();
@@ -251,6 +252,16 @@ dit('chaque ligne porte une origine', origines.length > 0 && !origines.includes(
 await page.locator('#onglet-php').press('ArrowLeft');
 await page.waitForTimeout(200);
 dit('flèche gauche : retour à « Plugins »', (await panneauPlugins.isVisible()) && !(await panneauPhp.isVisible()));
+
+// Et vers la droite, jusqu'au troisième onglet.
+await page.locator('#onglet-plugins').press('ArrowRight');
+await page.locator('#onglet-php').press('ArrowRight');
+await page.waitForTimeout(200);
+dit('flèche droite : jusqu’à « Serveur »',
+	(await page.locator('#panneau-serveur').isVisible()) && !(await panneauPhp.isVisible()));
+await page.locator('#onglet-serveur').press('ArrowRight');
+await page.waitForTimeout(200);
+dit('la navigation au clavier boucle', await panneauPlugins.isVisible());
 dit('aucune extension PHP dans l’onglet « Plugins »',
 	!/\bphp:/i.test(await panneauPlugins.innerText()));
 
@@ -294,6 +305,116 @@ async function attendreChantier(page, secondes = 180) {
 	}
 
 	return { fini: false, dernier };
+}
+
+console.log('\n### Onglet « Serveur »');
+
+// L'onglet est refusé tant que le site géré ne l'a pas explicitement autorisé :
+// c'est la plus indiscrète des permissions, et elle s'accorde à part.
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+const appelsServeur = [];
+page.on('response', (r) => {
+	if (/action=dashboard_serveur/.test(r.url())) { appelsServeur.push(r.status()); }
+});
+dit('onglet « Serveur » présent', (await page.locator('#onglet-serveur').count()) > 0);
+dit('rien n’est demandé au site avant d’ouvrir l’onglet', appelsServeur.length === 0, appelsServeur.join(','));
+
+await page.locator('#onglet-serveur').click();
+await page.waitForTimeout(2500);
+const refus = await page.locator('[data-serveur-bloc="resume"]').innerText();
+dit('consultation refusée tant qu’elle n’est pas autorisée', /désactivée|autoris/i.test(refus), refus.trim().slice(0, 90));
+
+await page.goto(base + '/ecrire/?exec=configurer_dashagent', { waitUntil: 'domcontentloaded' });
+await page.check('[name="op_serveur"]').catch(() => {});
+await page.locator('form input[type=submit]').last().click();
+await page.waitForTimeout(700);
+dit('consultation autorisée sur le site géré',
+	await page.locator('[name="op_serveur"]').isChecked().catch(() => false));
+
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await page.locator('#onglet-serveur').click();
+await page.waitForTimeout(3000);
+
+const resume = await page.locator('[data-serveur-bloc="resume"]').innerText();
+dit('résumé : version de PHP', /PHP\s+\d+\.\d+/.test(resume), resume.split('\n')[0]);
+dit('résumé : base de données', /sqlite|mysql|maria/i.test(resume));
+dit('résumé : poids de la base', /Poids de la base\s+[\d.]+\s*(o|Ko|Mo|Go)/.test(resume),
+	(resume.match(/Poids de la base[^\n]*/) || [''])[0]);
+dit('résumé : extensions PHP listées', /\d+ extensions PHP chargées/.test(resume),
+	(resume.match(/\d+ extensions PHP chargées/) || [''])[0]);
+
+// Parcours d'une table : pagination, tri, filtre.
+const bloc = page.locator('[data-serveur-bloc="tables"]');
+const choix = bloc.locator('select').first();
+dit('les tables du site sont listées', (await choix.locator('option').count()) > 10,
+	(await choix.locator('option').count()) + ' entrées');
+await choix.selectOption('spip_meta');
+await page.waitForTimeout(1500);
+const total = Number(((await bloc.locator('.dashboard-serveur-pagination').innerText()).match(/sur (\d+)/) || [0, 0])[1]);
+dit('le contenu d’une table s’affiche', (await bloc.locator('tbody tr').count()) > 0,
+	(await bloc.locator('tbody tr').count()) + ' lignes sur ' + total);
+
+await bloc.locator('thead th button').first().click();
+await page.waitForTimeout(1200);
+dit('le tri s’applique sur une colonne', /[↑↓]/.test(await bloc.locator('thead th').first().innerText()));
+
+if (total > 50) {
+	await bloc.locator('.dashboard-serveur-pagination button', { hasText: 'suivant' }).click();
+	await page.waitForTimeout(1200);
+	dit('la pagination avance',
+		/^51/.test((await bloc.locator('.dashboard-serveur-pagination').innerText()).trim()),
+		(await bloc.locator('.dashboard-serveur-pagination').innerText()).replace(/\s+/g, ' ').trim());
+}
+
+await bloc.locator('select').nth(1).selectOption('nom');
+await bloc.locator('input[type=search]').fill('version');
+await page.waitForTimeout(1500);
+const filtre = Number(((await bloc.locator('.dashboard-serveur-pagination').innerText()).match(/sur (\d+)/) || [0, 0])[1]);
+dit('le filtre restreint la sélection', filtre > 0 && filtre < total, filtre + ' sur ' + total);
+
+// Le point qui compte : rien de secret ne doit atteindre l'écran.
+await choix.selectOption('spip_auteurs');
+await page.waitForTimeout(1500);
+const entetes = await bloc.locator('thead th').allInnerTexts();
+dit('les colonnes sensibles sont annoncées comme masquées',
+	entetes.filter((h) => /masquée/.test(h)).length >= 3,
+	entetes.filter((h) => /masquée/.test(h)).map((h) => h.split('(')[0].trim()).join(', '));
+const corpsAuteurs = await bloc.locator('tbody').innerText();
+dit('aucune empreinte de mot de passe à l’écran', !/\$2y\$|\$argon|\$1\$/.test(corpsAuteurs));
+dit('les colonnes utiles restent lisibles', /admin/.test(corpsAuteurs));
+
+await choix.selectOption('spip_meta');
+await page.waitForTimeout(1500);
+await bloc.locator('select').nth(1).selectOption('nom');
+await bloc.locator('input[type=search]').fill('dashagent');
+await page.waitForTimeout(1500);
+dit('le secret partagé de l’agent ne s’affiche pas',
+	!/c2:/.test(await bloc.locator('tbody').innerText()),
+	(await bloc.locator('tbody').innerText()).replace(/\s+/g, ' ').trim().slice(0, 70));
+
+// Fichiers de configuration.
+const fichiers = page.locator('[data-serveur-bloc="fichiers"] details');
+dit('trois fichiers proposés', (await fichiers.count()) === 3);
+const options = fichiers.filter({ hasText: 'mes_options' }).first();
+await options.locator('summary').click();
+await page.waitForTimeout(1500);
+const texteOptions = await options.innerText();
+dit('le contenu de mes_options.php s’affiche', /_DASHAGENT_ARCHIVES_HTTP/.test(texteOptions),
+	texteOptions.replace(/\s+/g, ' ').slice(0, 90));
+
+// phpinfo, dans son cadre isolé.
+await page.locator('[data-serveur-bloc="phpinfo"] summary').click();
+await page.waitForTimeout(3000);
+const cadre = page.locator('iframe.dashboard-serveur-phpinfo');
+dit('phpinfo s’affiche dans un cadre isolé', (await cadre.count()) === 1);
+if (await cadre.count()) {
+	const dedans = page.frameLocator('iframe.dashboard-serveur-phpinfo');
+	const texte = await dedans.locator('body').innerText();
+	dit('phpinfo porte bien ses sections', (await dedans.locator('h2').count()) > 10,
+		(await dedans.locator('h2').count()) + ' sections');
+	dit('les variables d’environnement sensibles sont masquées',
+		!/proxy-injected|sk-live|ghp_[A-Za-z0-9]/.test(texte),
+		(texte.match(/[^\n]*(proxy-injected|sk-live|ghp_)[^\n]*/) || [''])[0].slice(0, 70));
 }
 
 console.log('\n### URL des boutons d’action');

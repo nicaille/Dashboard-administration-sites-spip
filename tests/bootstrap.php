@@ -57,6 +57,7 @@ require_once __DIR__ . '/../plugins/dashboard_agent/inc/dashagent_fs.php';
 require_once __DIR__ . '/../plugins/dashboard_agent/inc/dashagent_infos.php';
 require_once __DIR__ . '/../plugins/dashboard_agent/inc/dashagent_maj.php';
 require_once __DIR__ . '/../plugins/dashboard_agent/inc/dashagent_base.php';
+require_once __DIR__ . '/../plugins/dashboard_agent/inc/dashagent_serveur.php';
 
 /* Le client du dashboard tire quelques fonctions du core SPIP : on les neutralise
    avant de le charger, pour ne garder que la partie protocole. */
