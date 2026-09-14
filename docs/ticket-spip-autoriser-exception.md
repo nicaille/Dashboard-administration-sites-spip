@@ -11,17 +11,32 @@ silencieusement ignorée.
 `autoriser('ajouter', '_plugins')` continue de retourner `false`.
 
 Le type est normalisé **deux fois** : une fois à l'écriture de l'exception, une
-seconde fois à sa relecture. `plugins` devient `plugin`, et la clé consultée
-n'est jamais celle qui a été écrite.
+seconde fois à sa relecture. La clé consultée n'est donc jamais celle qui a été
+écrite.
 
-Le défaut touche tout type dont la forme normalisée est elle-même
-re-normalisable, c'est-à-dire **14 des 20 types en `_` employés par SPIP et ses
-plugins-dist** : `_articles`, `_auteurs`, `_avancees`, `_depots`, `_documents`,
-`_interactions`, `_mots`, `_plugins`, `_preferences`, `_revisions`,
-`_rubriques`, `_sites`, `_statistiques`, `_urls`.
+Le fond du problème tient à ce que `autoriser_type()` **détruit d'abord
+l'information qui empêcherait la seconde passe**. Le `_` initial est le seul
+marqueur qui distingue un nom de page d'un type d'objet — le docblock de la
+fonction le dit : *« Si `_` en premier caractère, c'est un nom de page. Sinon,
+c'est un type d'objet éditorial. »* Or elle commence par le supprimer :
 
-Restent indemnes les types déjà au singulier : `_contenu`, `_langage`,
-`_langue`, `_multilinguisme`, `_controlersyndication`, `_bigup`.
+```
+autoriser_type('_plugins') === 'plugins'   // le marqueur a disparu
+autoriser_type('plugins')  === 'plugin'    // relu comme un objet, dépluralisé
+```
+
+Le défaut est systématique pour tout nom de page se terminant par `s` : **14 des
+20 noms de page employés par SPIP et ses plugins-dist** sont dans ce cas —
+`_articles`, `_auteurs`, `_avancees`, `_depots`, `_documents`, `_interactions`,
+`_mots`, `_plugins`, `_preferences`, `_revisions`, `_rubriques`, `_sites`,
+`_statistiques`, `_urls`. Restent indemnes ceux déjà au singulier : `_contenu`,
+`_langage`, `_langue`, `_multilinguisme`, `_controlersyndication`, `_bigup`.
+
+**Il n'est toutefois observable que là où du code pose une exception** sur un tel
+nom de page. Le cœur de SPIP n'en pose que sur des types d'objet au singulier
+(`auteur`, `document`), pour lesquels `autoriser_type()` est idempotente : c'est
+ce qui explique que le défaut ait survécu. Le cas démontré ci-dessous est
+`_plugins`, via SVP.
 
 ## Reproduction
 
@@ -49,7 +64,8 @@ _contenu       -> true
 
 `autoriser_type()` (`ecrire/inc/autoriser.php`) n'est pas idempotente : elle
 laisse intact un type commençant par `_` puis lui retire ses `_`, mais applique
-`objet_type()` à tout autre type.
+`objet_type()` à tout autre type. Après le premier passage, le nom de page a
+perdu son `_` et sera donc traité au second comme un type d'objet.
 
 ```php
 function autoriser_type(?string $type = ''): string {
@@ -66,6 +82,12 @@ Donc :
 autoriser_type('_plugins') === 'plugins'
 autoriser_type('plugins')  === 'plugin'     // objet_type() singularise
 ```
+
+Noter que `objet_type($type, false)` dépluralise **sans vérifier qu'un tel objet
+existe** : avec `$serveur === false`, elle retourne directement le résultat de
+`preg_replace(',^spip_|^id_|s$,', '', $table_objet)`. C'est ainsi que
+`_statistiques` devient `statistique`, alors qu'aucun objet éditorial de ce nom
+n'est déclaré.
 
 À l'écriture, `autoriser_exception()` range l'exception sous `plugins` :
 
