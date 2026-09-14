@@ -40,7 +40,9 @@ if [ ! -f "$SITE/spip.php" ]; then
 	[ -n "$interne" ] && mv "$(dirname "$interne")" "$SITE.tmp" && rm -rf "$SITE" && mv "$SITE.tmp" "$SITE"
 fi
 mkdir -p "$SITE/plugins" "$SITE/config/bases"
-cp -a "$RACINE/plugins/dashboard" "$RACINE/plugins/dashboard_agent" "$SITE/plugins/"
+# Les dossiers portent leur version : on les prend au glob plutôt que de
+# figer un numéro que la prochaine montée de version démentirait.
+cp -a "$RACINE"/plugins/dashboard-* "$RACINE"/plugins/dashboard_agent-* "$SITE/plugins/"
 chmod -R 777 "$SITE/tmp" "$SITE/local" "$SITE/config" "$SITE/IMG" "$SITE/plugins" 2>/dev/null
 fi
 
@@ -92,7 +94,15 @@ include_once param('spip.dirs.core') . 'inc_version.php';
 include_spip('inc/plugin');
 include_spip('inc/meta');
 header('Content-Type: text/plain; charset=utf-8');
-ecrire_plugin_actifs(['dashboard/', 'dashboard_agent/'], false, 'ajoute');
+// Les dossiers portent leur version : on les retrouve au glob plutôt que de
+// figer un numéro que la prochaine montée de version démentirait.
+$dossiers = [];
+foreach (['dashboard', 'dashboard_agent'] as $prefixe) {
+	foreach ((array) glob(_DIR_PLUGINS . $prefixe . '-*', GLOB_ONLYDIR) as $chemin) {
+		$dossiers[] = basename($chemin) . '/';
+	}
+}
+ecrire_plugin_actifs($dossiers, false, 'ajoute');
 lire_metas();
 plugin_installes_meta();
 lire_metas();

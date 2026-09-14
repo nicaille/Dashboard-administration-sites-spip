@@ -51,13 +51,36 @@ function spip_version_compare($v1, $v2, $op = null) {
 	return version_compare($normaliser($v1), $normaliser($v2), $op);
 }
 
-require_once __DIR__ . '/../plugins/dashboard_agent/dashagent_options.php';
-require_once __DIR__ . '/../plugins/dashboard_agent/inc/dashagent_securite.php';
-require_once __DIR__ . '/../plugins/dashboard_agent/inc/dashagent_fs.php';
-require_once __DIR__ . '/../plugins/dashboard_agent/inc/dashagent_infos.php';
-require_once __DIR__ . '/../plugins/dashboard_agent/inc/dashagent_maj.php';
-require_once __DIR__ . '/../plugins/dashboard_agent/inc/dashagent_base.php';
-require_once __DIR__ . '/../plugins/dashboard_agent/inc/dashagent_serveur.php';
+/**
+ * Chemin d'un plugin, retrouvé par son préfixe.
+ *
+ * Les dossiers de plugins portent leur version (`dashboard-1.0.8`), pour qu'une
+ * mise en ligne n'écrase pas la version précédente. Les retrouver par préfixe
+ * évite d'avoir à toucher ce fichier à chaque montée de version.
+ *
+ * @param string $prefixe
+ * @return string
+ */
+function chemin_plugin($prefixe) {
+	$trouves = glob(__DIR__ . '/../plugins/' . $prefixe . '-*', GLOB_ONLYDIR);
+	if (!$trouves) {
+		fwrite(STDERR, "Plugin introuvable : $prefixe\n");
+		exit(2);
+	}
+	// La plus haute version, comme le fait SPIP quand deux dossiers déclarent
+	// le même préfixe.
+	usort($trouves, 'version_compare');
+
+	return end($trouves);
+}
+
+require_once chemin_plugin('dashboard_agent') . '/dashagent_options.php';
+require_once chemin_plugin('dashboard_agent') . '/inc/dashagent_securite.php';
+require_once chemin_plugin('dashboard_agent') . '/inc/dashagent_fs.php';
+require_once chemin_plugin('dashboard_agent') . '/inc/dashagent_infos.php';
+require_once chemin_plugin('dashboard_agent') . '/inc/dashagent_maj.php';
+require_once chemin_plugin('dashboard_agent') . '/inc/dashagent_base.php';
+require_once chemin_plugin('dashboard_agent') . '/inc/dashagent_serveur.php';
 
 /* Le client du dashboard tire quelques fonctions du core SPIP : on les neutralise
    avant de le charger, pour ne garder que la partie protocole. */
@@ -65,9 +88,9 @@ function url_de_base() {
 	return 'https://dashboard.test/';
 }
 
-require_once __DIR__ . '/../plugins/dashboard/inc/dashboard_client.php';
-require_once __DIR__ . '/../plugins/dashboard/inc/dashboard_operations.php';
+require_once chemin_plugin('dashboard') . '/inc/dashboard_client.php';
+require_once chemin_plugin('dashboard') . '/inc/dashboard_operations.php';
 /* Le moteur de chantiers ne touche à la base que dans ses fonctions d'accès :
    la logique d'enchaînement des étapes, elle, est vérifiable telle quelle. */
-require_once __DIR__ . '/../plugins/dashboard/inc/dashboard_chantiers.php';
-require_once __DIR__ . '/../plugins/dashboard/dashboard_fonctions.php';
+require_once chemin_plugin('dashboard') . '/inc/dashboard_chantiers.php';
+require_once chemin_plugin('dashboard') . '/dashboard_fonctions.php';

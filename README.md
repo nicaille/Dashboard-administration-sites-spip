@@ -27,8 +27,8 @@ L'outil est fait de **deux plugins** :
 
 | Plugin | Où on l'installe | Rôle |
 |---|---|---|
-| `plugins/dashboard` | sur le site tour de contrôle, un seul | interface, inventaire, conduite des chantiers de mise à jour |
-| `plugins/dashboard_agent` | sur **chaque** site géré | expose un point d'entrée JSON signé, exécute les opérations qu'il a l'autorisation d'exécuter |
+| `plugins/dashboard-<version>` | sur le site tour de contrôle, un seul | interface, inventaire, conduite des chantiers de mise à jour |
+| `plugins/dashboard_agent-<version>` | sur **chaque** site géré | expose un point d'entrée JSON signé, exécute les opérations qu'il a l'autorisation d'exécuter |
 
 Le dashboard n'a besoin ni de SSH, ni de FTP, ni d'accès à la base des sites
 gérés : il dialogue en HTTPS avec l'agent, chaque requête étant signée en
@@ -78,10 +78,30 @@ avant de traverser le réseau.
 
 Ce qui reste exposé malgré tout est décrit dans [docs/securite.md](docs/securite.md).
 
+## Les dossiers de plugins portent leur version
+
+`plugins/dashboard-1.0.8`, `plugins/dashboard_agent-1.0.8`. Ce n'est pas
+décoratif : en déposant la nouvelle version **à côté** de l'ancienne plutôt que
+par-dessus, on évite le travers classique de la mise en ligne par FTP, où les
+fichiers supprimés entre deux versions survivent dans le dossier écrasé et
+finissent par être chargés.
+
+SPIP s'y retrouve seul : il indexe les plugins par préfixe et retient la version
+la plus élevée quand deux dossiers déclarent le même (`ecrire/inc/plugin.php`).
+Déposer le nouveau dossier suffit donc, et supprimer le nouveau suffit à revenir
+en arrière.
+
+Une précision, parce qu'elle change ce sur quoi on peut compter : les migrations
+de schéma d'un plugin ne se déclenchent **pas** d'après le nom du dossier, mais
+de la comparaison entre la version du `paquet.xml` et celle mémorisée en meta
+(`maj_plugin()`). Elles se joueraient donc aussi bien en écrasant le dossier. Le
+gain des dossiers versionnés est ailleurs : pas de fichier fantôme, et un retour
+arrière immédiat.
+
 ## Installation rapide
 
-1. Copier `plugins/dashboard` dans le `plugins/` du site tour de contrôle, l'activer.
-2. Copier `plugins/dashboard_agent` dans le `plugins/` de **chaque** site à gérer, l'activer.
+1. Copier `plugins/dashboard-<version>` dans le `plugins/` du site tour de contrôle, l'activer.
+2. Copier `plugins/dashboard_agent-<version>` dans le `plugins/` de **chaque** site à gérer, l'activer.
 3. Sur un site géré : *Configuration → Dashboard : agent*, générer un secret,
    cocher les opérations autorisées, noter l'URL de l'agent. Deux d'entre elles
    sont refusées par défaut, à dessein : *Mettre à jour le core SPIP et migrer sa

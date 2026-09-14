@@ -10,7 +10,28 @@
  */
 
 $racine = dirname(__DIR__);
-$plugins = [$racine . '/plugins/dashboard', $racine . '/plugins/dashboard_agent'];
+
+/**
+ * Les dossiers de plugins portent leur version (`dashboard-1.0.8`), pour qu'une
+ * mise en ligne n'écrase pas la version précédente. On les retrouve donc par
+ * préfixe, sans quoi ce fichier serait à retoucher à chaque montée de version.
+ *
+ * @param string $prefixe
+ * @return string
+ */
+function chemin_plugin($prefixe) {
+	global $racine;
+	$trouves = glob($racine . '/plugins/' . $prefixe . '-*', GLOB_ONLYDIR);
+	if (!$trouves) {
+		fwrite(STDERR, "Plugin introuvable : $prefixe\n");
+		exit(2);
+	}
+	usort($trouves, 'version_compare');
+
+	return end($trouves);
+}
+
+$plugins = [chemin_plugin('dashboard'), chemin_plugin('dashboard_agent')];
 
 $echecs = 0;
 $total  = 0;
@@ -636,7 +657,7 @@ foreach ($inconnues as $nom => $ou) {
 }
 
 // Le diagnostic affiché à l’utilisateur doit couvrir la même surface.
-$fonctions = file_get_contents($racine . '/plugins/dashboard/dashboard_fonctions.php');
+$fonctions = file_get_contents(chemin_plugin('dashboard') . '/dashboard_fonctions.php');
 if (preg_match('/function dashboard_api_requise\(.*?\n}/s', $fonctions, $bloc)) {
 	preg_match_all("/'([a-z_][a-z0-9_]*)'/", $bloc[0], $t);
 	$declarees = array_diff($t[1], ['inc', 'action', 'base']);

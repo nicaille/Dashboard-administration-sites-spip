@@ -249,7 +249,7 @@ verifier('http accepté une fois autorisé explicitement', dashboard_url_accepta
 echo "\n== URL des archives SPIP ==\n";
 
 $GLOBALS['dashboard_config_test'] = ['url_archives_spip' => 'https://files.spip.net/spip/archives/'];
-require_once __DIR__ . '/../plugins/dashboard/inc/dashboard_versions.php';
+require_once chemin_plugin('dashboard') . '/inc/dashboard_versions.php';
 verifier(
 	'URL construite pour une version valide',
 	dashboard_url_archive_spip('4.2.16') === 'https://files.spip.net/spip/archives/SPIP-v4.2.16.zip',
