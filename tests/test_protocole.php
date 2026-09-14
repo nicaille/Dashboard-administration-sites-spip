@@ -525,6 +525,110 @@ verifier('kilo-octets', dashboard_octets(2048) === '2 Ko', dashboard_octets(2048
 verifier('méga-octets', dashboard_octets(5 * 1024 * 1024) === '5 Mo', dashboard_octets(5 * 1024 * 1024));
 verifier('zéro', dashboard_octets(0) === '0 o', dashboard_octets(0));
 
+echo "\n== Le dossier d'un plugin porte sa version ==\n";
+
+verifier(
+	'convention du site respectée : v6.3.4 devient v6.3.6',
+	dashagent_dossier_versionne('plugins/auto/saisies/v6.3.4', '6.3.4', '6.3.6') === 'plugins/auto/saisies/v6.3.6',
+	dashagent_dossier_versionne('plugins/auto/saisies/v6.3.4', '6.3.4', '6.3.6')
+);
+verifier(
+	'suffixe à tiret conservé',
+	dashagent_dossier_versionne('plugins/champs_extras_core-4.3.3', '4.3.3', '4.3.6') === 'plugins/champs_extras_core-4.3.6',
+	dashagent_dossier_versionne('plugins/champs_extras_core-4.3.3', '4.3.3', '4.3.6')
+);
+verifier(
+	'dossier sans numéro : le numéro est ajouté',
+	dashagent_dossier_versionne('plugins/saisies', '6.3.4', '6.3.6') === 'plugins/saisies-6.3.6',
+	dashagent_dossier_versionne('plugins/saisies', '6.3.4', '6.3.6')
+);
+verifier(
+	'ancien numéro sous une autre forme : remplacé, pas accumulé',
+	dashagent_dossier_versionne('plugins/saisies-6.3.4', '', '6.3.6') === 'plugins/saisies-6.3.6',
+	dashagent_dossier_versionne('plugins/saisies-6.3.4', '', '6.3.6')
+);
+verifier(
+	'la barre finale ne crée pas de dossier vide',
+	dashagent_dossier_versionne('plugins/saisies/v6.3.4/', '6.3.4', '6.3.6') === 'plugins/saisies/v6.3.6',
+	dashagent_dossier_versionne('plugins/saisies/v6.3.4/', '6.3.4', '6.3.6')
+);
+verifier(
+	'sans version d’archive, le dossier ne bouge pas',
+	dashagent_dossier_versionne('plugins/saisies/v6.3.4', '6.3.4', '') === 'plugins/saisies/v6.3.4'
+);
+verifier(
+	'même version : même dossier',
+	dashagent_dossier_versionne('plugins/saisies/v6.3.4', '6.3.4', '6.3.4') === 'plugins/saisies/v6.3.4'
+);
+verifier(
+	'un nom réduit à son numéro reste un numéro',
+	dashagent_dossier_versionne('plugins/saisies/6.3.4', '', '6.3.6') === 'plugins/saisies/6.3.6',
+	dashagent_dossier_versionne('plugins/saisies/6.3.4', '', '6.3.6')
+);
+verifier(
+	'le « v » du site est conservé même sans ancien numéro connu',
+	dashagent_dossier_versionne('plugins/saisies/v6.3.4', '', '6.3.6') === 'plugins/saisies/v6.3.6',
+	dashagent_dossier_versionne('plugins/saisies/v6.3.4', '', '6.3.6')
+);
+
+verifier(
+	'chemin relatif reconstruit sous son parent',
+	dashagent_dossier_relatif('auto/saisies/v6.3.4', 'v6.3.6') === 'auto/saisies/v6.3.6',
+	dashagent_dossier_relatif('auto/saisies/v6.3.4', 'v6.3.6')
+);
+verifier(
+	'plugin à la racine de plugins/',
+	dashagent_dossier_relatif('saisies', 'saisies-6.3.6') === 'saisies-6.3.6',
+	dashagent_dossier_relatif('saisies', 'saisies-6.3.6')
+);
+verifier(
+	'sans nouveau nom, le chemin est inchangé',
+	dashagent_dossier_relatif('auto/saisies/v6.3.4', '') === 'auto/saisies/v6.3.4'
+);
+
+echo "\n== Installation à côté, sans écraser ==\n";
+
+$bac = _DIR_TMP . 'installer-a-cote-' . bin2hex(random_bytes(4)) . '/';
+mkdir($bac . 'plugins/auto/saisies/v6.3.4', 0777, true);
+mkdir($bac . 'source', 0777, true);
+file_put_contents($bac . 'plugins/auto/saisies/v6.3.4/paquet.xml', '<paquet prefix="saisies" version="6.3.4" />');
+file_put_contents($bac . 'plugins/auto/saisies/v6.3.4/temoin-ancien.txt', 'ancien');
+file_put_contents($bac . 'source/paquet.xml', '<paquet prefix="saisies" version="6.3.6" />');
+
+$ancien  = $bac . 'plugins/auto/saisies/v6.3.4';
+$cible   = dashagent_dossier_versionne($ancien, '6.3.4', '6.3.6');
+$echange = dashagent_installer_a_cote($ancien, $cible, $bac . 'source');
+
+verifier('déploiement réussi', !empty($echange['ok']), (string) ($echange['erreur'] ?? ''));
+verifier('le nouveau dossier porte la nouvelle version', ($echange['dossier'] ?? '') === 'v6.3.6', $echange['dossier'] ?? '');
+verifier('les fichiers de la nouvelle version sont en place', is_file($cible . '/paquet.xml'));
+verifier('l’ancien dossier a été libéré', !is_dir($ancien));
+verifier('une copie de secours a été gardée', ($echange['sauvegarde'] ?? '') !== '', $echange['sauvegarde'] ?? '');
+verifier(
+	'la copie de secours est cachée au balayage de SPIP',
+	strncmp((string) ($echange['sauvegarde'] ?? ''), '.', 1) === 0,
+	$echange['sauvegarde'] ?? ''
+);
+verifier(
+	'la copie de secours contient bien l’ancienne version',
+	is_file($bac . 'plugins/auto/saisies/' . ($echange['sauvegarde'] ?? 'x') . '/temoin-ancien.txt')
+);
+verifier(
+	'les fichiers de l’ancienne version ne sont pas mélangés aux nouveaux',
+	!is_file($cible . '/temoin-ancien.txt')
+);
+
+/* Un déploiement précédent a laissé le nom libre convoité : mieux vaut
+   s'arrêter que d'écraser ce qu'on ne connaît pas. */
+mkdir($bac . 'plugins/auto/saisies/v6.4.0', 0777, true);
+mkdir($bac . 'source2', 0777, true);
+file_put_contents($bac . 'source2/paquet.xml', '<paquet prefix="saisies" version="6.4.0" />');
+$occupe = dashagent_installer_a_cote($cible, $bac . 'plugins/auto/saisies/v6.4.0', $bac . 'source2');
+verifier('un dossier déjà occupé interrompt le déploiement', empty($occupe['ok']));
+verifier('la version en place est intacte', is_file($cible . '/paquet.xml'));
+
+dashagent_supprimer_repertoire($bac, true);
+
 echo "\n----------------------------------------\n";
 echo ($total - $echecs) . " / $total vérifications passées\n";
 
