@@ -30,7 +30,7 @@ function action_dashagent_dist() {
 	$args    = $requete['args'];
 
 	// Les opérations lourdes peuvent dépasser le temps d'exécution par défaut.
-	if (in_array($op, ['sauvegarde_creer', 'plugin_maj', 'core_maj', 'base_maj'], true)) {
+	if (in_array($op, ['sauvegarde_creer', 'plugin_maj', 'plugin_svp_avancer', 'core_maj', 'base_maj'], true)) {
 		@set_time_limit(600);
 		@ini_set('memory_limit', '512M');
 	}
@@ -117,6 +117,26 @@ function dashagent_executer($op, $args) {
 			include_spip('inc/dashagent_maj');
 
 			return dashagent_plugin_maj($args);
+
+		case 'plugin_svp_preflight':
+			include_spip('inc/dashagent_svp');
+
+			return dashagent_svp_preflight($args);
+
+		case 'plugin_svp_preparer':
+			include_spip('inc/dashagent_svp');
+
+			return dashagent_svp_preparer($args);
+
+		case 'plugin_svp_avancer':
+			include_spip('inc/dashagent_svp');
+
+			return dashagent_svp_avancer($args);
+
+		case 'plugin_svp_liberer':
+			include_spip('inc/dashagent_svp');
+
+			return dashagent_svp_liberer($args);
 
 		case 'core_maj_preflight':
 			include_spip('inc/dashagent_maj');

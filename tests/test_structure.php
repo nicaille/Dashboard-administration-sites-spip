@@ -12,7 +12,7 @@
 $racine = dirname(__DIR__);
 
 /**
- * Les dossiers de plugins portent leur version (`dashboard-1.0.10`), pour qu'une
+ * Les dossiers de plugins portent leur version (`dashboard-1.0.11`), pour qu'une
  * mise en ligne n'écrase pas la version précédente. On les retrouve donc par
  * préfixe, sans quoi ce fichier serait à retoucher à chaque montée de version.
  *
@@ -574,7 +574,10 @@ $api_spip = [
 	'include_spip', 'charger_fonction', '_T', '_request', 'spip_log', 'ecrire_meta',
 	'effacer_meta', 'parametre_url', 'redirige_par_entete', 'url_de_base', 'generer_url_ecrire',
 	// inc/
-	'autoriser', 'lire_config', 'ecrire_config', 'recuperer_url', 'purger_repertoire',
+	'autoriser', 'autoriser_exception', 'autoriser_type', 'lire_config', 'ecrire_config', 'recuperer_url', 'purger_repertoire',
+	// find_in_path() sert à savoir si un plugin est là avant de l'appeler :
+	// c'est ainsi que l'agent reconnaît un site pourvu de SVP.
+	'find_in_path',
 	'lire_metas', 'plugin_installes_meta', 'affdate_heure', 'affdate_jourcourt',
 	'sous_repertoire', 'spip_unlink', 'spip_version_compare', 'session_get',
 	'auth_synchroniser_distant',
@@ -593,6 +596,10 @@ $api_spip = [
 	'sql_drop_table', 'sql_error', 'sql_fetch', 'sql_fetsel', 'sql_free', 'sql_insertq',
 	'sql_query', 'sql_quote', 'sql_select', 'sql_showtable', 'sql_updateq', 'sql_version',
 	'sql_in',
+	// SVP, quand le site géré en dispose : c'est lui qui sait mettre à jour un
+	// plugin proprement, dépendances comprises. Les classes Decideur et
+	// Actionneur ne passent pas par ici — seules les fonctions sont analysées.
+	'svp_actualiser_paquets_locaux',
 ];
 
 $definies = [];
@@ -713,6 +720,7 @@ $fournisseur = [
 	'objet_instituer'      => 'action/editer_objet',
 	'maj_tables'           => 'base/create',
 	'maj_plugin'           => 'base/upgrade',
+	'svp_actualiser_paquets_locaux' => 'inc/svp_depoter_local',
 	'formulaires_editer_objet_charger'  => 'inc/editer',
 	'formulaires_editer_objet_verifier' => 'inc/editer',
 	'formulaires_editer_objet_traiter'  => 'inc/editer',

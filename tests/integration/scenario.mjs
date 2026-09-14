@@ -7,7 +7,7 @@
  */
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
 const base = process.env.BASE_URL || 'http://127.0.0.1:8321';
 const site = process.env.SITE_DIR;
@@ -198,28 +198,36 @@ if (await boutonMaj.count()) {
 	)).map((l) => String(l.message));
 	dit('version passée de 1.0.0 à 1.0.1', lignesPlugin.some((m) => /1\.0\.0\s*→\s*1\.0\.1/.test(m)),
 		lignesPlugin.join(' | '));
-	dit('le journal nomme le nouveau dossier', lignesPlugin.some((m) => /dossier zzztest-1\.0\.1/.test(m)),
+	// C'est SVP qui a travaillé, pas notre déploiement d'archive : il connaît
+	// les dépendances, et il range les plugins là où il sait les retrouver.
+	dit('la mise à jour est passée par SVP', lignesPlugin.some((m) => /par SVP/.test(m)),
+		lignesPlugin.join(' | '));
+	dit('le journal nomme le dossier retenu', lignesPlugin.some((m) => /dossier auto\/zzztest\/v1\.0\.1/.test(m)),
 		lignesPlugin.join(' | '));
 } else {
 	dit('bouton de mise à jour présent', false);
 }
 
-// La nouvelle version s'installe à côté : rien n'est écrasé, et le dossier dit
-// quelle version il contient.
+// SVP dépose la nouvelle version dans plugins/auto/<prefixe>/v<version>, sa
+// convention : rien n'est écrasé, et le dossier dit quelle version il contient.
 const versionFichier = execFileSync('php', ['-r',
-	`$x=@file_get_contents(getenv('SITE').'/plugins/zzztest-1.0.1/paquet.xml'); preg_match('/version="([^"]+)"/',(string)$x,$m); echo $m[1] ?? '?';`,
+	`$x=@file_get_contents(getenv('SITE').'/plugins/auto/zzztest/v1.0.1/paquet.xml'); preg_match('/version="([^"]+)"/',(string)$x,$m); echo $m[1] ?? '?';`,
 ], { env: { ...process.env, SITE: site } }).toString();
-dit('la nouvelle version est dans un dossier à son nom', versionFichier === '1.0.1', 'paquet.xml en ' + versionFichier);
-dit('l’ancien dossier n’a pas été réutilisé', !existsSync(`${site}/plugins/zzztest`));
+dit('la nouvelle version est dans le dossier versionné de SVP', versionFichier === '1.0.1',
+	'paquet.xml en ' + versionFichier);
 dit('le marqueur 1.0.1 accompagne la nouvelle version',
-	(lu('plugins/zzztest-1.0.1/marqueur.txt') || '').includes('1.0.1'), String(lu('plugins/zzztest-1.0.1/marqueur.txt')));
+	(lu('plugins/auto/zzztest/v1.0.1/marqueur.txt') || '').includes('1.0.1'),
+	String(lu('plugins/auto/zzztest/v1.0.1/marqueur.txt')));
+dit('l’ancienne version est toujours là, intacte',
+	(lu('plugins/zzztest/marqueur.txt') || '').includes('1.0.0'), String(lu('plugins/zzztest/marqueur.txt')));
 
-// Cachée par un point initial : SPIP ne balaye pas les dossiers cachés, sans
-// quoi le site listerait deux fois le même plugin jusqu'au prochain entretien.
-const ancienZzz = readdirSync(`${site}/plugins`).filter((n) => /^\.zzztest\.dashagent-\d{14}$/.test(n));
-dit('l’ancienne version est gardée de côté, hors du balayage', ancienZzz.length === 1, ancienZzz.join(', '));
-dit('l’ancienne version est intacte dans sa copie',
-	ancienZzz.length === 1 && (lu(`plugins/${ancienZzz[0]}/marqueur.txt`) || '').includes('1.0.0'));
+// L'inventaire de SVP doit avoir suivi : sans cela le site géré continue
+// d'annoncer l'ancienne version à son propre administrateur.
+// SVP range les versions normalisées : « 1.0.1 » s'y écrit « 001.000.001 ».
+const paquetLocal = execFileSync('php', ['-r',
+	`$db=new SQLite3(getenv('BDD'));$r=$db->querySingle('SELECT pa.version FROM spip_paquets pa JOIN spip_plugins pl ON pl.id_plugin=pa.id_plugin WHERE pa.id_depot=0 AND pl.prefixe="ZZZTEST" ORDER BY pa.version DESC',true);echo $r['version'] ?? '?';`,
+], { env: { ...process.env, BDD: bdd } }).toString();
+dit('l’inventaire local de SVP a suivi', paquetLocal === '001.000.001', paquetLocal);
 
 // Le remplacement des fichiers ne doit pas désactiver les plugins : « raz »
 // sur une liste partielle couperait le dashboard et l'agent eux-mêmes. Et
@@ -228,7 +236,7 @@ dit('l’ancienne version est intacte dans sa copie',
 const dossierActif = execFileSync('php', ['-r',
 	`$db=new SQLite3(getenv('BDD'));$a=unserialize($db->querySingle('SELECT valeur FROM spip_meta WHERE nom="plugin"'));echo $a['ZZZTEST']['dir'] ?? '?';`,
 ], { env: { ...process.env, BDD: bdd } }).toString();
-dit('SPIP a suivi le plugin dans son nouveau dossier', dossierActif === 'zzztest-1.0.1', dossierActif);
+dit('SPIP a suivi le plugin dans son nouveau dossier', dossierActif === 'auto/zzztest/v1.0.1', dossierActif);
 
 const actifs = execFileSync('php', ['-r',
 	`$db=new SQLite3(getenv('BDD'));$k=array_keys(unserialize($db->querySingle('SELECT valeur FROM spip_meta WHERE nom="plugin"')));echo implode(',',array_intersect(['DASHBOARD','DASHAGENT','ZZZTEST'],$k));`,
@@ -541,7 +549,7 @@ dit('ancien core conservé pour rollback', rollback.length === 1, rollback.join(
 for (const g of gardes) {
 	dit(`${g}/ préservé`, lu(`${g}/temoin-dashboard.txt`) === avant[g]);
 }
-dit('plugin mis à jour non écrasé', (lu('plugins/zzztest-1.0.1/paquet.xml') || '').includes('1.0.1'));
+dit('plugin mis à jour non écrasé', (lu('plugins/auto/zzztest/v1.0.1/paquet.xml') || '').includes('1.0.1'));
 dit('secret de l’agent préservé', (lu('config/mes_options.php') || '').includes('_DASHAGENT_ARCHIVES_HTTP'));
 
 // Le site tourne désormais sur les fichiers déployés : s'il ne répondait plus,

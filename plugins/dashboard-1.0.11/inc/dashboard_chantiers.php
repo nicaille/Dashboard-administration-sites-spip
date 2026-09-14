@@ -314,9 +314,7 @@ function dashboard_chantier_executer_etape($chantier) {
 			return dashboard_chantier_etape_base($chantier);
 
 		case 'plugin':
-			$reponse = dashboard_operation_plugin_maj($id_site, $cible);
-
-			return ['ok' => !empty($reponse['ok']), 'message' => (string) $reponse['message']];
+			return dashboard_chantier_etape_plugin($chantier);
 
 		case 'plugins':
 			return dashboard_chantier_etape_plugins($chantier);
@@ -427,6 +425,131 @@ function dashboard_chantier_etape_base($chantier) {
 	}
 
 	return ['ok' => true, 'message' => (string) $reponse['message']];
+}
+
+/**
+ * La mise à jour d'un plugin : par SVP s'il est là, par archive sinon.
+ *
+ * SVP fait déjà ce travail, et le fait mieux : il vérifie les dépendances
+ * **avant** d'agir, dépose la nouvelle version dans `plugins/auto/<prefixe>/v<x>`,
+ * écarte l'ancien dossier, active le nouveau, enchaîne la migration de schéma du
+ * plugin et tient son inventaire à jour. Sa file d'actions se joue une action à
+ * la fois, ce qui tombe juste : c'est exactement le grain d'un avancement.
+ *
+ * Le repli sur l'archive n'a lieu que si SVP est hors jeu — absent, sans paquet
+ * local, sans mise à jour annoncée. **Jamais** sur un refus de dépendance : ce
+ * serait installer précisément ce que SVP vient de refuser.
+ *
+ * @param array $chantier
+ * @return array
+ */
+function dashboard_chantier_etape_plugin($chantier) {
+	include_spip('inc/dashboard_journal');
+
+	$id_site = (int) $chantier['id_dashboard_site'];
+	$prefixe = (string) $chantier['cible'];
+	$reste   = (string) $chantier['reste'];
+
+	// `reste` porte l'état de l'étape entre deux avancements : vide au premier
+	// passage, puis « svp:<version d'avant> » une fois la file constituée sur le
+	// site géré — la version de départ, parce qu'après coup elle n'est plus
+	// lisible nulle part, et qu'un compte rendu sans elle ne dit rien.
+	if (strncmp($reste, 'svp:', 4) === 0) {
+		return dashboard_chantier_plugin_svp_avancer($id_site, $prefixe, substr($reste, 4));
+	}
+
+	$prepare = dashboard_operation_plugin_svp_preparer($id_site, $prefixe);
+	if (!empty($prepare['ok'])) {
+		$actions = (array) ($prepare['data']['actions'] ?? []);
+
+		return [
+			'ok'      => true,
+			'rester'  => true,
+			'reste'   => 'svp:' . (string) ($prepare['data']['version'] ?? ''),
+			'message' => $prefixe . ' : SVP prend la main — '
+				. ($actions ? implode(' ; ', array_slice($actions, 0, 4)) : 'file constituée'),
+		];
+	}
+
+	$raison  = (string) ($prepare['data']['raison'] ?? '');
+	$message = (string) $prepare['message'];
+
+	if (!dashboard_chantier_svp_repli($raison)) {
+		dashboard_journaliser($id_site, 'plugin_maj', 'erreur', $prefixe . ' : ' . $message, $prepare['data']);
+
+		return ['ok' => false, 'message' => $prefixe . ' : ' . $message];
+	}
+
+	// SVP n'est pas en mesure de traiter ce plugin : l'archive reste le chemin.
+	$reponse = dashboard_operation_plugin_maj($id_site, $prefixe);
+
+	return ['ok' => !empty($reponse['ok']), 'message' => (string) $reponse['message']];
+}
+
+/**
+ * Un refus de SVP autorise-t-il à revenir au déploiement d'archive ?
+ *
+ * La distinction est tout le sujet. SVP absent, ou sans aucun paquet local pour
+ * ce préfixe : il n'est pas en mesure de traiter ce plugin, l'archive reste le
+ * seul chemin.
+ *
+ * Tout le reste est une **réponse**, et se respecte. Un refus de dépendance, un
+ * verrou posé par un administrateur, mais aussi un « aucune mise à jour » : sur
+ * un site où SVP suit ce plugin, il a ses raisons de ne pas proposer la version
+ * que notre catalogue annonce — un état trop instable, une incompatibilité avec
+ * la version de SPIP installée. Déployer l'archive par-dessus reviendrait à
+ * installer précisément ce qu'il écarte, et SPIP désactiverait le plugin au
+ * recalcul suivant. Mieux vaut le dire et laisser actualiser ses dépôts.
+ *
+ * @param string $raison Code rendu par l'agent
+ * @return bool
+ */
+function dashboard_chantier_svp_repli($raison) {
+	return in_array((string) $raison, ['svp_absent', 'paquet_inconnu', ''], true);
+}
+
+/**
+ * Une action de la file SVP, et une seule.
+ *
+ * @param int $id_site
+ * @param string $prefixe
+ * @param string $version_avant Version de départ, pour le compte rendu final
+ * @return array
+ */
+function dashboard_chantier_plugin_svp_avancer($id_site, $prefixe, $version_avant = '') {
+	include_spip('inc/dashboard_journal');
+	include_spip('inc/dashboard_sync');
+
+	$reponse = dashboard_operation_plugin_svp_avancer($id_site, $prefixe);
+	$data    = (array) ($reponse['data'] ?? []);
+
+	if (empty($reponse['ok'])) {
+		dashboard_journaliser($id_site, 'plugin_maj', 'erreur', $prefixe . ' : ' . (string) $reponse['message'], $data);
+
+		return ['ok' => false, 'message' => $prefixe . ' : ' . (string) $reponse['message']];
+	}
+
+	if (empty($data['termine'])) {
+		return [
+			'ok'      => true,
+			'rester'  => true,
+			'reste'   => 'svp:' . $version_avant,
+			'message' => $prefixe . ' : ' . (string) ($data['action'] ?? 'action SVP')
+				. ' — reste ' . (int) ($data['reste'] ?? 0) . ' action(s)',
+		];
+	}
+
+	$message = $prefixe . ' : ' . ($version_avant !== '' ? $version_avant : '?')
+		. ' → ' . (string) ($data['version_apres'] ?? '?') . ' par SVP';
+	$dossier = (string) ($data['dossier'] ?? '');
+	if ($dossier !== '') {
+		$message .= ' (dossier ' . rtrim($dossier, '/') . ')';
+	}
+
+	dashboard_journaliser($id_site, 'plugin_maj', 'ok', $message, $data);
+	dashboard_synchroniser($id_site);
+
+	return ['ok' => true, 'reste' => '', 'message' => $message];
 }
 
 /**

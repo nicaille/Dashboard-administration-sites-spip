@@ -76,7 +76,7 @@ function spip_version_compare($v1, $v2, $op = null) {
 /**
  * Chemin d'un plugin, retrouvé par son préfixe.
  *
- * Les dossiers de plugins portent leur version (`dashboard-1.0.10`), pour qu'une
+ * Les dossiers de plugins portent leur version (`dashboard-1.0.11`), pour qu'une
  * mise en ligne n'écrase pas la version précédente. Les retrouver par préfixe
  * évite d'avoir à toucher ce fichier à chaque montée de version.
  *
@@ -103,6 +103,9 @@ require_once chemin_plugin('dashboard_agent') . '/inc/dashagent_infos.php';
 require_once chemin_plugin('dashboard_agent') . '/inc/dashagent_maj.php';
 require_once chemin_plugin('dashboard_agent') . '/inc/dashagent_base.php';
 require_once chemin_plugin('dashboard_agent') . '/inc/dashagent_serveur.php';
+/* La délégation à SVP : seules ses fonctions pures sont chargeables hors SPIP,
+   les autres ont besoin de SVP lui-même. */
+require_once chemin_plugin('dashboard_agent') . '/inc/dashagent_svp.php';
 
 /* Le client du dashboard tire quelques fonctions du core SPIP : on les neutralise
    avant de le charger, pour ne garder que la partie protocole. */

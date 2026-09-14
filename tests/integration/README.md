@@ -69,3 +69,16 @@ DASHBOARD_TEST_SANS_PREPARATION=1 tests/integration/executer.sh <zip> 8321
 | Onglet Serveur | l'onglet est refusé tant que le site géré ne l'a pas autorisé ; une fois permis, le résumé, le parcours d'une table (tri, filtre, pagination), les fichiers de réglage et le phpinfo s'affichent — et aucune empreinte, aucun secret partagé, aucune variable d'environnement sensible n'atteint l'écran |
 | Migration du schéma | l'archive annonce aussi une version de schéma plus récente et embarque un palier qui ajoute une colonne : le test vérifie que la colonne existe, que la meta a suivi, et que l'espace privé du site n'est plus bloqué |
 | Restauration | le dump se rejoue dans une base neuve, contenu intact |
+
+## Ce que le parcours ne couvre pas
+
+**Le repli sur le déploiement d'archive.** Le site de test a SVP — il est livré
+avec SPIP — et le parcours vérifie donc le chemin SVP, celui qu'emprunteront
+presque tous les sites réels. Le repli ne se déclenche que sur un site sans SVP,
+ou dont SVP ignore le plugin : le reproduire ici demanderait de démonter
+`plugins-dist/`, ce que la mise à jour du core rétablirait aussitôt.
+
+Ce chemin reste couvert par les tests unitaires : la décision de se rabattre
+(`dashboard_chantier_svp_repli()`), le nommage du dossier versionné
+(`dashagent_dossier_versionne()`) et l'installation à côté sans écraser
+(`dashagent_installer_a_cote()`, sur une arborescence temporaire réelle).

@@ -175,6 +175,36 @@ réponse porte alors `dossier_avant`, `dossier` et `dossier_relatif` (chemin du
 nouveau dossier relatif à `plugins/`), en plus de `version_avant`,
 `version_apres`, `version_archive` et `sauvegarde`.
 
+### `plugin_svp_preflight`
+
+Argument : `prefixe`. Fait calculer à SVP, sur le site géré, ce qu'une mise à
+jour impliquerait — **sans rien engager**. Retourne la version installée, la
+version cible, la liste des actions prévues (dépendances comprises), et l'état
+du verrou de SVP.
+
+En cas de refus, `raison` dit lequel : `svp_absent`, `paquet_inconnu`,
+`maj_inconnue`, `dependances`, `verrou`, `dir_auto`. Le tableau de bord s'en
+sert pour décider s'il peut se rabattre sur le déploiement d'archive — il ne le
+fait que pour `svp_absent` et `paquet_inconnu`.
+
+### `plugin_svp_preparer`
+
+Arguments : `prefixe`, `forcer` (booléen, pour passer outre un verrou). Fige la
+file d'actions que SVP jouera. Repart d'une file propre : un reliquat d'une
+tentative abandonnée serait joué sans que personne l'ait demandé.
+
+### `plugin_svp_avancer`
+
+Argument : `prefixe`. Joue **une** action de la file et rend la main.
+`termine` dit s'il en reste. À la dernière, l'agent actualise l'inventaire de
+SVP, purge les caches, recalcule la liste des plugins et retourne
+`version_apres` et `dossier`.
+
+### `plugin_svp_liberer`
+
+Argument : `prefixe` (facultatif). Efface la file d'actions de SVP et son
+verrou. Sert à débloquer un site où une série a été interrompue.
+
 ### `core_maj_preflight`
 
 Sans argument. Retourne le détail des contrôles : extension zip, inscriptibilité
