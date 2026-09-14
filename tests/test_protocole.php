@@ -266,6 +266,199 @@ verifier('deux branches lues', count($manuelles) === 2, json_encode($manuelles))
 verifier('branche 4.2 correcte', ($manuelles['4.2'] ?? '') === '4.2.16');
 verifier('ligne invalide ignorée', !isset($manuelles['ligne']));
 
+echo "\n== Ce qui ne doit pas quitter un site géré ==\n";
+
+/* Le masquage tient à un seul prédicat : s'il se trompe, des empreintes de
+   mots de passe et des clés d'API traversent le réseau. */
+$sensibles = ['pass', 'htpass', 'password', 'DB_PASSWORD', 'low_sec', 'alea_actuel',
+	'alea_futur', 'cookie_oubli', 'backup_cles', 'HTTP_COOKIE', 'GITHUB_TOKEN',
+	'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'API_KEY', 'api-key', 'MA_CLE_API',
+	'apikey', 'jeton_secret', 'DATABASE_DSN', 'private_key', 'session_salt', 'prefs'];
+$anodins = ['nom', 'titre', 'version', 'descriptif', 'email', 'login', 'statut',
+	'date', 'maj', 'id_article', 'monkey_cache', 'keyboard_layout', 'HTTP_HOST',
+	'memory_limit', 'url_site'];
+
+$rates = array_values(array_filter($sensibles, function ($n) { return !dashagent_nom_sensible($n); }));
+verifier('tous les noms parlants sont reconnus', $rates === [], implode(', ', $rates));
+$faux = array_values(array_filter($anodins, function ($n) { return dashagent_nom_sensible($n); }));
+verifier('aucun nom anodin n’est masqué à tort', $faux === [], implode(', ', $faux));
+
+/* Le nom ne dit pas tout : une URL peut porter ses identifiants. */
+verifier('URL à identifiants reconnue', dashagent_valeur_sensible('https://bob:hunter2@miroir.test/'));
+verifier('URL ordinaire épargnée', !dashagent_valeur_sensible('https://exemple.org/archives.zip'));
+verifier('valeur non textuelle ignorée', !dashagent_valeur_sensible(42));
+
+verifier('la marque ne laisse rien filtrer',
+	strpos(dashagent_masquer('hunter2'), 'hunter2') === false, dashagent_masquer('hunter2'));
+verifier('la marque dit la longueur',
+	strpos(dashagent_masquer('hunter2'), '7 caractères') !== false, dashagent_masquer('hunter2'));
+verifier('une valeur vide reste vide', dashagent_masquer('') === '');
+
+echo "\n== Masquage d’un fichier de configuration ==\n";
+
+$options = <<<'PHP'
+<?php
+define('_DASHAGENT_ARCHIVES_HTTP', true);
+define('_MON_API_KEY', 'sk-live-3f9a2b7c4d1e');
+define('_SMTP_PASSWORD', "correct horse battery");
+define('_SMTP_HOST', 'smtp.exemple.org');
+const STRIPE_SECRET = 'sk_test_51Hxxxx';
+$GLOBALS['ldap_password'] = 'tr3sSecret';
+$reglages = ['token' => 'abcdef123456', 'delai' => '30'];
+$miroir = 'https://depot:s3cr3t@archives.test/';
+define('_DEBUG', false);
+PHP;
+$masque = dashagent_masquer_texte($options);
+
+foreach (['sk-live-3f9a2b7c4d1e', 'correct horse battery', 'sk_test_51Hxxxx',
+	'tr3sSecret', 'abcdef123456', 's3cr3t'] as $secret) {
+	verifier('« ' . substr($secret, 0, 14) . ' » ne sort pas', strpos($masque, $secret) === false);
+}
+foreach (['_DASHAGENT_ARCHIVES_HTTP', 'smtp.exemple.org', "'delai' => '30'", '_DEBUG'] as $utile) {
+	verifier('« ' . $utile . ' » reste lisible', strpos($masque, $utile) !== false);
+}
+verifier('les noms des constantes restent visibles',
+	strpos($masque, '_SMTP_PASSWORD') !== false && strpos($masque, 'STRIPE_SECRET') !== false);
+verifier('l’hôte du miroir reste lisible', strpos($masque, 'archives.test') !== false, $masque);
+
+echo "\n== Fichiers consultables ==\n";
+
+$lisibles = dashagent_serveur_fichiers_lisibles();
+verifier('trois fichiers, et trois seulement', count($lisibles) === 3, implode(', ', $lisibles));
+verifier('config/connect.php n’en fait pas partie',
+	!in_array('config/connect.php', $lisibles, true));
+foreach (['../config/connect.php', '/etc/passwd', 'connect', ''] as $fabrique) {
+	$reponse = dashagent_serveur_fichier(['fichier' => $fabrique]);
+	verifier('chemin refusé : ' . ($fabrique ?: '(vide)'), $reponse['ok'] === false);
+}
+
+echo "\n== Colonnes et tri d’un parcours de table ==\n";
+
+$colonnes = ['id_auteur', 'nom', 'login', 'pass'];
+verifier('une colonne réelle est retrouvée',
+	dashagent_serveur_colonne_connue('LOGIN', $colonnes) === 'login');
+verifier('une colonne inventée est écartée',
+	dashagent_serveur_colonne_connue('id_auteur; DROP TABLE x', $colonnes) === '');
+verifier('une colonne absente est écartée',
+	dashagent_serveur_colonne_connue('nimporte', $colonnes) === '');
+
+verifier('filtrer sur une colonne absente est refusé',
+	dashagent_serveur_filtre(['filtre_colonne' => 'x', 'filtre_valeur' => 'a'], $colonnes) === false);
+verifier('filtrer sur une colonne masquée est refusé',
+	dashagent_serveur_filtre(['filtre_colonne' => 'pass', 'filtre_valeur' => 'a'], $colonnes) === false,
+	'sinon le masque se devine caractère par caractère');
+verifier('sans filtre, pas de clause',
+	dashagent_serveur_filtre([], $colonnes) === '');
+
+/* Le masquage des lignes : c'est la colonne qui décide, sauf pour spip_meta. */
+$description = [
+	['nom' => 'id_auteur', 'masquee' => false],
+	['nom' => 'login', 'masquee' => false],
+	['nom' => 'pass', 'masquee' => true],
+];
+$rendu = dashagent_serveur_masquer_lignes(
+	[['id_auteur' => 1, 'login' => 'admin', 'pass' => '$2y$10$abcdefghijklmnop']],
+	$description
+);
+verifier('la colonne masquée l’est', strpos($rendu[0]['pass'], '$2y$') === false, $rendu[0]['pass']);
+verifier('les autres colonnes passent', $rendu[0]['login'] === 'admin');
+
+$metas = dashagent_serveur_masquer_lignes(
+	[['nom' => 'dashagent', 'valeur' => 'c2:secret'], ['nom' => 'charset', 'valeur' => 'utf-8']],
+	[['nom' => 'nom', 'masquee' => false], ['nom' => 'valeur', 'masquee' => false]]
+);
+verifier('le secret de l’agent est masqué dans spip_meta',
+	strpos($metas[0]['valeur'], 'secret') === false, $metas[0]['valeur']);
+verifier('une meta anodine reste lisible', $metas[1]['valeur'] === 'utf-8');
+
+echo "\n== Schéma de base d’un site géré ==\n";
+
+/* `dashagent_base_etat()` lit deux globales de SPIP : ce que les fichiers
+   attendent, et ce que la base contient. */
+$etat_base = function ($attendue, $installee) {
+	$GLOBALS['spip_version_base'] = $attendue;
+	$GLOBALS['meta']['version_installee'] = $installee;
+
+	return dashagent_base_etat();
+};
+
+$a_jour = $etat_base('2026080300', '2026080300');
+verifier('schéma à jour : rien à faire', $a_jour['maj_requise'] === false);
+verifier('schéma à jour : base pas en avance', $a_jour['base_plus_recente'] === false);
+
+$retard = $etat_base('2026080300', '2026010100');
+verifier('schéma en retard : migration due', $retard['maj_requise'] === true);
+verifier('schéma en retard : versions rendues', $retard['version_base'] === '2026010100'
+	&& $retard['version_base_attendue'] === '2026080300');
+
+/* Une base plus récente que les fichiers signale une double installation ou un
+   retour arrière : migrer aggraverait les choses. */
+$avance = $etat_base('2026010100', '2026080300');
+verifier('base plus récente : signalée', $avance['base_plus_recente'] === true);
+verifier('base plus récente : préflight bloquant', dashagent_base_preflight()['ok'] === false);
+verifier('base plus récente : refus expliqué',
+	strpos(dashagent_base_preflight()['erreur'], 'plus récente') !== false,
+	dashagent_base_preflight()['erreur']);
+
+/* Certains hébergeurs enregistrent la version avec une virgule décimale. */
+$virgule = $etat_base('2026080300', '2026080300');
+$GLOBALS['meta']['version_installee'] = '2026080300';
+verifier('version à virgule tolérée', dashagent_base_etat()['maj_requise'] === false);
+
+echo "\n== Journal de migration ==\n";
+
+$brut = "<div>MAJ 2026080300 <span title='0'>.</span></div><br>MAJ 2026080400 .<br>"
+	. 'HTTP 302<br>Si votre navigateur n’est pas redirigé, cliquez ici pour continuer.';
+$lisible = dashagent_base_journal_lisible($brut);
+verifier('les paliers sont conservés', strpos($lisible, 'MAJ 2026080300') !== false, $lisible);
+verifier('le second palier aussi', strpos($lisible, 'MAJ 2026080400') !== false, $lisible);
+verifier('la redirection est coupée', strpos($lisible, 'cliquez ici') === false, $lisible);
+verifier('le balisage a disparu', strpos($lisible, '<span') === false);
+
+echo "\n== Étapes d’un chantier ==\n";
+
+foreach (['plugin_maj', 'plugin_maj_tous', 'core_maj', 'base_maj'] as $operation) {
+	$etapes = dashboard_chantier_etapes($operation);
+	verifier("$operation : commence par une sauvegarde", ($etapes[0] ?? '') === 'sauvegarde',
+		implode(' → ', $etapes));
+	verifier("$operation : finit par une synchronisation", end($etapes) === 'sync');
+}
+verifier('la mise à jour du core migre aussi le schéma',
+	in_array('base', dashboard_chantier_etapes('core_maj'), true),
+	implode(' → ', dashboard_chantier_etapes('core_maj')));
+verifier('les plugins sont relistés juste avant d’être mis à jour',
+	dashboard_chantier_etapes('plugin_maj_tous') === ['sauvegarde', 'sync', 'plugins', 'sync']);
+verifier('opération inconnue : aucune étape', dashboard_chantier_etapes('rm_rf') === []);
+verifier('opération inconnue : refusée', dashboard_chantier_operation_connue('rm_rf') === false);
+verifier('opération connue : acceptée', dashboard_chantier_operation_connue('core_maj') === true);
+
+echo "\n== État d’un chantier ==\n";
+
+$fabriquer = function ($champs = []) {
+	return array_merge([
+		'id_dashboard_chantier' => 7, 'id_dashboard_site' => 1, 'operation' => 'core_maj',
+		'cible' => '', 'etape' => 'sauvegarde', 'statut' => 'encours', 'rang' => 0,
+		'total' => 5, 'tentatives' => 1, 'message' => '', 'detail' => '', 'reste' => '',
+	], $champs);
+};
+
+verifier('un chantier en cours n’est pas fini', dashboard_chantier_fini($fabriquer()) === false);
+verifier('un chantier réussi est fini', dashboard_chantier_fini($fabriquer(['statut' => 'ok'])) === true);
+verifier('un chantier en échec est fini', dashboard_chantier_fini($fabriquer(['statut' => 'erreur'])) === true);
+verifier('un chantier absent est fini', dashboard_chantier_fini(null) === true);
+
+verifier('le résumé situe l’étape',
+	dashboard_chantier_resume($fabriquer(['rang' => 2])) === 'Mise à jour du core SPIP (étape 3/5)',
+	dashboard_chantier_resume($fabriquer(['rang' => 2])));
+verifier('le libellé nomme le plugin visé',
+	dashboard_chantier_libelle('plugin_maj', 'CEXTRAS') === 'Mise à jour du plugin CEXTRAS');
+
+verifier('aucun échec retenu au départ', dashboard_chantier_echecs($fabriquer()) === []);
+$avec_echec = $fabriquer(['detail' => json_encode(['echecs' => ['CEXTRAS' => 'HTTP 404']])]);
+verifier('les échecs sont relus', array_keys(dashboard_chantier_echecs($avec_echec)) === ['CEXTRAS']);
+verifier('un détail illisible ne casse rien',
+	dashboard_chantier_echecs($fabriquer(['detail' => 'pas du json'])) === []);
+
 echo "\n== Magasin d’autorités de certification ==\n";
 
 /* Reproduit une pile locale pour Windows : OpenSSL annonce des chemins compilés

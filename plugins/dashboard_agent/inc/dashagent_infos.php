@@ -58,13 +58,20 @@ function dashagent_infos_site() {
  * @return array
  */
 function dashagent_infos_spip() {
+	include_spip('inc/dashagent_base');
 	$branche = (string) ($GLOBALS['spip_version_branche'] ?? '');
 	$code    = $GLOBALS['spip_version_code'] ?? null;
+	$base    = dashagent_base_etat();
 
 	return [
 		'version'         => $branche,
 		'version_code'    => $code,
-		'version_base'    => (string) ($GLOBALS['meta']['version_installee'] ?? ''),
+		'version_base'    => $base['version_base'],
+		// Ce que les fichiers attendent : sans les deux nombres, le tableau de
+		// bord ne peut pas voir qu'une migration de schéma est en attente.
+		'version_base_attendue' => $base['version_base_attendue'],
+		'base_maj_requise'      => $base['maj_requise'],
+		'base_plus_recente'     => $base['base_plus_recente'],
 		'ecran_securite'  => defined('_ECRAN_SECURITE') ? _ECRAN_SECURITE : null,
 		'charset'         => (string) ($GLOBALS['meta']['charset'] ?? ''),
 		'dir_plugins'     => defined('_DIR_PLUGINS') ? _DIR_PLUGINS : '',

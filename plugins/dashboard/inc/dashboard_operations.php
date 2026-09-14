@@ -257,6 +257,10 @@ function dashboard_operation_plugin_maj_tous($id_dashboard_site) {
 /**
  * Met à jour le core SPIP d'un site géré.
  *
+ * Le remplacement des fichiers, et lui seul : la sauvegarde préalable et la
+ * migration du schéma qui suit sont des étapes du chantier, de sorte qu'aucun
+ * appelant ne puisse remplacer un noyau sans filet.
+ *
  * @param int $id_dashboard_site
  * @param string $version Version cible, déduite si vide
  * @param array $options
@@ -283,15 +287,6 @@ function dashboard_operation_core_maj($id_dashboard_site, $version = '', $option
 		return ['ok' => false, 'message' => 'URL d’archive introuvable pour SPIP ' . $version, 'data' => []];
 	}
 
-	// Une sauvegarde préalable est le seul filet de sécurité côté données :
-	// les fichiers, eux, sont conservés par l'agent pour rollback.
-	if (!empty($options['sauvegarder_avant'])) {
-		$sauvegarde = dashboard_operation_sauvegarder($id_dashboard_site, ['rapatrier' => true]);
-		if (!$sauvegarde['ok']) {
-			return ['ok' => false, 'message' => 'Mise à jour annulée : ' . $sauvegarde['message'], 'data' => []];
-		}
-	}
-
 	$reponse = dashboard_appeler($site, 'core_maj', [
 		'url_archive'      => $url,
 		'version_attendue' => $version,
@@ -305,10 +300,23 @@ function dashboard_operation_core_maj($id_dashboard_site, $version = '', $option
 		return ['ok' => false, 'message' => $message, 'data' => $reponse['data']];
 	}
 
-	$message = 'SPIP ' . (string) ($reponse['data']['version_avant'] ?? '?') . ' → ' . (string) ($reponse['data']['version_apres'] ?? $version);
+	$version_apres = (string) ($reponse['data']['version_apres'] ?? $version);
+	$message = 'SPIP ' . (string) ($reponse['data']['version_avant'] ?? '?') . ' → ' . $version_apres;
 	dashboard_journaliser($id_dashboard_site, 'core_maj', 'ok', $message, $reponse['data'], $reponse['duree_ms']);
 
 	dashboard_synchroniser($id_dashboard_site);
+
+	// La synchronisation qui suit immédiatement le remplacement interroge un
+	// PHP qui a déjà chargé l'ancien inc_version.php : il annonce encore la
+	// version d'avant, et la fiche continuerait de proposer une mise à jour
+	// déjà faite. La version déployée, elle, est connue avec certitude —
+	// l'agent l'a lue dans l'archive qu'il vient d'installer.
+	if ($version_apres !== '') {
+		sql_updateq('spip_dashboard_sites', [
+			'version_spip' => $version_apres,
+			'core_maj'     => dashboard_version_cible($version_apres) ? 'oui' : 'non',
+		], 'id_dashboard_site = ' . (int) $id_dashboard_site);
+	}
 
 	return ['ok' => true, 'message' => $message, 'data' => $reponse['data']];
 }
@@ -328,6 +336,78 @@ function dashboard_operation_core_preflight($id_dashboard_site) {
 	}
 
 	$reponse = dashboard_appeler($site, 'core_maj_preflight');
+
+	return [
+		'ok'      => $reponse['ok'],
+		'message' => $reponse['ok'] ? '' : (string) ($reponse['erreur']['message'] ?? ''),
+		'data'    => $reponse['data'],
+	];
+}
+
+/**
+ * Joue une tranche de migration du schéma de base sur un site géré.
+ *
+ * L'agent rend la main dès qu'il a consommé son budget de temps ; `termine`
+ * dit s'il reste du travail. L'appelant rappelle tant que ce n'est pas fini —
+ * c'est ce que fait l'étape « base » d'un chantier.
+ *
+ * @param int $id_dashboard_site
+ * @return array
+ */
+function dashboard_operation_base_maj($id_dashboard_site) {
+	include_spip('inc/dashboard_client');
+	include_spip('inc/dashboard_journal');
+
+	$site = dashboard_charger_site($id_dashboard_site);
+	if (!$site) {
+		return ['ok' => false, 'message' => 'Site inconnu', 'termine' => true, 'data' => []];
+	}
+
+	// Le budget accordé à l'agent reste en deçà de notre propre temps d'attente :
+	// mieux vaut une tranche rendue proprement qu'une requête coupée.
+	$timeout = (int) dashboard_config('timeout_long', 300);
+	$budget  = max(5, min(120, (int) ($timeout / 3)));
+
+	$reponse = dashboard_appeler($site, 'base_maj', ['budget' => $budget], ['timeout' => $timeout]);
+
+	if (!$reponse['ok']) {
+		$message = (string) ($reponse['erreur']['message'] ?? '');
+		dashboard_journaliser($id_dashboard_site, 'base_maj', 'erreur', $message, $reponse, $reponse['duree_ms']);
+
+		return ['ok' => false, 'message' => $message, 'termine' => true, 'data' => $reponse['data']];
+	}
+
+	$data    = $reponse['data'];
+	$termine = !empty($data['termine']);
+	$message = $termine
+		? 'Base migrée en version ' . (string) ($data['version_base'] ?? '?')
+		: 'Migration en cours : version ' . (string) ($data['version_base'] ?? '?')
+			. ' sur ' . (string) ($data['version_base_attendue'] ?? '?');
+
+	// Une tranche qui n'aboutit pas n'est pas un événement : seul le terme
+	// mérite une ligne au journal, sans quoi une grosse migration le noierait.
+	if ($termine) {
+		dashboard_journaliser($id_dashboard_site, 'base_maj', 'ok', $message, $data, $reponse['duree_ms']);
+	}
+
+	return ['ok' => true, 'message' => $message, 'termine' => $termine, 'data' => $data];
+}
+
+/**
+ * Contrôles préalables à la migration du schéma, sans rien modifier.
+ *
+ * @param int $id_dashboard_site
+ * @return array
+ */
+function dashboard_operation_base_preflight($id_dashboard_site) {
+	include_spip('inc/dashboard_client');
+
+	$site = dashboard_charger_site($id_dashboard_site);
+	if (!$site) {
+		return ['ok' => false, 'message' => 'Site inconnu', 'data' => []];
+	}
+
+	$reponse = dashboard_appeler($site, 'base_maj_preflight');
 
 	return [
 		'ok'      => $reponse['ok'],

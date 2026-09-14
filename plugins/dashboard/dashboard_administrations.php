@@ -52,6 +52,12 @@ function dashboard_upgrade($nom_meta_base_version, $version_cible) {
 		['dashboard_creer_tables'],
 	];
 
+	// 1.0.6 : les mises à jour distantes deviennent des chantiers suivis pas à
+	// pas, et la synchronisation retient si la base du site attend sa migration.
+	$maj['1.0.6'] = [
+		['dashboard_creer_tables'],
+	];
+
 	include_spip('base/upgrade');
 	maj_plugin($nom_meta_base_version, $version_cible, $maj);
 }
@@ -68,6 +74,7 @@ function dashboard_vider_tables($nom_meta_base_version) {
 	sql_drop_table('spip_dashboard_sites');
 	sql_drop_table('spip_dashboard_plugins');
 	sql_drop_table('spip_dashboard_journal');
+	sql_drop_table('spip_dashboard_chantiers');
 	sql_drop_table('spip_dashboard_sauvegardes');
 
 	effacer_meta('dashboard');

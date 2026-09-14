@@ -7,6 +7,7 @@
  */
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import { execFileSync } from 'node:child_process';
+import { readFileSync, readdirSync } from 'node:fs';
 
 const base = process.env.BASE_URL || 'http://127.0.0.1:8321';
 const site = process.env.SITE_DIR;
@@ -180,11 +181,22 @@ const boutonMaj = ligneMaj.locator('a.dashboard-bouton').first();
 if (await boutonMaj.count()) {
 	await boutonMaj.click();
 	await page.waitForLoadState('domcontentloaded').catch(() => {});
-	await page.waitForTimeout(3000);
-	const t = await page.locator('body').innerText();
+	await page.waitForTimeout(1000);
 	dit('mise à jour sans erreur', (await erreurs(page)).length === 0, (await erreurs(page)).join(' ; '));
-	dit('version passée de 1.0.0 à 1.0.1', /ZZZTEST\s*:\s*1\.0\.0\s*→\s*1\.0\.1/.test(t),
-		(t.match(/ZZZTEST[^\n]{0,60}/) || [''])[0]);
+
+	// Une mise à jour de plugin est elle aussi un chantier : sauvegarde d'abord,
+	// remplacement ensuite, inventaire pour finir.
+	const issuePlugin = await attendreChantier(page, 120);
+	dit('le chantier du plugin arrive à son terme', issuePlugin.fini, 'dernière étape vue : ' + issuePlugin.dernier);
+	await page.waitForTimeout(1000);
+
+	// Deux lignes au journal : le remplacement, qui nomme la transition, puis la
+	// conclusion du chantier.
+	const lignesPlugin = JSON.parse(sql(
+		"SELECT message FROM spip_dashboard_journal WHERE operation = 'plugin_maj' ORDER BY id_dashboard_journal"
+	)).map((l) => String(l.message));
+	dit('version passée de 1.0.0 à 1.0.1', lignesPlugin.some((m) => /1\.0\.0\s*→\s*1\.0\.1/.test(m)),
+		lignesPlugin.join(' | '));
 } else {
 	dit('bouton de mise à jour présent', false);
 }
@@ -217,7 +229,8 @@ console.log('\n### Onglets « Plugins » et « PHP »');
 await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
 const panneauPlugins = page.locator('#panneau-plugins');
 const panneauPhp = page.locator('#panneau-php');
-dit('deux onglets présents', (await page.locator('[data-dashboard-onglets] [role="tab"]').count()) === 2);
+dit('trois onglets présents', (await page.locator('[data-dashboard-onglets] [role="tab"]').count()) === 3,
+	(await page.locator('[data-dashboard-onglets] [role="tab"]').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim()).join(' | '));
 dit('« Plugins » ouvert par défaut', (await panneauPlugins.isVisible()) && !(await panneauPhp.isVisible()));
 
 await page.locator('#onglet-php').click();
@@ -239,8 +252,311 @@ dit('chaque ligne porte une origine', origines.length > 0 && !origines.includes(
 await page.locator('#onglet-php').press('ArrowLeft');
 await page.waitForTimeout(200);
 dit('flèche gauche : retour à « Plugins »', (await panneauPlugins.isVisible()) && !(await panneauPhp.isVisible()));
+
+// Et vers la droite, jusqu'au troisième onglet.
+await page.locator('#onglet-plugins').press('ArrowRight');
+await page.locator('#onglet-php').press('ArrowRight');
+await page.waitForTimeout(200);
+dit('flèche droite : jusqu’à « Serveur »',
+	(await page.locator('#panneau-serveur').isVisible()) && !(await panneauPhp.isVisible()));
+await page.locator('#onglet-serveur').press('ArrowRight');
+await page.waitForTimeout(200);
+dit('la navigation au clavier boucle', await panneauPlugins.isVisible());
 dit('aucune extension PHP dans l’onglet « Plugins »',
 	!/\bphp:/i.test(await panneauPlugins.innerText()));
+
+/**
+ * Une balise laissée non compilée arrive dans l'URL sous la forme %23NOM, et
+ * l'opération reçoit un nom de balise en guise d'identifiant. Le symptôme est
+ * muet : la page revient avec « Site inconnu ». Le piège se tend tout seul —
+ * une balise à accolades imbriquée dans les arguments d'une autre suffit — donc
+ * on inspecte toutes les URL d'action plutôt qu'un bouton à la fois.
+ */
+async function urlsDActions(page, nom, url) {
+	await page.goto(base + url, { waitUntil: 'domcontentloaded' });
+	const liens = await page.locator('a.dashboard-bouton').evaluateAll((l) => l.map((a) => a.getAttribute('href') || ''));
+	const brutes = liens.filter((h) => /%23|#[A-Z_]{3,}/.test(h));
+	dit(`${nom} : aucune balise non compilée dans les URL d’action`, brutes.length === 0,
+		brutes.map((h) => (h.match(/%23[A-Za-z_:]+|#[A-Z_]{3,}/) || [''])[0]).join(', '));
+	const args = liens.map((h) => decodeURIComponent((h.match(/[?&]arg=([^&]*)/) || ['', ''])[1]))
+		.filter((a) => /^(core_maj|plugin_maj|plugin_maj_tous|sync|purger|sauvegarde)\b/.test(a));
+	const malFormes = args.filter((a) => !/^[a-z_]+\/\d+(\/|$)/.test(a));
+	dit(`${nom} : chaque URL d’action porte un identifiant numérique`, malFormes.length === 0, malFormes.join(', '));
+	return liens;
+}
+
+/**
+ * Attend qu'un chantier arrive à son terme.
+ *
+ * C'est le pilote JavaScript de la page qui le fait avancer, un aller-retour à
+ * la fois. Après le remplacement du noyau, la page elle-même ne peut plus se
+ * rendre — SPIP bloque son espace privé tant que le schéma n'est pas migré —
+ * mais les actions, elles, continuent de passer : le chantier va au bout.
+ */
+async function attendreChantier(page, secondes = 180) {
+	const limite = Date.now() + secondes * 1000;
+	let dernier = '';
+	while (Date.now() < limite) {
+		if ((await page.locator('[data-dashboard-chantier]').count()) === 0) {
+			return { fini: true, dernier };
+		}
+		dernier = (await page.locator('.dashboard-chantier-rang').innerText().catch(() => '')).trim();
+		await page.waitForTimeout(500);
+	}
+
+	return { fini: false, dernier };
+}
+
+console.log('\n### Onglet « Serveur »');
+
+// L'onglet est refusé tant que le site géré ne l'a pas explicitement autorisé :
+// c'est la plus indiscrète des permissions, et elle s'accorde à part.
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+const appelsServeur = [];
+page.on('response', (r) => {
+	if (/action=dashboard_serveur/.test(r.url())) { appelsServeur.push(r.status()); }
+});
+dit('onglet « Serveur » présent', (await page.locator('#onglet-serveur').count()) > 0);
+dit('rien n’est demandé au site avant d’ouvrir l’onglet', appelsServeur.length === 0, appelsServeur.join(','));
+
+await page.locator('#onglet-serveur').click();
+await page.waitForTimeout(2500);
+const refus = await page.locator('[data-serveur-bloc="resume"]').innerText();
+dit('consultation refusée tant qu’elle n’est pas autorisée', /désactivée|autoris/i.test(refus), refus.trim().slice(0, 90));
+
+await page.goto(base + '/ecrire/?exec=configurer_dashagent', { waitUntil: 'domcontentloaded' });
+await page.check('[name="op_serveur"]').catch(() => {});
+await page.locator('form input[type=submit]').last().click();
+await page.waitForTimeout(700);
+dit('consultation autorisée sur le site géré',
+	await page.locator('[name="op_serveur"]').isChecked().catch(() => false));
+
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await page.locator('#onglet-serveur').click();
+await page.waitForTimeout(3000);
+
+const resume = await page.locator('[data-serveur-bloc="resume"]').innerText();
+dit('résumé : version de PHP', /PHP\s+\d+\.\d+/.test(resume), resume.split('\n')[0]);
+dit('résumé : base de données', /sqlite|mysql|maria/i.test(resume));
+dit('résumé : poids de la base', /Poids de la base\s+[\d.]+\s*(o|Ko|Mo|Go)/.test(resume),
+	(resume.match(/Poids de la base[^\n]*/) || [''])[0]);
+dit('résumé : extensions PHP listées', /\d+ extensions PHP chargées/.test(resume),
+	(resume.match(/\d+ extensions PHP chargées/) || [''])[0]);
+
+// Parcours d'une table : pagination, tri, filtre.
+const bloc = page.locator('[data-serveur-bloc="tables"]');
+const choix = bloc.locator('select').first();
+dit('les tables du site sont listées', (await choix.locator('option').count()) > 10,
+	(await choix.locator('option').count()) + ' entrées');
+await choix.selectOption('spip_meta');
+await page.waitForTimeout(1500);
+const total = Number(((await bloc.locator('.dashboard-serveur-pagination').innerText()).match(/sur (\d+)/) || [0, 0])[1]);
+dit('le contenu d’une table s’affiche', (await bloc.locator('tbody tr').count()) > 0,
+	(await bloc.locator('tbody tr').count()) + ' lignes sur ' + total);
+
+await bloc.locator('thead th button').first().click();
+await page.waitForTimeout(1200);
+dit('le tri s’applique sur une colonne', /[↑↓]/.test(await bloc.locator('thead th').first().innerText()));
+
+if (total > 50) {
+	await bloc.locator('.dashboard-serveur-pagination button', { hasText: 'suivant' }).click();
+	await page.waitForTimeout(1200);
+	dit('la pagination avance',
+		/^51/.test((await bloc.locator('.dashboard-serveur-pagination').innerText()).trim()),
+		(await bloc.locator('.dashboard-serveur-pagination').innerText()).replace(/\s+/g, ' ').trim());
+}
+
+await bloc.locator('select').nth(1).selectOption('nom');
+await bloc.locator('input[type=search]').fill('version');
+await page.waitForTimeout(1500);
+const filtre = Number(((await bloc.locator('.dashboard-serveur-pagination').innerText()).match(/sur (\d+)/) || [0, 0])[1]);
+dit('le filtre restreint la sélection', filtre > 0 && filtre < total, filtre + ' sur ' + total);
+
+// Le point qui compte : rien de secret ne doit atteindre l'écran.
+await choix.selectOption('spip_auteurs');
+await page.waitForTimeout(1500);
+const entetes = await bloc.locator('thead th').allInnerTexts();
+dit('les colonnes sensibles sont annoncées comme masquées',
+	entetes.filter((h) => /masquée/.test(h)).length >= 3,
+	entetes.filter((h) => /masquée/.test(h)).map((h) => h.split('(')[0].trim()).join(', '));
+const corpsAuteurs = await bloc.locator('tbody').innerText();
+dit('aucune empreinte de mot de passe à l’écran', !/\$2y\$|\$argon|\$1\$/.test(corpsAuteurs));
+dit('les colonnes utiles restent lisibles', /admin/.test(corpsAuteurs));
+
+await choix.selectOption('spip_meta');
+await page.waitForTimeout(1500);
+await bloc.locator('select').nth(1).selectOption('nom');
+await bloc.locator('input[type=search]').fill('dashagent');
+await page.waitForTimeout(1500);
+dit('le secret partagé de l’agent ne s’affiche pas',
+	!/c2:/.test(await bloc.locator('tbody').innerText()),
+	(await bloc.locator('tbody').innerText()).replace(/\s+/g, ' ').trim().slice(0, 70));
+
+// Fichiers de configuration.
+const fichiers = page.locator('[data-serveur-bloc="fichiers"] details');
+dit('trois fichiers proposés', (await fichiers.count()) === 3);
+const options = fichiers.filter({ hasText: 'mes_options' }).first();
+await options.locator('summary').click();
+await page.waitForTimeout(1500);
+const texteOptions = await options.innerText();
+dit('le contenu de mes_options.php s’affiche', /_DASHAGENT_ARCHIVES_HTTP/.test(texteOptions),
+	texteOptions.replace(/\s+/g, ' ').slice(0, 90));
+
+// phpinfo, dans son cadre isolé.
+await page.locator('[data-serveur-bloc="phpinfo"] summary').click();
+await page.waitForTimeout(3000);
+const cadre = page.locator('iframe.dashboard-serveur-phpinfo');
+dit('phpinfo s’affiche dans un cadre isolé', (await cadre.count()) === 1);
+if (await cadre.count()) {
+	const dedans = page.frameLocator('iframe.dashboard-serveur-phpinfo');
+	const texte = await dedans.locator('body').innerText();
+	dit('phpinfo porte bien ses sections', (await dedans.locator('h2').count()) > 10,
+		(await dedans.locator('h2').count()) + ' sections');
+	dit('les variables d’environnement sensibles sont masquées',
+		!/proxy-injected|sk-live|ghp_[A-Za-z0-9]/.test(texte),
+		(texte.match(/[^\n]*(proxy-injected|sk-live|ghp_)[^\n]*/) || [''])[0].slice(0, 70));
+}
+
+console.log('\n### URL des boutons d’action');
+await urlsDActions(page, 'parc', '/ecrire/?exec=dashboard');
+await urlsDActions(page, 'fiche du site', '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
+
+console.log('\n### Mise à jour du core SPIP');
+const coreCible = process.env.CORE_CIBLE || '4.4.99';
+const lu = (relatif) => { try { return readFileSync(`${site}/${relatif}`, 'utf8'); } catch { return null; } };
+
+// Le dépôt d'archives de core est local et en http : le tableau de bord ne
+// l'accepte qu'avec l'autorisation explicite déjà cochée, et l'agent qu'avec
+// _DASHAGENT_ARCHIVES_HTTP dans son mes_options.php. Deux accords distincts.
+// Sur le site géré, la mise à jour du core est refusée par défaut : c'est une
+// case à cocher à part, et le test la coche comme le ferait l'administrateur.
+await page.goto(base + '/ecrire/?exec=configurer_dashagent', { waitUntil: 'domcontentloaded' });
+await page.check('[name="op_core_maj"]').catch(() => {});
+await page.locator('form input[type=submit]').last().click();
+await page.waitForTimeout(700);
+dit('mise à jour du core autorisée sur le site géré',
+	await page.locator('[name="op_core_maj"]').isChecked().catch(() => false));
+
+await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
+await page.fill('[name="url_archives_spip"]', base + '/core-archives/');
+await page.fill('[name="versions_manuelles"]', `4.4 = ${coreCible}`);
+// Zéro seconde de validité : une sauvegarde neuve est exigée, ce qui vérifie
+// que la règle « une sauvegarde avant toute mise à jour » n'a pas d'échappatoire.
+await page.fill('[name="fraicheur_sauvegarde"]', '0');
+await page.locator('form input[type=submit]').first().click();
+await page.waitForLoadState('domcontentloaded').catch(() => {});
+await page.waitForTimeout(500);
+dit('dépôt d’archives de core configuré', (await page.locator('body').innerText()).includes('enregistrée'));
+
+// Le retard de core est décidé à la synchronisation : il faut la rejouer pour
+// que la nouvelle version cible soit prise en compte.
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await bouton(page, 'Synchroniser');
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await urlsDActions(page, 'fiche du site, mise à jour du core proposée',
+	'/ecrire/?exec=dashboard_site&id_dashboard_site=1');
+const boutonCore = page.locator('a.dashboard-bouton-danger').first();
+dit('mise à jour du core proposée', (await boutonCore.count()) > 0);
+
+// État d'avant, pour prouver ensuite que ce sont bien les fichiers de l'archive
+// qui sont arrivés, et que rien d'autre n'a bougé.
+const gardes = ['config', 'IMG', 'local', 'squelettes', 'plugins'];
+const avant = Object.fromEntries(gardes.map((g) => [g, lu(`${g}/temoin-dashboard.txt`)]));
+dit('témoins en place avant la mise à jour', Object.values(avant).every((v) => v !== null),
+	JSON.stringify(Object.entries(avant).filter(([, v]) => v === null).map(([k]) => k)));
+dit('témoin du core absent avant', lu('ecrire/temoin-core.txt') === null);
+
+const sauvegardesAvant = JSON.parse(sql('SELECT count(*) AS n FROM spip_dashboard_sauvegardes'))[0].n;
+
+page.once('dialog', (d) => d.accept());
+await boutonCore.click();
+await page.waitForLoadState('domcontentloaded').catch(() => {});
+
+// Le pilote de la page peut mener un chantier court en une poignée de secondes :
+// l'encadré est relevé tout de suite, avant qu'il n'ait eu le temps de partir.
+const encadreVu = (await page.locator('[data-dashboard-chantier]').count()) > 0;
+await page.waitForTimeout(1500);
+
+dit('lancement sans erreur', (await erreurs(page)).length === 0, (await erreurs(page)).join(' ; '));
+
+const retour = decodeURIComponent((page.url().match(/dashboard_message=([^&]*)/) || ['', ''])[1]).replace(/\+/g, ' ');
+const statut = (page.url().match(/dashboard_statut=(\w+)/) || ['', ''])[1];
+dit('l’opération démarre sans refus', statut === 'ok', statut + ' : ' + retour);
+dit('la première étape est une sauvegarde', /[Ss]auvegarde/.test(retour), retour);
+dit('un encadré de chantier est affiché', encadreVu);
+
+// Le pilote de la page mène l'opération à son terme, étape par étape.
+const issue = await attendreChantier(page);
+dit('le chantier arrive à son terme', issue.fini, 'dernière étape vue : ' + issue.dernier);
+await page.waitForTimeout(1500);
+
+const chantier = JSON.parse(sql(
+	"SELECT statut, etape, tentatives, message FROM spip_dashboard_chantiers WHERE operation = 'core_maj' ORDER BY id_dashboard_chantier DESC LIMIT 1"
+))[0] || {};
+dit('le chantier est enregistré comme réussi', chantier.statut === 'ok', JSON.stringify(chantier));
+// Le journal porte deux lignes pour l'opération : le remplacement lui-même, qui
+// nomme la transition, et la conclusion du chantier.
+const lignesCore = JSON.parse(sql(
+	"SELECT message FROM spip_dashboard_journal WHERE operation = 'core_maj' ORDER BY id_dashboard_journal"
+)).map((l) => String(l.message));
+dit(`le journal porte la transition 4.4.23 → ${coreCible}`,
+	lignesCore.some((m) => new RegExp(`4\\.4\\.23\\s*→\\s*${coreCible.replace(/\./g, '\\.')}`).test(m)),
+	lignesCore.join(' | '));
+dit('le journal porte la conclusion du chantier',
+	lignesCore.some((m) => /terminé/.test(m)), lignesCore.join(' | '));
+
+const sauvegardesApres = JSON.parse(sql('SELECT count(*) AS n FROM spip_dashboard_sauvegardes'))[0].n;
+dit('une sauvegarde neuve a précédé la mise à jour', Number(sauvegardesApres) > Number(sauvegardesAvant),
+	sauvegardesAvant + ' → ' + sauvegardesApres);
+
+dit('fichiers de l’archive réellement déployés', (lu('ecrire/temoin-core.txt') || '').includes(coreCible),
+	String(lu('ecrire/temoin-core.txt')));
+dit('version de branche remplacée sur le disque',
+	new RegExp(`spip_version_branche\\s*=\\s*['"]${coreCible.replace(/\./g, '\\.')}`).test(lu('ecrire/inc_version.php') || ''));
+
+const rollback = readdirSync(site).filter((n) => /^ecrire\.dashagent-\d{14}$/.test(n));
+dit('ancien core conservé pour rollback', rollback.length === 1, rollback.join(', '));
+
+for (const g of gardes) {
+	dit(`${g}/ préservé`, lu(`${g}/temoin-dashboard.txt`) === avant[g]);
+}
+dit('plugin mis à jour non écrasé', (lu('plugins/zzztest/paquet.xml') || '').includes('1.0.1'));
+dit('secret de l’agent préservé', (lu('config/mes_options.php') || '').includes('_DASHAGENT_ARCHIVES_HTTP'));
+
+// Le site tourne désormais sur les fichiers déployés : s'il ne répondait plus,
+// la mise à jour aurait « réussi » en cassant le site.
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+dit('l’espace privé répond encore après le remplacement', (await erreurs(page)).length === 0,
+	(await erreurs(page)).join(' ; '));
+// « la page contient 4.4.99 » ne prouverait rien : le badge « 4.4.23 → 4.4.99 »
+// l'affiche aussi quand rien ne s'est passé. C'est la version enregistrée qui
+// compte, et la disparition de la proposition de mise à jour.
+const apres = JSON.parse(sql('SELECT version_spip, core_maj, base_maj FROM spip_dashboard_sites WHERE id_dashboard_site = 1'))[0];
+dit('version du site mise à jour dans le parc', apres.version_spip === coreCible, JSON.stringify(apres));
+dit('plus de retard de core signalé', apres.core_maj === 'non', apres.core_maj);
+
+console.log('\n### Migration du schéma de base');
+const baseCible = process.env.BASE_CIBLE || '2026090100';
+
+// Remplacer les fichiers du noyau ne suffit pas : l'archive annonce un schéma
+// plus récent, et SPIP bloque l'espace privé du site tant qu'il n'est pas migré.
+// C'est l'étape « base » du chantier qui l'a joué, sans intervention humaine.
+dit('la version de schéma attendue a bien changé',
+	new RegExp(`spip_version_base\\s*=\\s*${baseCible}`).test(lu('ecrire/inc_version.php') || ''));
+dit('le schéma enregistré en base a suivi',
+	JSON.parse(sql("SELECT valeur FROM spip_meta WHERE nom = 'version_installee'"))[0]?.valeur === baseCible,
+	JSON.parse(sql("SELECT valeur FROM spip_meta WHERE nom = 'version_installee'"))[0]?.valeur);
+
+// Le palier ajouté à l'archive crée une colonne : c'est la preuve que la
+// migration a réellement joué, et pas seulement écrit un numéro de version.
+const colonnes = JSON.parse(sql("SELECT name FROM pragma_table_info('spip_jobs')")).map((c) => c.name);
+dit('le palier de migration a bien été appliqué', colonnes.includes('temoin_dashboard'), colonnes.join(', '));
+
+dit('plus de migration de base en attente', apres.base_maj === 'non', apres.base_maj);
+dit('l’espace privé du site n’est plus bloqué',
+	!/procédure de mise à jour doit être lancée/.test(await page.locator('body').innerText()));
+dit('plus de mise à jour de core proposée',
+	(await page.locator('a.dashboard-bouton-danger').count()) === 0);
 
 console.log('\n### Restauration du dump');
 try {

@@ -32,6 +32,7 @@ function formulaires_configurer_dashagent_charger_dist() {
 		'op_sauvegarde'     => dashagent_config('op_sauvegarde', ''),
 		'op_plugin_maj'     => dashagent_config('op_plugin_maj', ''),
 		'op_core_maj'       => dashagent_config('op_core_maj', ''),
+		'op_serveur'        => dashagent_config('op_serveur', ''),
 		'retention_journal' => dashagent_config('retention_journal', 90),
 		'retention_backup'  => dashagent_config('retention_backup', 7),
 		'url_agent'         => url_de_base() . 'spip.php?action=dashagent',
@@ -104,7 +105,7 @@ function formulaires_configurer_dashagent_traiter_dist() {
 	$config['retention_journal'] = max(1, (int) _request('retention_journal'));
 	$config['retention_backup']  = max(1, (int) _request('retention_backup'));
 
-	foreach (['op_infos', 'op_purger', 'op_sauvegarde', 'op_plugin_maj', 'op_core_maj'] as $op) {
+	foreach (['op_infos', 'op_purger', 'op_sauvegarde', 'op_plugin_maj', 'op_core_maj', 'op_serveur'] as $op) {
 		$config[$op] = (_request($op) === 'on') ? 'on' : '';
 	}
 
