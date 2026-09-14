@@ -176,8 +176,15 @@
 	background: rgba(43, 108, 163, .12);
 	font-variant-numeric: tabular-nums;
 }
+/* Ce qui se joue à l'instant, par opposition au message, qui rend compte de
+   l'étape précédente. Les confondre faisait lire « bloqué sur la sauvegarde »
+   quand les contrôles préalables étaient en cours. */
+.dashboard-chantier-travail {
+	font-weight: bold;
+}
 .dashboard-chantier-message {
 	color: inherit;
+	opacity: .8;
 }
 
 /* Une base en attente de migration n'est pas un simple retard de version :

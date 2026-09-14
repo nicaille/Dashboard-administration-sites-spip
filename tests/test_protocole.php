@@ -250,10 +250,64 @@ echo "\n== URL des archives SPIP ==\n";
 
 $GLOBALS['dashboard_config_test'] = ['url_archives_spip' => 'https://files.spip.net/spip/archives/'];
 require_once chemin_plugin('dashboard') . '/inc/dashboard_versions.php';
+
+/* L'index tel que le publie files.spip.net : le nom est en minuscules. Le
+   déduire d'une convention supposée valait un « HTTP 404 » après la sauvegarde,
+   au pire moment. */
+$index = dashboard_archives_analyser(
+	'<a href="spip-v4.2.16.zip">spip-v4.2.16.zip</a>' . "\n"
+	. '<a href="spip-v4.4.23.zip">spip-v4.4.23.zip</a>' . "\n"
+	. '<a href="spip-v4.4.16.zip">spip-v4.4.16.zip</a>' . "\n"
+	. '<a href="spip-v4.4.23.zip.md5">empreinte</a>'
+);
+verifier('deux branches relevées dans l’index', count($index['versions']) === 2, json_encode($index['versions']));
+verifier('la plus haute version de la branche est retenue',
+	($index['versions']['4.4'] ?? '') === '4.4.23', json_encode($index['versions']));
+verifier('le nom de fichier est relevé tel quel',
+	($index['fichiers']['4.4.23'] ?? '') === 'spip-v4.4.23.zip', json_encode($index['fichiers']));
+
+/* Certains miroirs emploient la capitale : c'est leur nom qui fait foi, pas
+   le nôtre. */
+$capitale = dashboard_archives_analyser('SPIP-v4.4.99.zip');
+verifier('la casse du miroir est conservée',
+	($capitale['fichiers']['4.4.99'] ?? '') === 'SPIP-v4.4.99.zip', json_encode($capitale['fichiers']));
+
+verifier('un index vide ne donne rien',
+	dashboard_archives_analyser('<html><body>rien ici</body></html>')['fichiers'] === []);
+
+/* L'index effectivement consulté est simulé par le stub de recuperer_url. */
+$GLOBALS['dashboard_index_archives_test'] = '<a href="spip-v4.2.16.zip">spip-v4.2.16.zip</a>';
 verifier(
-	'URL construite pour une version valide',
-	dashboard_url_archive_spip('4.2.16') === 'https://files.spip.net/spip/archives/SPIP-v4.2.16.zip',
+	'URL prise sur le nom publié par l’index',
+	dashboard_url_archive_spip('4.2.16') === 'https://files.spip.net/spip/archives/spip-v4.2.16.zip',
 	dashboard_url_archive_spip('4.2.16')
+);
+
+/* Dépôt sans index — un miroir privé, un répertoire sans listing : on demande
+   au serveur lequel des noms d'usage existe, plutôt que de parier. */
+$GLOBALS['dashboard_index_archives_test'] = null;
+$GLOBALS['dashboard_archives_servies_test'] = ['https://files.spip.net/spip/archives/spip-v4.4.23.zip'];
+verifier(
+	'sans index, le nom d’usage est vérifié auprès du serveur',
+	dashboard_url_archive_spip('4.4.23') === 'https://files.spip.net/spip/archives/spip-v4.4.23.zip',
+	dashboard_url_archive_spip('4.4.23')
+);
+
+/* Un miroir qui n'a que la capitale : c'est lui qui a raison. */
+$GLOBALS['dashboard_archives_servies_test'] = ['https://files.spip.net/spip/archives/SPIP-v4.4.99.zip'];
+verifier(
+	'un miroir en capitales est trouvé malgré tout',
+	dashboard_url_archive_spip('4.4.99') === 'https://files.spip.net/spip/archives/SPIP-v4.4.99.zip',
+	dashboard_url_archive_spip('4.4.99')
+);
+
+/* Rien ne répond : une adresse est tout de même rendue, pour que le message
+   d'erreur en nomme une. */
+$GLOBALS['dashboard_archives_servies_test'] = [];
+verifier(
+	'aucun nom ne répond : l’adresse la plus probable est rendue',
+	dashboard_url_archive_spip('4.4.23') === 'https://files.spip.net/spip/archives/spip-v4.4.23.zip',
+	dashboard_url_archive_spip('4.4.23')
 );
 verifier('version fantaisiste refusée', dashboard_url_archive_spip('../../etc/passwd') === '');
 verifier('version vide refusée', dashboard_url_archive_spip('') === '');

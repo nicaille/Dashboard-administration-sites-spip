@@ -193,6 +193,10 @@ echo "== Archive de core factice (pour la mise à jour du noyau)"
 # bien les fichiers de l'archive qui sont arrivés sur le site. Le contenu reste
 # celui d'un SPIP valide, donc le site fonctionne encore après le remplacement.
 mkdir -p "$SITE/core-archives"
+# Le nom porte volontairement une capitale, alors que le nom de repli du
+# tableau de bord est en minuscules : la mise à jour du core ne peut donc
+# aboutir que s'il a bien relevé le nom exact dans l'index du dépôt, au lieu
+# de le fabriquer. Un système de fichiers sensible à la casse fait le reste.
 cp "$ZIP" "$SITE/core-archives/SPIP-v$CORE_CIBLE.zip"
 php "$RACINE/tests/integration/preparer-core.php" "$SITE/core-archives/SPIP-v$CORE_CIBLE.zip" "$CORE_CIBLE" "$BASE_CIBLE" \
 	|| { echo "archive de core non préparée" >&2; exit 1; }

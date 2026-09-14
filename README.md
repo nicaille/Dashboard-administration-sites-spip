@@ -63,6 +63,16 @@ requête mourir en silence.
 | Tous les plugins | sauvegarde → inventaire → plugins, un par un → inventaire |
 | Le core | sauvegarde → contrôles → remplacement → migration du schéma → inventaire |
 
+L'encadré nomme **ce qui est en cours** — « Contrôles préalables sur le site… » —
+en plus du compte rendu de l'étape précédente : lire le second pour le premier
+faisait croire à un blocage là où il n'y en avait pas. Si le navigateur perd la
+main, il réessaie cinq fois avant de laisser la tâche de fond finir seule.
+
+L'adresse de l'archive de core n'est jamais devinée : elle est **relevée dans
+l'index du dépôt**, casse comprise, et à défaut d'index les noms d'usage sont
+essayés auprès du serveur avant qu'une mise à jour ne s'engage. Voir
+[docs/exploitation.md](docs/exploitation.md#doù-vient-ladresse-de-larchive).
+
 ## Consulter l'état d'un serveur
 
 Un onglet *Serveur* donne, pour un site géré : le résumé de PHP et de la base,
@@ -80,7 +90,7 @@ Ce qui reste exposé malgré tout est décrit dans [docs/securite.md](docs/secur
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/dashboard-1.0.9`, `plugins/dashboard_agent-1.0.9`. Ce n'est pas
+`plugins/dashboard-1.0.10`, `plugins/dashboard_agent-1.0.9`. Ce n'est pas
 décoratif : en déposant la nouvelle version **à côté** de l'ancienne plutôt que
 par-dessus, on évite le travers classique de la mise en ligne par FTP, où les
 fichiers supprimés entre deux versions survivent dans le dossier écrasé et

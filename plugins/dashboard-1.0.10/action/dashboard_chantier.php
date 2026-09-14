@@ -50,6 +50,8 @@ function action_dashboard_chantier_dist() {
  * @return array
  */
 function dashboard_chantier_etat_json($chantier) {
+	include_spip('dashboard_fonctions');
+
 	if (!$chantier) {
 		return ['ok' => false, 'fini' => true, 'message' => 'Opération introuvable'];
 	}
@@ -62,6 +64,9 @@ function dashboard_chantier_etat_json($chantier) {
 		'fini'    => dashboard_chantier_fini($chantier),
 		'statut'  => (string) $chantier['statut'],
 		'etape'   => (string) $chantier['etape'],
+		// Ce qui se joue à cet instant, par opposition à `message`, qui rend
+		// compte de l'étape précédente.
+		'travail' => dashboard_libelle_etape((string) $chantier['etape']),
 		'libelle' => dashboard_chantier_libelle((string) $chantier['operation'], (string) $chantier['cible']),
 		'rang'    => min((int) $chantier['rang'] + 1, $total),
 		'total'   => $total,
