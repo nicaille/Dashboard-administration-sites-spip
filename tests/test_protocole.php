@@ -250,10 +250,64 @@ echo "\n== URL des archives SPIP ==\n";
 
 $GLOBALS['dashboard_config_test'] = ['url_archives_spip' => 'https://files.spip.net/spip/archives/'];
 require_once chemin_plugin('dashboard') . '/inc/dashboard_versions.php';
+
+/* L'index tel que le publie files.spip.net : le nom est en minuscules. Le
+   déduire d'une convention supposée valait un « HTTP 404 » après la sauvegarde,
+   au pire moment. */
+$index = dashboard_archives_analyser(
+	'<a href="spip-v4.2.16.zip">spip-v4.2.16.zip</a>' . "\n"
+	. '<a href="spip-v4.4.23.zip">spip-v4.4.23.zip</a>' . "\n"
+	. '<a href="spip-v4.4.16.zip">spip-v4.4.16.zip</a>' . "\n"
+	. '<a href="spip-v4.4.23.zip.md5">empreinte</a>'
+);
+verifier('deux branches relevées dans l’index', count($index['versions']) === 2, json_encode($index['versions']));
+verifier('la plus haute version de la branche est retenue',
+	($index['versions']['4.4'] ?? '') === '4.4.23', json_encode($index['versions']));
+verifier('le nom de fichier est relevé tel quel',
+	($index['fichiers']['4.4.23'] ?? '') === 'spip-v4.4.23.zip', json_encode($index['fichiers']));
+
+/* Certains miroirs emploient la capitale : c'est leur nom qui fait foi, pas
+   le nôtre. */
+$capitale = dashboard_archives_analyser('SPIP-v4.4.99.zip');
+verifier('la casse du miroir est conservée',
+	($capitale['fichiers']['4.4.99'] ?? '') === 'SPIP-v4.4.99.zip', json_encode($capitale['fichiers']));
+
+verifier('un index vide ne donne rien',
+	dashboard_archives_analyser('<html><body>rien ici</body></html>')['fichiers'] === []);
+
+/* L'index effectivement consulté est simulé par le stub de recuperer_url. */
+$GLOBALS['dashboard_index_archives_test'] = '<a href="spip-v4.2.16.zip">spip-v4.2.16.zip</a>';
 verifier(
-	'URL construite pour une version valide',
-	dashboard_url_archive_spip('4.2.16') === 'https://files.spip.net/spip/archives/SPIP-v4.2.16.zip',
+	'URL prise sur le nom publié par l’index',
+	dashboard_url_archive_spip('4.2.16') === 'https://files.spip.net/spip/archives/spip-v4.2.16.zip',
 	dashboard_url_archive_spip('4.2.16')
+);
+
+/* Dépôt sans index — un miroir privé, un répertoire sans listing : on demande
+   au serveur lequel des noms d'usage existe, plutôt que de parier. */
+$GLOBALS['dashboard_index_archives_test'] = null;
+$GLOBALS['dashboard_archives_servies_test'] = ['https://files.spip.net/spip/archives/spip-v4.4.23.zip'];
+verifier(
+	'sans index, le nom d’usage est vérifié auprès du serveur',
+	dashboard_url_archive_spip('4.4.23') === 'https://files.spip.net/spip/archives/spip-v4.4.23.zip',
+	dashboard_url_archive_spip('4.4.23')
+);
+
+/* Un miroir qui n'a que la capitale : c'est lui qui a raison. */
+$GLOBALS['dashboard_archives_servies_test'] = ['https://files.spip.net/spip/archives/SPIP-v4.4.99.zip'];
+verifier(
+	'un miroir en capitales est trouvé malgré tout',
+	dashboard_url_archive_spip('4.4.99') === 'https://files.spip.net/spip/archives/SPIP-v4.4.99.zip',
+	dashboard_url_archive_spip('4.4.99')
+);
+
+/* Rien ne répond : une adresse est tout de même rendue, pour que le message
+   d'erreur en nomme une. */
+$GLOBALS['dashboard_archives_servies_test'] = [];
+verifier(
+	'aucun nom ne répond : l’adresse la plus probable est rendue',
+	dashboard_url_archive_spip('4.4.23') === 'https://files.spip.net/spip/archives/spip-v4.4.23.zip',
+	dashboard_url_archive_spip('4.4.23')
 );
 verifier('version fantaisiste refusée', dashboard_url_archive_spip('../../etc/passwd') === '');
 verifier('version vide refusée', dashboard_url_archive_spip('') === '');
@@ -524,6 +578,110 @@ verifier('octets bruts', dashboard_octets(512) === '512 o', dashboard_octets(512
 verifier('kilo-octets', dashboard_octets(2048) === '2 Ko', dashboard_octets(2048));
 verifier('méga-octets', dashboard_octets(5 * 1024 * 1024) === '5 Mo', dashboard_octets(5 * 1024 * 1024));
 verifier('zéro', dashboard_octets(0) === '0 o', dashboard_octets(0));
+
+echo "\n== Le dossier d'un plugin porte sa version ==\n";
+
+verifier(
+	'convention du site respectée : v6.3.4 devient v6.3.6',
+	dashagent_dossier_versionne('plugins/auto/saisies/v6.3.4', '6.3.4', '6.3.6') === 'plugins/auto/saisies/v6.3.6',
+	dashagent_dossier_versionne('plugins/auto/saisies/v6.3.4', '6.3.4', '6.3.6')
+);
+verifier(
+	'suffixe à tiret conservé',
+	dashagent_dossier_versionne('plugins/champs_extras_core-4.3.3', '4.3.3', '4.3.6') === 'plugins/champs_extras_core-4.3.6',
+	dashagent_dossier_versionne('plugins/champs_extras_core-4.3.3', '4.3.3', '4.3.6')
+);
+verifier(
+	'dossier sans numéro : le numéro est ajouté',
+	dashagent_dossier_versionne('plugins/saisies', '6.3.4', '6.3.6') === 'plugins/saisies-6.3.6',
+	dashagent_dossier_versionne('plugins/saisies', '6.3.4', '6.3.6')
+);
+verifier(
+	'ancien numéro sous une autre forme : remplacé, pas accumulé',
+	dashagent_dossier_versionne('plugins/saisies-6.3.4', '', '6.3.6') === 'plugins/saisies-6.3.6',
+	dashagent_dossier_versionne('plugins/saisies-6.3.4', '', '6.3.6')
+);
+verifier(
+	'la barre finale ne crée pas de dossier vide',
+	dashagent_dossier_versionne('plugins/saisies/v6.3.4/', '6.3.4', '6.3.6') === 'plugins/saisies/v6.3.6',
+	dashagent_dossier_versionne('plugins/saisies/v6.3.4/', '6.3.4', '6.3.6')
+);
+verifier(
+	'sans version d’archive, le dossier ne bouge pas',
+	dashagent_dossier_versionne('plugins/saisies/v6.3.4', '6.3.4', '') === 'plugins/saisies/v6.3.4'
+);
+verifier(
+	'même version : même dossier',
+	dashagent_dossier_versionne('plugins/saisies/v6.3.4', '6.3.4', '6.3.4') === 'plugins/saisies/v6.3.4'
+);
+verifier(
+	'un nom réduit à son numéro reste un numéro',
+	dashagent_dossier_versionne('plugins/saisies/6.3.4', '', '6.3.6') === 'plugins/saisies/6.3.6',
+	dashagent_dossier_versionne('plugins/saisies/6.3.4', '', '6.3.6')
+);
+verifier(
+	'le « v » du site est conservé même sans ancien numéro connu',
+	dashagent_dossier_versionne('plugins/saisies/v6.3.4', '', '6.3.6') === 'plugins/saisies/v6.3.6',
+	dashagent_dossier_versionne('plugins/saisies/v6.3.4', '', '6.3.6')
+);
+
+verifier(
+	'chemin relatif reconstruit sous son parent',
+	dashagent_dossier_relatif('auto/saisies/v6.3.4', 'v6.3.6') === 'auto/saisies/v6.3.6',
+	dashagent_dossier_relatif('auto/saisies/v6.3.4', 'v6.3.6')
+);
+verifier(
+	'plugin à la racine de plugins/',
+	dashagent_dossier_relatif('saisies', 'saisies-6.3.6') === 'saisies-6.3.6',
+	dashagent_dossier_relatif('saisies', 'saisies-6.3.6')
+);
+verifier(
+	'sans nouveau nom, le chemin est inchangé',
+	dashagent_dossier_relatif('auto/saisies/v6.3.4', '') === 'auto/saisies/v6.3.4'
+);
+
+echo "\n== Installation à côté, sans écraser ==\n";
+
+$bac = _DIR_TMP . 'installer-a-cote-' . bin2hex(random_bytes(4)) . '/';
+mkdir($bac . 'plugins/auto/saisies/v6.3.4', 0777, true);
+mkdir($bac . 'source', 0777, true);
+file_put_contents($bac . 'plugins/auto/saisies/v6.3.4/paquet.xml', '<paquet prefix="saisies" version="6.3.4" />');
+file_put_contents($bac . 'plugins/auto/saisies/v6.3.4/temoin-ancien.txt', 'ancien');
+file_put_contents($bac . 'source/paquet.xml', '<paquet prefix="saisies" version="6.3.6" />');
+
+$ancien  = $bac . 'plugins/auto/saisies/v6.3.4';
+$cible   = dashagent_dossier_versionne($ancien, '6.3.4', '6.3.6');
+$echange = dashagent_installer_a_cote($ancien, $cible, $bac . 'source');
+
+verifier('déploiement réussi', !empty($echange['ok']), (string) ($echange['erreur'] ?? ''));
+verifier('le nouveau dossier porte la nouvelle version', ($echange['dossier'] ?? '') === 'v6.3.6', $echange['dossier'] ?? '');
+verifier('les fichiers de la nouvelle version sont en place', is_file($cible . '/paquet.xml'));
+verifier('l’ancien dossier a été libéré', !is_dir($ancien));
+verifier('une copie de secours a été gardée', ($echange['sauvegarde'] ?? '') !== '', $echange['sauvegarde'] ?? '');
+verifier(
+	'la copie de secours est cachée au balayage de SPIP',
+	strncmp((string) ($echange['sauvegarde'] ?? ''), '.', 1) === 0,
+	$echange['sauvegarde'] ?? ''
+);
+verifier(
+	'la copie de secours contient bien l’ancienne version',
+	is_file($bac . 'plugins/auto/saisies/' . ($echange['sauvegarde'] ?? 'x') . '/temoin-ancien.txt')
+);
+verifier(
+	'les fichiers de l’ancienne version ne sont pas mélangés aux nouveaux',
+	!is_file($cible . '/temoin-ancien.txt')
+);
+
+/* Un déploiement précédent a laissé le nom libre convoité : mieux vaut
+   s'arrêter que d'écraser ce qu'on ne connaît pas. */
+mkdir($bac . 'plugins/auto/saisies/v6.4.0', 0777, true);
+mkdir($bac . 'source2', 0777, true);
+file_put_contents($bac . 'source2/paquet.xml', '<paquet prefix="saisies" version="6.4.0" />');
+$occupe = dashagent_installer_a_cote($cible, $bac . 'plugins/auto/saisies/v6.4.0', $bac . 'source2');
+verifier('un dossier déjà occupé interrompt le déploiement', empty($occupe['ok']));
+verifier('la version en place est intacte', is_file($cible . '/paquet.xml'));
+
+dashagent_supprimer_repertoire($bac, true);
 
 echo "\n----------------------------------------\n";
 echo ($total - $echecs) . " / $total vérifications passées\n";

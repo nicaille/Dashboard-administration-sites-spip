@@ -149,7 +149,13 @@ function dashagent_plugin_maj($args) {
 	}
 
 	if (!empty($resultat['ok'])) {
-		$resultat['post'] = dashagent_apres_maj();
+		// Le plugin a changé de dossier : sans le lui dire, SPIP ne retrouve
+		// plus celui qu'il avait noté comme actif et désactive le plugin.
+		$declare = [];
+		if (!empty($resultat['dossier_relatif']) && $resultat['dossier_relatif'] !== $plugin['dossier']) {
+			$declare = [$plugin['prefixe'] => $resultat['dossier_relatif']];
+		}
+		$resultat['post'] = dashagent_apres_maj($declare);
 
 		// La liste des plugins vient d'être réécrite en base : sans relecture,
 		// $GLOBALS['meta'] garde l'état d'avant la mise à jour et la version
@@ -243,7 +249,9 @@ function dashagent_plugin_maj_zip($plugin, $url, $sha256 = '') {
 		return ['ok' => false, 'erreur' => $controle['erreur']];
 	}
 
-	$echange = dashagent_remplacer_repertoire(rtrim($plugin['chemin'], '/'), $unzip['racine']);
+	$ancien  = rtrim($plugin['chemin'], '/');
+	$cible   = dashagent_dossier_versionne($ancien, $plugin['version'], $controle['version']);
+	$echange = dashagent_installer_a_cote($ancien, $cible, $unzip['racine']);
 	dashagent_supprimer_repertoire($extrait, true);
 
 	if (!$echange['ok']) {
@@ -255,6 +263,9 @@ function dashagent_plugin_maj_zip($plugin, $url, $sha256 = '') {
 		'erreur'          => '',
 		'version_archive' => $controle['version'],
 		'sauvegarde'      => $echange['sauvegarde'],
+		'dossier_avant'   => basename($ancien),
+		'dossier'         => $echange['dossier'],
+		'dossier_relatif' => dashagent_dossier_relatif($plugin['dossier'], $echange['dossier']),
 	];
 }
 
@@ -282,6 +293,141 @@ function dashagent_verifier_archive_plugin($racine, $prefixe) {
 	$version = preg_match('/\sversion\s*=\s*"([^"]+)"/i', $xml, $v) ? $v[1] : '';
 
 	return ['ok' => true, 'erreur' => '', 'version' => $version];
+}
+
+/**
+ * Où déposer une nouvelle version d'un plugin.
+ *
+ * Le dossier n'est pas réutilisé : la nouvelle version s'installe à côté, dans
+ * un dossier qui porte son propre numéro. Autrement `saisies/v6.3.4`
+ * contiendrait la 6.3.6, et plus rien sur le disque ne dirait la vérité.
+ *
+ * La convention du site est respectée plutôt qu'imposée : si le nom actuel
+ * porte l'ancien numéro, sous quelque forme que ce soit (`v6.3.4`, `-6.3.4`,
+ * `_6.3.4`), il est remplacé sur place ; sinon le numéro est ajouté à la fin.
+ *
+ * @param string $chemin Répertoire actuel du plugin
+ * @param string $version_avant
+ * @param string $version_apres
+ * @return string Chemin du répertoire à créer
+ */
+function dashagent_dossier_versionne($chemin, $version_avant, $version_apres) {
+	$chemin = rtrim((string) $chemin, '/');
+	$parent = dirname($chemin);
+	$nom    = basename($chemin);
+	$version_apres = trim((string) $version_apres);
+
+	if ($version_apres === '') {
+		return $chemin;
+	}
+
+	$version_avant = trim((string) $version_avant);
+	if ($version_avant !== '' && strpos($nom, $version_avant) !== false) {
+		$nouveau = str_replace($version_avant, $version_apres, $nom);
+	} elseif (preg_match('/^(.*?)([-_]?v?)(\d+(?:\.\d+)+)$/', $nom, $m)) {
+		// Un numéro déjà là sous une autre forme est remplacé en gardant ce qui
+		// l'annonce : `v6.3.4` reste un `v…`, `nom-6.3.4` reste un `nom-…`.
+		$nouveau = $m[1] . $m[2] . $version_apres;
+	} else {
+		// Rien qui ressemble à un numéro : on l'ajoute, avec le tiret
+		// qu'emploient les archives de SPIP.
+		$nouveau = $nom . '-' . $version_apres;
+	}
+
+	// Un nom vide ou réduit à des séparateurs rendrait le chemin inutilisable.
+	$nouveau = trim($nouveau, '/');
+	if ($nouveau === '' || $nouveau === '.' || $nouveau === '..') {
+		return $chemin;
+	}
+
+	return $parent . '/' . $nouveau;
+}
+
+/**
+ * Le chemin du nouveau dossier tel que SPIP le nomme : relatif à `plugins/`.
+ *
+ * C'est sous cette forme que la liste des plugins actifs est tenue ; sans elle,
+ * SPIP ne retrouverait pas le plugin après le changement de nom et le
+ * désactiverait.
+ *
+ * @param string $dossier_avant Chemin relatif actuel, p. ex. `auto/saisies/v6.3.4`
+ * @param string $nom_apres Nom du nouveau dossier, sans son chemin
+ * @return string
+ */
+function dashagent_dossier_relatif($dossier_avant, $nom_apres) {
+	$nom_apres = trim((string) $nom_apres, '/');
+	if ($nom_apres === '') {
+		return (string) $dossier_avant;
+	}
+	$parent = trim(dirname('/' . trim((string) $dossier_avant, '/')), '/');
+
+	return ($parent === '' || $parent === '.') ? $nom_apres : $parent . '/' . $nom_apres;
+}
+
+/**
+ * Installe une nouvelle version à côté de l'ancienne, sans rien écraser.
+ *
+ * L'ancienne est mise de côté sous un nom suffixé, ce qui la retire de la liste
+ * des plugins que SPIP retient — il garde la version la plus haute par préfixe —
+ * tout en la laissant disponible pour un retour arrière, jusqu'à ce que la tâche
+ * d'entretien l'efface.
+ *
+ * @param string $ancien Répertoire actuel du plugin
+ * @param string $nouveau Répertoire à créer
+ * @param string $source Répertoire extrait à déployer
+ * @return array{ok: bool, erreur: string, sauvegarde: string, dossier: string}
+ */
+function dashagent_installer_a_cote($ancien, $nouveau, $source) {
+	include_spip('inc/dashagent_fs');
+
+	$ancien  = rtrim($ancien, '/');
+	$nouveau = rtrim($nouveau, '/');
+	$source  = rtrim($source, '/');
+
+	// Même nom : le site ne versionne pas ses dossiers, ou la version n'a pas
+	// bougé. On retombe alors sur le remplacement en place.
+	if ($nouveau === $ancien) {
+		$echange = dashagent_remplacer_repertoire($ancien, $source);
+
+		return $echange + ['dossier' => basename($ancien)];
+	}
+
+	// Un déploiement précédent a pu laisser ce nom derrière lui.
+	if (is_dir($nouveau)) {
+		return [
+			'ok' => false,
+			'erreur' => 'Le répertoire ' . basename($nouveau) . ' existe déjà : déploiement interrompu',
+			'sauvegarde' => '',
+			'dossier' => '',
+		];
+	}
+
+	if (!@rename($source, $nouveau) && !dashagent_copier_repertoire($source, $nouveau)) {
+		return [
+			'ok' => false,
+			'erreur' => 'Déploiement impossible dans ' . basename($nouveau) . ' (droits ?)',
+			'sauvegarde' => '',
+			'dossier' => '',
+		];
+	}
+
+	// La nouvelle version est en place : écarter l'ancienne ne peut plus faire
+	// perdre le plugin, et son échec éventuel ne doit pas faire échouer la mise
+	// à jour — SPIP retiendra de toute façon la version la plus haute.
+	// Le point initial met l'ancienne version hors de portée du balayage de
+	// SPIP, qui ignore les dossiers cachés : sans lui, le site listerait deux
+	// fois le même plugin jusqu'au prochain entretien.
+	$sauvegarde = dirname($ancien) . '/.' . basename($ancien) . '.dashagent-' . date('YmdHis');
+	if (is_dir($ancien) && !@rename($ancien, $sauvegarde)) {
+		$sauvegarde = '';
+	}
+
+	return [
+		'ok'         => true,
+		'erreur'     => '',
+		'sauvegarde' => $sauvegarde ? basename($sauvegarde) : '',
+		'dossier'    => basename($nouveau),
+	];
 }
 
 /**
@@ -664,9 +810,12 @@ function dashagent_nettoyer_rollback($suffixe) {
 /**
  * Remise en cohérence de SPIP après un remplacement de fichiers.
  *
+ * @param array $dossiers Dossiers à déclarer actifs, préfixe => chemin relatif
+ *     à `plugins/`. Sert aux plugins qui ont changé de dossier en changeant de
+ *     version : SPIP tient sa liste par dossier, pas par préfixe.
  * @return array
  */
-function dashagent_apres_maj() {
+function dashagent_apres_maj($dossiers = []) {
 	include_spip('inc/dashagent_cache');
 
 	// Les fichiers viennent d'être remplacés, mais PHP garde en mémoire ceux
@@ -688,7 +837,7 @@ function dashagent_apres_maj() {
 	include_spip('inc/plugin');
 	$rapport['plugins_recalcules'] = false;
 	if (function_exists('ecrire_plugin_actifs')) {
-		ecrire_plugin_actifs([], false, 'ajoute');
+		ecrire_plugin_actifs($dossiers, false, 'ajoute');
 		$rapport['plugins_recalcules'] = true;
 	}
 

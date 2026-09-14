@@ -42,10 +42,20 @@ function dashagent_entretien_rollbacks() {
 
 	$limite = time() - 7 * 86400;
 	$n = 0;
-	$candidats = array_merge(
-		(array) glob((_DIR_RACINE ?: './') . '*.dashagent-[0-9]*'),
-		defined('_DIR_PLUGINS') ? (array) glob(_DIR_PLUGINS . '*.dashagent-[0-9]*') : []
-	);
+	$candidats = (array) glob((_DIR_RACINE ?: './') . '*.dashagent-[0-9]*');
+
+	// Les anciennes versions de plugins sont cachées par un point initial, que
+	// `glob` n'atteint pas sans le nommer, et vivent à la profondeur où le site
+	// range ses plugins — souvent `plugins/auto/nom/`.
+	if (defined('_DIR_PLUGINS')) {
+		foreach (['', '*/', '*/*/', '*/*/*/'] as $profondeur) {
+			$candidats = array_merge(
+				$candidats,
+				(array) glob(_DIR_PLUGINS . $profondeur . '*.dashagent-[0-9]*'),
+				(array) glob(_DIR_PLUGINS . $profondeur . '.*.dashagent-[0-9]*')
+			);
+		}
+	}
 
 	foreach ($candidats as $chemin) {
 		if (filemtime($chemin) > $limite) {

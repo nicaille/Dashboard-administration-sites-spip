@@ -211,6 +211,13 @@ function dashboard_operation_plugin_maj($id_dashboard_site, $prefixe, $options =
 
 	$message = $prefixe . ' : ' . (string) ($reponse['data']['version_avant'] ?? '?')
 		. ' → ' . (string) ($reponse['data']['version_apres'] ?? '?');
+
+	// Le dossier change de nom avec la version : le dire évite de chercher
+	// pourquoi l'ancien répertoire ne contient plus rien.
+	$dossier = (string) ($reponse['data']['dossier'] ?? '');
+	if ($dossier !== '' && $dossier !== (string) ($reponse['data']['dossier_avant'] ?? '')) {
+		$message .= ' (dossier ' . $dossier . ')';
+	}
 	dashboard_journaliser($id_dashboard_site, 'plugin_maj', 'ok', $message, $reponse['data'], $reponse['duree_ms']);
 
 	dashboard_synchroniser($id_dashboard_site);

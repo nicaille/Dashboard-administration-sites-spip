@@ -2,8 +2,8 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/dashboard-1.0.8`,
-`plugins/dashboard_agent-1.0.8`.
+`plugins/<prefixe>-<version>` : `plugins/dashboard-1.0.10`,
+`plugins/dashboard_agent-1.0.9`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
 dans le même commit que le changement de `version=` dans son `paquet.xml`. Un
@@ -20,6 +20,14 @@ la plus élevée quand deux dossiers déclarent le même (`ecrire/inc/plugin.php
 
 À ne pas confondre avec le déclenchement des migrations : `maj_plugin()` compare
 la version du `paquet.xml` à celle mémorisée en meta, jamais le nom du dossier.
+
+**L'agent applique la même règle aux sites qu'il administre** : une mise à jour
+de plugin par archive installe la nouvelle version dans un dossier à son numéro
+et écarte l'ancien, au lieu de déployer par-dessus
+(`dashagent_dossier_versionne()` et `dashagent_installer_a_cote()`, dans
+`inc/dashagent_maj.php`). Comme SPIP tient sa liste de plugins actifs par
+dossier, le nouveau lui est déclaré dans la foulée — sans quoi le plugin serait
+désactivé par son propre changement de nom.
 
 ### Ne pas figer la version dans les références
 

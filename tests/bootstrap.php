@@ -39,6 +39,28 @@ function include_spip($chemin) {
 	return true;
 }
 
+/* `ecrire_config()` du core : le cache des versions y passe. Les tests le
+   relisent par `lire_config()`, qui puise dans la même configuration simulée. */
+function ecrire_config($chemin, $valeur) {
+	$GLOBALS['dashboard_config_test'][preg_replace('#^dashboard/#', '', (string) $chemin)] = $valeur;
+
+	return true;
+}
+
+/* Aucun appel sortant depuis les tests unitaires. Deux simulations : l'index des
+   archives, et la liste des adresses auxquelles un HEAD répond 200. */
+function recuperer_url($url, $options = []) {
+	if (($options['methode'] ?? 'GET') === 'HEAD') {
+		$servies = $GLOBALS['dashboard_archives_servies_test'] ?? [];
+
+		return ['status' => in_array($url, $servies, true) ? 200 : 404];
+	}
+
+	$page = $GLOBALS['dashboard_index_archives_test'] ?? null;
+
+	return $page === null ? false : ['status' => 200, 'page' => $page];
+}
+
 function _T($clef, $args = []) {
 	return $clef;
 }
@@ -54,7 +76,7 @@ function spip_version_compare($v1, $v2, $op = null) {
 /**
  * Chemin d'un plugin, retrouvé par son préfixe.
  *
- * Les dossiers de plugins portent leur version (`dashboard-1.0.8`), pour qu'une
+ * Les dossiers de plugins portent leur version (`dashboard-1.0.10`), pour qu'une
  * mise en ligne n'écrase pas la version précédente. Les retrouver par préfixe
  * évite d'avoir à toucher ce fichier à chaque montée de version.
  *

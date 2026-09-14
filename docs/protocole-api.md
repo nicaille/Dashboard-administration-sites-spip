@@ -168,6 +168,13 @@ de SVP.
 Une archive ZIP est refusée si son `paquet.xml` ne déclare pas le préfixe
 attendu : une URL erronée ne peut donc pas écraser un plugin par un autre.
 
+La stratégie `zip` n'écrase pas non plus le dossier existant : elle installe la
+nouvelle version dans un dossier portant son numéro, écarte l'ancien sous
+`.<nom>.dashagent-AAAAMMJJHHMMSS`, et déclare le nouveau dossier à SPIP. La
+réponse porte alors `dossier_avant`, `dossier` et `dossier_relatif` (chemin du
+nouveau dossier relatif à `plugins/`), en plus de `version_avant`,
+`version_apres`, `version_archive` et `sauvegarde`.
+
 ### `core_maj_preflight`
 
 Sans argument. Retourne le détail des contrôles : extension zip, inscriptibilité

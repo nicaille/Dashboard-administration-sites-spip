@@ -12,7 +12,7 @@
 $racine = dirname(__DIR__);
 
 /**
- * Les dossiers de plugins portent leur version (`dashboard-1.0.8`), pour qu'une
+ * Les dossiers de plugins portent leur version (`dashboard-1.0.10`), pour qu'une
  * mise en ligne n'écrase pas la version précédente. On les retrouve donc par
  * préfixe, sans quoi ce fichier serait à retoucher à chaque montée de version.
  *
@@ -411,10 +411,19 @@ foreach ($plugins as $plugin) {
 		"$nom_court : ecrire_plugin_actifs() n’est jamais appelée en mode « raz »",
 		!preg_match("/ecrire_plugin_actifs\\([^;]*'raz'/", $code)
 	);
+	// En mode « ajoute », la liste fournie s'ajoute aux plugins déjà actifs :
+	// elle ne sert qu'à déclarer un dossier que SPIP ne retrouverait pas seul,
+	// celui d'un plugin qui a changé de nom en changeant de version.
 	verifier(
-		"$nom_court : recalcul par « ajoute » sur liste vide",
-		(bool) preg_match("/ecrire_plugin_actifs\\(\\s*\\[\\s*\\]\\s*,[^;]*'ajoute'/", $code)
+		"$nom_court : recalcul par « ajoute », sur liste vide ou sur les dossiers déplacés",
+		(bool) preg_match("/ecrire_plugin_actifs\\(\\s*(\\[\\s*\\]|\\\$dossiers)\\s*,[^;]*'ajoute'/", $code)
 	);
+	if (strpos($code, 'function dashagent_apres_maj(') !== false) {
+		verifier(
+			"$nom_court : dashagent_apres_maj() ne déclare aucun dossier par défaut",
+			(bool) preg_match('/function dashagent_apres_maj\\(\\s*\\$dossiers\\s*=\\s*\\[\\s*\\]\\s*\\)/', $code)
+		);
+	}
 }
 
 echo "\n== Champs éditables ==\n";

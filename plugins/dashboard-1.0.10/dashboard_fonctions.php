@@ -376,6 +376,31 @@ function dashboard_libelle_operation($operation, $cible = '') {
 }
 
 /**
+ * Ce que le chantier est en train de faire, en clair.
+ *
+ * L'encadré ne portait jusqu'ici que le message de l'étape **précédente** :
+ * « bloqué sur la sauvegarde » se lisait alors qu'en réalité les contrôles
+ * préalables étaient en cours. Nommer le travail en cours lève l'ambiguïté.
+ *
+ * @filtre
+ * @param string $etape
+ * @return string
+ */
+function dashboard_libelle_etape($etape) {
+	$libelles = [
+		'sauvegarde' => 'dashboard:etape_sauvegarde',
+		'preflight'  => 'dashboard:etape_preflight',
+		'core'       => 'dashboard:etape_core',
+		'base'       => 'dashboard:etape_base',
+		'plugin'     => 'dashboard:etape_plugin',
+		'plugins'    => 'dashboard:etape_plugins',
+		'sync'       => 'dashboard:etape_sync',
+	];
+
+	return isset($libelles[$etape]) ? _T($libelles[$etape]) : (string) $etape;
+}
+
+/**
  * Synthèse d'un parc : compteurs pour la page d'ensemble.
  *
  * @filtre

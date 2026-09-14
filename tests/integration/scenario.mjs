@@ -7,11 +7,12 @@
  */
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 
 const base = process.env.BASE_URL || 'http://127.0.0.1:8321';
 const site = process.env.SITE_DIR;
 const bdd = `${site}/config/bases/spip.sqlite`;
+const lu = (relatif) => { try { return readFileSync(`${site}/${relatif}`, 'utf8'); } catch { return null; } };
 
 let echecs = 0;
 const dit = (titre, ok, detail = '') => {
@@ -197,16 +198,37 @@ if (await boutonMaj.count()) {
 	)).map((l) => String(l.message));
 	dit('version passée de 1.0.0 à 1.0.1', lignesPlugin.some((m) => /1\.0\.0\s*→\s*1\.0\.1/.test(m)),
 		lignesPlugin.join(' | '));
+	dit('le journal nomme le nouveau dossier', lignesPlugin.some((m) => /dossier zzztest-1\.0\.1/.test(m)),
+		lignesPlugin.join(' | '));
 } else {
 	dit('bouton de mise à jour présent', false);
 }
 
-// Le remplacement des fichiers ne doit pas désactiver les plugins : « raz »
-// sur une liste partielle couperait le dashboard et l'agent eux-mêmes.
+// La nouvelle version s'installe à côté : rien n'est écrasé, et le dossier dit
+// quelle version il contient.
 const versionFichier = execFileSync('php', ['-r',
-	`$x=@file_get_contents(getenv('SITE').'/plugins/zzztest/paquet.xml'); preg_match('/version="([^"]+)"/',(string)$x,$m); echo $m[1] ?? '?';`,
+	`$x=@file_get_contents(getenv('SITE').'/plugins/zzztest-1.0.1/paquet.xml'); preg_match('/version="([^"]+)"/',(string)$x,$m); echo $m[1] ?? '?';`,
 ], { env: { ...process.env, SITE: site } }).toString();
-dit('fichiers réellement remplacés sur le disque', versionFichier === '1.0.1', 'paquet.xml en ' + versionFichier);
+dit('la nouvelle version est dans un dossier à son nom', versionFichier === '1.0.1', 'paquet.xml en ' + versionFichier);
+dit('l’ancien dossier n’a pas été réutilisé', !existsSync(`${site}/plugins/zzztest`));
+dit('le marqueur 1.0.1 accompagne la nouvelle version',
+	(lu('plugins/zzztest-1.0.1/marqueur.txt') || '').includes('1.0.1'), String(lu('plugins/zzztest-1.0.1/marqueur.txt')));
+
+// Cachée par un point initial : SPIP ne balaye pas les dossiers cachés, sans
+// quoi le site listerait deux fois le même plugin jusqu'au prochain entretien.
+const ancienZzz = readdirSync(`${site}/plugins`).filter((n) => /^\.zzztest\.dashagent-\d{14}$/.test(n));
+dit('l’ancienne version est gardée de côté, hors du balayage', ancienZzz.length === 1, ancienZzz.join(', '));
+dit('l’ancienne version est intacte dans sa copie',
+	ancienZzz.length === 1 && (lu(`plugins/${ancienZzz[0]}/marqueur.txt`) || '').includes('1.0.0'));
+
+// Le remplacement des fichiers ne doit pas désactiver les plugins : « raz »
+// sur une liste partielle couperait le dashboard et l'agent eux-mêmes. Et
+// changer de dossier ne doit pas non plus les perdre : SPIP tient sa liste par
+// dossier, pas par préfixe.
+const dossierActif = execFileSync('php', ['-r',
+	`$db=new SQLite3(getenv('BDD'));$a=unserialize($db->querySingle('SELECT valeur FROM spip_meta WHERE nom="plugin"'));echo $a['ZZZTEST']['dir'] ?? '?';`,
+], { env: { ...process.env, BDD: bdd } }).toString();
+dit('SPIP a suivi le plugin dans son nouveau dossier', dossierActif === 'zzztest-1.0.1', dossierActif);
 
 const actifs = execFileSync('php', ['-r',
 	`$db=new SQLite3(getenv('BDD'));$k=array_keys(unserialize($db->querySingle('SELECT valeur FROM spip_meta WHERE nom="plugin"')));echo implode(',',array_intersect(['DASHBOARD','DASHAGENT','ZZZTEST'],$k));`,
@@ -423,7 +445,6 @@ await urlsDActions(page, 'fiche du site', '/ecrire/?exec=dashboard_site&id_dashb
 
 console.log('\n### Mise à jour du core SPIP');
 const coreCible = process.env.CORE_CIBLE || '4.4.99';
-const lu = (relatif) => { try { return readFileSync(`${site}/${relatif}`, 'utf8'); } catch { return null; } };
 
 // Le dépôt d'archives de core est local et en http : le tableau de bord ne
 // l'accepte qu'avec l'autorisation explicite déjà cochée, et l'agent qu'avec
@@ -520,7 +541,7 @@ dit('ancien core conservé pour rollback', rollback.length === 1, rollback.join(
 for (const g of gardes) {
 	dit(`${g}/ préservé`, lu(`${g}/temoin-dashboard.txt`) === avant[g]);
 }
-dit('plugin mis à jour non écrasé', (lu('plugins/zzztest/paquet.xml') || '').includes('1.0.1'));
+dit('plugin mis à jour non écrasé', (lu('plugins/zzztest-1.0.1/paquet.xml') || '').includes('1.0.1'));
 dit('secret de l’agent préservé', (lu('config/mes_options.php') || '').includes('_DASHAGENT_ARCHIVES_HTTP'));
 
 // Le site tourne désormais sur les fichiers déployés : s'il ne répondait plus,

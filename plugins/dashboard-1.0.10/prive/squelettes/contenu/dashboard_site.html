@@ -34,6 +34,9 @@
 	<p class="dashboard-chantier-libelle">[(#OPERATION|dashboard_libelle_operation{#CIBLE})]</p>
 	<p class="dashboard-chantier-etape">
 		<span class="dashboard-chantier-rang">[(#RANG|plus{1})]/#TOTAL</span>
+		<span class="dashboard-chantier-travail">[(#ETAPE|dashboard_libelle_etape)]</span>
+	</p>
+	<p class="dashboard-chantier-etape">
 		<span class="dashboard-chantier-message">[(#MESSAGE|textebrut)]</span>
 	</p>
 	<p class="explication"><:dashboard:explication_chantier:></p>
@@ -380,13 +383,42 @@
 
 	var url = bloc.getAttribute('data-dashboard-chantier');
 	var rang = bloc.querySelector('.dashboard-chantier-rang');
+	var etape = bloc.querySelector('.dashboard-chantier-travail');
 	var message = bloc.querySelector('.dashboard-chantier-message');
+
+	// Une requête d'avancement peut mourir en route : temps d'exécution PHP
+	// dépassé, coupure réseau, réponse tronquée. Abandonner au premier échec
+	// laissait la page figée sur l'étape précédente, alors que la tâche de fond
+	// finissait le travail sans que rien ne le montre.
+	var echecs = 0;
+	var ECHECS_MAX = 5;
+
+	function reessayer() {
+		echecs++;
+		if (echecs > ECHECS_MAX) {
+			if (message) {
+				message.textContent = message.textContent
+					+ ' — le navigateur ne peut plus suivre l’opération ; elle se poursuit d’elle-même, rechargez la page dans quelques minutes';
+			}
+			return;
+		}
+		if (message) {
+			message.textContent = message.textContent
+				+ ' — interruption, nouvel essai (' + echecs + '/' + ECHECS_MAX + ')';
+		}
+		window.setTimeout(avancer, echecs * 5000);
+	}
 
 	function avancer() {
 		fetch(url, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-			.then(function (r) { return r.json(); })
+			.then(function (r) {
+				if (!r.ok) { throw new Error('HTTP ' + r.status); }
+				return r.json();
+			})
 			.then(function (etat) {
+				echecs = 0;
 				if (rang && etat.rang) { rang.textContent = etat.rang + '/' + etat.total; }
+				if (etape && etat.etape) { etape.textContent = etat.travail || etat.etape; }
 				if (message && etat.message) { message.textContent = etat.message; }
 				if (etat.fini) {
 					// L'opération est terminée : la page rechargée montre le
@@ -396,9 +428,7 @@
 				}
 				avancer();
 			})
-			.catch(function () {
-				if (message) { message.textContent = message.textContent + ' — interrompu, reprise automatique en cours'; }
-			});
+			.catch(reessayer);
 	}
 
 	avancer();
