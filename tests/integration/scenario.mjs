@@ -223,6 +223,21 @@ dit('l’ancienne version est toujours là, intacte',
 
 // L'inventaire de SVP doit avoir suivi : sans cela le site géré continue
 // d'annoncer l'ancienne version à son propre administrateur.
+// Le catalogue du dépôt est relu avant toute décision de mise à jour : c'est lui
+// qui dit quelles versions existent, et il ne se rafraîchit pas tout seul. Sa
+// date de relecture le prouve mieux qu'un message aperçu au vol.
+const depotRelu = execFileSync('php', ['-r',
+	`$db=new SQLite3(getenv('BDD'));echo (string) $db->querySingle('SELECT maj FROM spip_depots ORDER BY maj DESC LIMIT 1');`,
+], { env: { ...process.env, BDD: bdd } }).toString().trim();
+dit('le catalogue du dépôt a été relu à l’instant',
+	depotRelu !== '' && (Date.now() - Date.parse(depotRelu.replace(' ', 'T'))) < 10 * 60 * 1000, depotRelu);
+
+// Et le tableau de bord en garde la fraîcheur, pour pouvoir la montrer.
+const depotsVus = execFileSync('php', ['-r',
+	`$db=new SQLite3(getenv('BDD'));$i=json_decode((string) $db->querySingle('SELECT infos FROM spip_dashboard_sites WHERE id_dashboard_site=1'),true);echo count($i['depots'] ?? []),':',($i['depots'][0]['age'] ?? 'nul');`,
+], { env: { ...process.env, BDD: bdd } }).toString().trim();
+dit('la fraîcheur des dépôts est remontée au parc', /^1:\d+$/.test(depotsVus), depotsVus);
+
 // SVP range les versions normalisées : « 1.0.1 » s'y écrit « 001.000.001 ».
 const paquetLocal = execFileSync('php', ['-r',
 	`$db=new SQLite3(getenv('BDD'));$r=$db->querySingle('SELECT pa.version FROM spip_paquets pa JOIN spip_plugins pl ON pl.id_plugin=pa.id_plugin WHERE pa.id_depot=0 AND pl.prefixe="ZZZTEST" ORDER BY pa.version DESC',true);echo $r['version'] ?? '?';`,

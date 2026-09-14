@@ -150,6 +150,16 @@
 		</ul>
 
 		<section id="panneau-plugins" role="tabpanel" aria-labelledby="onglet-plugins">
+	[(#INFOS|dashboard_depots_age|oui)
+		<p class="dashboard-depots[(#INFOS|dashboard_depots_perimes|oui) dashboard-depots-perimes]">
+			<:dashboard:depots_relus:> [(#INFOS|dashboard_depots_age)][(#INFOS|dashboard_depots_perimes|oui) — <:dashboard:depots_avertissement:>]
+			[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+			<a class="dashboard-bouton" href="[(#URL_ACTION_AUTEUR{dashboard_operation,depots_maj/#ID_DASHBOARD_SITE,#SELF})]">
+				<:dashboard:action_depots_maj:>
+			</a>
+			]
+		</p>
+	]
 	[(#NB_PLUGINS_MAJ|>{0}|oui)
 			[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
 			<p class="boutons">

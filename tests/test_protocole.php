@@ -471,17 +471,47 @@ verifier('le balisage a disparu', strpos($lisible, '<span') === false);
 
 echo "\n== Étapes d’un chantier ==\n";
 
-foreach (['plugin_maj', 'plugin_maj_tous', 'core_maj', 'base_maj'] as $operation) {
+/* L'invariant n'est pas « la sauvegarde d'abord », mais « rien qui touche au
+   site avant elle ». Relire le catalogue des dépôts ne modifie que l'inventaire
+   de SVP, qu'il régénère à volonté : cette étape-là peut la précéder, et doit
+   même le faire — mieux vaut savoir ce qu'il y a à faire avant de sauvegarder. */
+$etapes_lecture = ['depots', 'sync'];
+$etapes_ecriture = ['plugin', 'plugins', 'core', 'base'];
+
+foreach (['plugin_maj', 'plugin_maj_tous', 'core_maj', 'base_maj', 'depots_maj'] as $operation) {
 	$etapes = dashboard_chantier_etapes($operation);
-	verifier("$operation : commence par une sauvegarde", ($etapes[0] ?? '') === 'sauvegarde',
-		implode(' → ', $etapes));
+	$rang_sauvegarde = array_search('sauvegarde', $etapes, true);
+
+	$avant = $rang_sauvegarde === false ? $etapes : array_slice($etapes, 0, $rang_sauvegarde);
+	$intrus = array_intersect($avant, $etapes_ecriture);
+	verifier("$operation : rien ne touche au site avant la sauvegarde",
+		$intrus === [], implode(' → ', $etapes));
+
+	$ecrit = array_intersect($etapes, $etapes_ecriture);
+	verifier("$operation : une sauvegarde dès qu'une étape modifie le site",
+		!$ecrit || $rang_sauvegarde !== false, implode(' → ', $etapes));
+
 	verifier("$operation : finit par une synchronisation", end($etapes) === 'sync');
 }
 verifier('la mise à jour du core migre aussi le schéma',
 	in_array('base', dashboard_chantier_etapes('core_maj'), true),
 	implode(' → ', dashboard_chantier_etapes('core_maj')));
 verifier('les plugins sont relistés juste avant d’être mis à jour',
-	dashboard_chantier_etapes('plugin_maj_tous') === ['sauvegarde', 'sync', 'plugins', 'sync']);
+	dashboard_chantier_etapes('plugin_maj_tous') === ['depots', 'sauvegarde', 'sync', 'plugins', 'sync'],
+	implode(' → ', dashboard_chantier_etapes('plugin_maj_tous')));
+
+/* Le catalogue est relu avant toute décision de mise à jour : c'est lui qui dit
+   quelles versions existent, et il ne se rafraîchit pas tout seul. */
+foreach (['plugin_maj', 'plugin_maj_tous'] as $operation) {
+	verifier("$operation : les dépôts sont relus en premier",
+		(dashboard_chantier_etapes($operation)[0] ?? '') === 'depots',
+		implode(' → ', dashboard_chantier_etapes($operation)));
+}
+verifier('relire les dépôts est une opération à soi seule',
+	dashboard_chantier_operation_connue('depots_maj') === true);
+verifier('relire les dépôts ne sauvegarde pas pour rien',
+	!in_array('sauvegarde', dashboard_chantier_etapes('depots_maj'), true),
+	implode(' → ', dashboard_chantier_etapes('depots_maj')));
 verifier('opération inconnue : aucune étape', dashboard_chantier_etapes('rm_rf') === []);
 verifier('opération inconnue : refusée', dashboard_chantier_operation_connue('rm_rf') === false);
 verifier('opération connue : acceptée', dashboard_chantier_operation_connue('core_maj') === true);

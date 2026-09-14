@@ -66,6 +66,180 @@ function dashagent_svp_disponible() {
 }
 
 /**
+ * État des dépôts de plugins du site, et de leur fraîcheur.
+ *
+ * Le catalogue des versions disponibles ne se rafraîchit pas tout seul : il est
+ * relu quand un administrateur clique « actualiser les dépôts » dans l'espace
+ * privé, ou quand la tâche de fond de SVP passe — ce qui, sur un site peu
+ * visité, peut n'arriver que rarement. Un tableau de bord qui lit ce catalogue
+ * sans en donner l'âge annonce « tout est à jour » avec l'assurance de quelqu'un
+ * qui n'a pas regardé depuis trois semaines.
+ *
+ * @return array
+ */
+function dashagent_svp_depots() {
+	include_spip('inc/dashagent_infos');
+
+	if (!dashagent_table_existe('spip_depots')) {
+		return [];
+	}
+
+	$depots = [];
+	foreach ((array) sql_allfetsel(
+		['id_depot', 'titre', 'xml_paquets', 'nbr_paquets', 'nbr_plugins', 'maj'],
+		'spip_depots',
+		'',
+		'',
+		'maj'
+	) as $depot) {
+		$date = (string) ($depot['maj'] ?? '');
+		$vu   = ($date && $date !== '0000-00-00 00:00:00') ? strtotime($date) : 0;
+
+		$depots[] = [
+			'id'          => (int) $depot['id_depot'],
+			'titre'       => (string) $depot['titre'],
+			'source'      => (string) $depot['xml_paquets'],
+			'paquets'     => (int) $depot['nbr_paquets'],
+			'plugins'     => (int) $depot['nbr_plugins'],
+			'date'        => $date,
+			// L'âge en secondes plutôt qu'une date : les deux sites peuvent
+			// avoir des fuseaux ou des horloges différentes, et c'est l'âge qui
+			// décide s'il faut actualiser.
+			'age'         => $vu ? max(0, time() - $vu) : null,
+		];
+	}
+
+	return $depots;
+}
+
+/**
+ * Actualise **un** dépôt, le plus ancien d'abord, et rend la main.
+ *
+ * Un dépôt, c'est le téléchargement d'un catalogue XML de plusieurs méga-octets
+ * et sa réindexation : de quoi dépasser le temps d'exécution d'un hébergement
+ * mutualisé si on les enchaîne. Un par appel, donc, comme pour le reste.
+ *
+ * @param array $args
+ *     - int `age_max` : ne rafraîchir qu'au-delà de cet âge, en secondes.
+ *       Zéro force le rafraîchissement de tous.
+ * @return array
+ */
+function dashagent_svp_depots_actualiser($args = []) {
+	$svp = dashagent_svp_disponible();
+	if (!$svp['ok']) {
+		return ['ok' => false, 'erreur' => $svp['erreur'], 'raison' => $svp['raison'], 'termine' => true];
+	}
+
+	$age_max = max(0, (int) ($args['age_max'] ?? 0));
+	$restants = dashagent_svp_depots_a_rafraichir($age_max);
+
+	if (!$restants) {
+		return dashagent_svp_depots_conclure(true, '', 0);
+	}
+
+	@set_time_limit(300);
+	include_spip('inc/svp_depoter_distant');
+
+	$depot = reset($restants);
+	$niveau = ob_get_level();
+	ob_start();
+	$echec = null;
+	try {
+		$fait = svp_actualiser_depot($depot['id']);
+	} catch (Throwable $e) {
+		$fait = false;
+		$echec = $e->getMessage();
+	}
+	$sortie = dashagent_svp_vider_tampons($niveau);
+
+	if ($echec !== null || !$fait) {
+		return [
+			'ok'      => false,
+			'erreur'  => 'Dépôt « ' . $depot['titre'] . ' » non actualisé'
+				. ($echec !== null ? ' : ' . $echec : ' (catalogue injoignable ou illisible ?)'),
+			'termine' => true,
+			'journal' => dashagent_svp_texte($sortie),
+			'depots'  => dashagent_svp_depots(),
+		];
+	}
+
+	$reste = count(dashagent_svp_depots_a_rafraichir($age_max));
+
+	return dashagent_svp_depots_conclure(!$reste, $depot['titre'], $reste)
+		+ ['journal' => dashagent_svp_texte($sortie)];
+}
+
+/**
+ * Plancher de fraîcheur, en secondes.
+ *
+ * « Forcer » ne peut pas vouloir dire « sans condition » : l'appelant rappelle
+ * tant qu'il reste des dépôts, et un dépôt qu'on vient de relire serait aussitôt
+ * à relire de nouveau — la boucle ne s'arrêterait jamais. Une minute suffit à
+ * distinguer « je viens de le faire » de « c'est à refaire ».
+ */
+if (!defined('_DASHAGENT_DEPOTS_PLANCHER')) {
+	define('_DASHAGENT_DEPOTS_PLANCHER', 60);
+}
+
+/**
+ * Les dépôts dont le catalogue mérite d'être relu.
+ *
+ * @param int $age_max Âge en secondes au-delà duquel un dépôt est périmé.
+ *     Zéro force, dans la limite du plancher ci-dessus.
+ * @return array
+ */
+function dashagent_svp_depots_a_rafraichir($age_max) {
+	$age_max = $age_max > 0 ? max(_DASHAGENT_DEPOTS_PLANCHER, (int) $age_max) : _DASHAGENT_DEPOTS_PLANCHER;
+	$a_faire = [];
+	foreach (dashagent_svp_depots() as $depot) {
+		// Un dépôt sans catalogue à relire — construit à la main, ou hérité
+		// d'une version antérieure de SVP — n'a rien à rafraîchir : l'inclure
+		// ferait échouer l'étape sans qu'on puisse y remédier à distance.
+		if ($depot['source'] === '') {
+			continue;
+		}
+		// Jamais actualisé : l'âge est inconnu, donc infini.
+		if ($depot['age'] === null || $depot['age'] > $age_max) {
+			$a_faire[] = $depot;
+		}
+	}
+
+	return $a_faire;
+}
+
+/**
+ * Ce qu'on rend après un dépôt actualisé, ou quand il n'y avait rien à faire.
+ *
+ * @param bool $termine
+ * @param string $titre Dépôt qui vient d'être relu
+ * @param int $reste
+ * @return array
+ */
+function dashagent_svp_depots_conclure($termine, $titre, $reste) {
+	// Le catalogue a changé : sans relecture des paquets locaux, les versions
+	// disponibles restent celles d'avant, et c'est précisément ce qu'on répare.
+	// Après chaque dépôt, et non à la fin seulement : un site à plusieurs dépôts
+	// profite du premier relu sans attendre les autres.
+	if ($titre !== '') {
+		include_spip('inc/svp_depoter_local');
+		$niveau = ob_get_level();
+		ob_start();
+		svp_actualiser_paquets_locaux();
+		svp_actualiser_maj_version();
+		dashagent_svp_vider_tampons($niveau);
+	}
+
+	return [
+		'ok'       => true,
+		'erreur'   => '',
+		'termine'  => (bool) $termine,
+		'actualise' => $titre,
+		'reste'    => (int) $reste,
+		'depots'   => dashagent_svp_depots(),
+	];
+}
+
+/**
  * Le paquet local d'un préfixe, tel que SVP le connaît.
  *
  * @param string $prefixe

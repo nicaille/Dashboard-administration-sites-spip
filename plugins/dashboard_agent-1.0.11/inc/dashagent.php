@@ -149,6 +149,9 @@ function dashagent_operation_autorisee($operation) {
 		'plugin_svp_preparer'     => 'op_plugin_maj',
 		'plugin_svp_avancer'      => 'op_plugin_maj',
 		'plugin_svp_liberer'      => 'op_plugin_maj',
+		// Relire le catalogue des dépôts, c'est savoir quelles versions
+		// existent : cela va de pair avec le droit de mettre à jour.
+		'depots_actualiser'       => 'op_plugin_maj',
 		'core_maj'                => 'op_core_maj',
 		'core_maj_preflight'      => 'op_core_maj',
 		// La migration du schéma va de pair avec le remplacement des fichiers :

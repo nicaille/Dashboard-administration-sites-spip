@@ -12,7 +12,7 @@
 $racine = dirname(__DIR__);
 
 /**
- * Les dossiers de plugins portent leur version (`dashboard-1.0.11`), pour qu'une
+ * Les dossiers de plugins portent leur version (`dashboard-1.0.12`), pour qu'une
  * mise en ligne n'écrase pas la version précédente. On les retrouve donc par
  * préfixe, sans quoi ce fichier serait à retoucher à chaque montée de version.
  *
@@ -599,7 +599,7 @@ $api_spip = [
 	// SVP, quand le site géré en dispose : c'est lui qui sait mettre à jour un
 	// plugin proprement, dépendances comprises. Les classes Decideur et
 	// Actionneur ne passent pas par ici — seules les fonctions sont analysées.
-	'svp_actualiser_paquets_locaux',
+	'svp_actualiser_paquets_locaux', 'svp_actualiser_maj_version', 'svp_actualiser_depot',
 ];
 
 $definies = [];
@@ -721,6 +721,8 @@ $fournisseur = [
 	'maj_tables'           => 'base/create',
 	'maj_plugin'           => 'base/upgrade',
 	'svp_actualiser_paquets_locaux' => 'inc/svp_depoter_local',
+	'svp_actualiser_maj_version'    => 'inc/svp_depoter_local',
+	'svp_actualiser_depot'          => 'inc/svp_depoter_distant',
 	'formulaires_editer_objet_charger'  => 'inc/editer',
 	'formulaires_editer_objet_verifier' => 'inc/editer',
 	'formulaires_editer_objet_traiter'  => 'inc/editer',

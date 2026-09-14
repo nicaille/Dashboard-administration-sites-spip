@@ -25,6 +25,7 @@ function formulaires_configurer_dashboard_charger_dist() {
 		'url_archives_spip'     => dashboard_config('url_archives_spip', 'https://files.spip.net/spip/archives/'),
 		'versions_manuelles'    => dashboard_config('versions_manuelles', ''),
 		'fraicheur_sauvegarde'  => dashboard_config('fraicheur_sauvegarde', 900),
+		'fraicheur_depots'      => dashboard_config('fraicheur_depots', 86400),
 		'retention_journal'     => dashboard_config('retention_journal', 180),
 		'retention_sauvegardes' => dashboard_config('retention_sauvegardes', 30),
 		'autoriser_http'        => dashboard_config('autoriser_http', ''),
@@ -89,6 +90,7 @@ function formulaires_configurer_dashboard_traiter_dist() {
 	$config['retention_journal']     = max(1, (int) _request('retention_journal'));
 	$config['retention_sauvegardes'] = max(1, (int) _request('retention_sauvegardes'));
 	$config['fraicheur_sauvegarde']  = max(0, (int) _request('fraicheur_sauvegarde'));
+	$config['fraicheur_depots']      = max(0, (int) _request('fraicheur_depots'));
 
 	foreach (['sync_auto', 'autoriser_http'] as $bascule) {
 		$config[$bascule] = (_request($bascule) === 'on') ? 'on' : '';

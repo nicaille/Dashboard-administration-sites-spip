@@ -175,6 +175,21 @@ réponse porte alors `dossier_avant`, `dossier` et `dossier_relatif` (chemin du
 nouveau dossier relatif à `plugins/`), en plus de `version_avant`,
 `version_apres`, `version_archive` et `sauvegarde`.
 
+### `depots_actualiser`
+
+Argument : `age_max` (secondes). Fait relire au site géré le catalogue **d'un**
+dépôt — le plus ancien d'abord — parmi ceux dont la dernière relecture dépasse
+cet âge. Zéro force, dans la limite d'un plancher d'une minute : sans lui, un
+dépôt qu'on vient de relire serait aussitôt à relire, et l'appelant boucherait.
+
+Retourne `termine`, `reste`, `actualise` (le dépôt relu) et `depots` — l'état de
+chacun : titre, source, nombre de paquets, date et **âge en secondes**. C'est
+l'âge qui fait foi, les deux sites pouvant avoir des horloges ou des fuseaux
+différents.
+
+Un dépôt sans catalogue déclaré est ignoré : il n'y a rien à relire. L'inventaire
+(`infos`) porte le même état sous la clé `depots`.
+
 ### `plugin_svp_preflight`
 
 Argument : `prefixe`. Fait calculer à SVP, sur le site géré, ce qu'une mise à

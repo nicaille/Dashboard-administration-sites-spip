@@ -366,6 +366,7 @@ function dashboard_libelle_operation($operation, $cible = '') {
 		'plugin_maj'      => 'dashboard:operation_plugin_maj',
 		'plugin_maj_tous' => 'dashboard:operation_plugin_maj_tous',
 		'core_maj'        => 'dashboard:operation_core_maj',
+		'depots_maj'      => 'dashboard:operation_depots_maj',
 		'base_maj'        => 'dashboard:operation_base_maj',
 	];
 
@@ -373,6 +374,71 @@ function dashboard_libelle_operation($operation, $cible = '') {
 	$cible = trim((string) $cible);
 
 	return $cible !== '' ? $libelle . ' : ' . $cible : $libelle;
+}
+
+/**
+ * Fraîcheur du catalogue des dépôts d'un site, en clair.
+ *
+ * « Aucune mise à jour disponible » ne vaut que ce que vaut la date à laquelle
+ * le catalogue a été relu : le dire évite de conclure trop vite. On retient le
+ * dépôt le plus ancien, c'est lui qui borne la confiance qu'on peut accorder à
+ * l'ensemble.
+ *
+ * @filtre
+ * @param string $infos Inventaire JSON mémorisé pour le site
+ * @return string Chaîne vide si le site n'a pas de dépôt
+ */
+function dashboard_depots_age($infos) {
+	$depots = dashboard_info($infos, 'depots');
+	if (!is_array($depots) || !$depots) {
+		return '';
+	}
+
+	$ages = [];
+	foreach ($depots as $depot) {
+		// Jamais relu : c'est le cas le plus méritant d'être signalé.
+		if (!isset($depot['age']) || $depot['age'] === null) {
+			return _T('dashboard:depots_jamais');
+		}
+		$ages[] = (int) $depot['age'];
+	}
+
+	$age = max($ages);
+	if ($age < 3600) {
+		return _T('dashboard:depots_minutes', ['n' => max(1, (int) round($age / 60))]);
+	}
+	if ($age < 172800) {
+		return _T('dashboard:depots_heures', ['n' => (int) round($age / 3600)]);
+	}
+
+	return _T('dashboard:depots_jours', ['n' => (int) round($age / 86400)]);
+}
+
+/**
+ * Le catalogue des dépôts est-il trop ancien pour qu'on s'y fie ?
+ *
+ * @filtre
+ * @param string $infos Inventaire JSON mémorisé pour le site
+ * @return bool
+ */
+function dashboard_depots_perimes($infos) {
+	$depots = dashboard_info($infos, 'depots');
+	if (!is_array($depots) || !$depots) {
+		return false;
+	}
+
+	$seuil = (int) dashboard_config('fraicheur_depots', 86400);
+	if ($seuil <= 0) {
+		return false;
+	}
+
+	foreach ($depots as $depot) {
+		if (!isset($depot['age']) || $depot['age'] === null || (int) $depot['age'] > $seuil) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
 /**
@@ -388,6 +454,7 @@ function dashboard_libelle_operation($operation, $cible = '') {
  */
 function dashboard_libelle_etape($etape) {
 	$libelles = [
+		'depots'     => 'dashboard:etape_depots',
 		'sauvegarde' => 'dashboard:etape_sauvegarde',
 		'preflight'  => 'dashboard:etape_preflight',
 		'core'       => 'dashboard:etape_core',

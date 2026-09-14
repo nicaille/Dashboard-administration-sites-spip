@@ -176,6 +176,43 @@ function dashboard_rapatrier_sauvegarde($id_dashboard_site, $id_dashboard_sauveg
 }
 
 /**
+ * Fait relire au site géré le catalogue de ses dépôts de plugins.
+ *
+ * Un dépôt par appel : télécharger un catalogue XML de plusieurs méga-octets et
+ * le réindexer suffit à occuper une requête.
+ *
+ * @param int $id_dashboard_site
+ * @param int $age_max Ne rafraîchir qu'au-delà de cet âge, en secondes. Zéro force.
+ * @return array
+ */
+function dashboard_operation_depots_actualiser($id_dashboard_site, $age_max = 0) {
+	include_spip('inc/dashboard_client');
+
+	$site = dashboard_charger_site($id_dashboard_site);
+	if (!$site) {
+		return ['ok' => false, 'message' => 'Site inconnu', 'data' => []];
+	}
+
+	$reponse = dashboard_appeler(
+		$site,
+		'depots_actualiser',
+		['age_max' => (int) $age_max],
+		['timeout' => dashboard_config('timeout_long', 300)]
+	);
+
+	if (!$reponse['ok']) {
+		return [
+			'ok' => false,
+			'message' => (string) ($reponse['erreur']['message'] ?? ''),
+			'code' => (string) ($reponse['erreur']['code'] ?? ''),
+			'data' => $reponse['data'],
+		];
+	}
+
+	return ['ok' => true, 'message' => '', 'data' => $reponse['data']];
+}
+
+/**
  * Fait calculer à SVP, sur le site géré, ce qu'une mise à jour impliquerait.
  *
  * Rien n'est engagé : c'est l'occasion d'apprendre qu'une dépendance manque

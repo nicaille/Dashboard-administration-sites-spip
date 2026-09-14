@@ -11,6 +11,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'a_mettre_a_jour'          => 'to upgrade',
 	'action_base_maj' => 'Migrate the database now',
 	'action_core_maj'          => 'Upgrade SPIP now',
+	'action_depots_maj' => 'Refresh repositories',
 	'action_maj'               => 'Upgrade',
 	'action_maj_tous'          => 'Upgrade all',
 	'action_purger'            => 'Clear',
@@ -58,6 +59,12 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'core_maj_texte'         => 'This site runs SPIP @version_actuelle@ while @version_cible@ is available in the same branch.',
 
 	// D
+	'depots_avertissement' => 'the available versions shown may be stale',
+	'depots_heures' => '@n@ hour(s) ago',
+	'depots_jamais' => 'never',
+	'depots_jours' => '@n@ day(s) ago',
+	'depots_minutes' => '@n@ minute(s) ago',
+	'depots_relus' => 'Repository catalogue re-read',
 	'derniere_erreur' => 'Last error:',
 
 	// E
@@ -73,6 +80,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'erreur_url_site'          => 'The public address must start with http:// or https://',
 	'erreur_versions_manuelles' => 'Invalid line: @ligne@ (expected format: 4.2 = 4.2.16)',
 	'etape_base'       => 'Migrating the database schema…',
+	'etape_depots'     => 'Refreshing plugin repositories…',
 	'etape_core'       => 'Replacing core files…',
 	'etape_plugin'     => 'Deploying the plugin…',
 	'etape_plugins'    => 'Deploying plugins…',
@@ -83,6 +91,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'explication_chantier' => 'The operation runs step by step. You may leave this page: it carries on by itself and its outcome is recorded in the log.',
 	'explication_generer_secret' => 'The secret is displayed once after saving: copy it straight into the agent settings on the managed site.',
 	'explication_groupe'       => 'Optional: groups sites belonging to the same client or the same hosting.',
+	'explication_fraicheur_depots' => 'The catalogue of available versions lives on the managed site and never refreshes by itself: without this, the fleet reports sites as up to date when they are not. Past this delay, in seconds, syncing has it re-read. Zero never refreshes it automatically — updates will still do so before acting.',
 	'explication_fraicheur_sauvegarde' => 'Every update starts with a downloaded backup of the managed site, without exception. A backup newer than this delay, in seconds, is reused as is rather than taken again. Zero to require a fresh one every time.',
 	'explication_secret_clair' => 'Paste here the secret generated on the managed site. It is never displayed again.',
 	'explication_serveur' => 'This is read on demand from the managed site, never stored here. Anything that looks like a credential — passwords, keys, tokens, session salts — is masked by the agent before it leaves. The managed site must have explicitly allowed this inspection.',
@@ -117,6 +126,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'label_notes'              => 'Notes',
 	'label_retention_journal'  => 'Keep the log (days)',
 	'label_retention_sauvegardes' => 'Keep downloaded backups (days)',
+	'label_fraicheur_depots'   => 'Repository catalogue validity (seconds)',
 	'label_fraicheur_sauvegarde' => 'How long a preliminary backup stays valid (seconds)',
 	'label_secret_clair'       => 'Shared secret',
 	'label_statut'             => 'Supervision',
@@ -148,6 +158,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 
 	// O
 	'operation_base_maj' => 'Database migration',
+	'operation_depots_maj'      => 'Repository refresh',
 	'operation_core_maj'        => 'Core upgrade',
 	'operation_plugin_maj'      => 'Plugin upgrade',
 	'operation_plugin_maj_tous' => 'Plugins upgrade',

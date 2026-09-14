@@ -70,6 +70,11 @@
 		<fieldset>
 			<legend><:dashboard:legend_securite_maj:></legend>
 			<ul>
+				<li class="editer editer_fraicheur_depots">
+					<label for="fraicheur_depots"><:dashboard:label_fraicheur_depots:></label>
+					<input type="number" class="text" name="fraicheur_depots" id="fraicheur_depots" min="0" step="3600" value="[(#ENV{fraicheur_depots}|entites_html)]" />
+					<p class="explication"><:dashboard:explication_fraicheur_depots:></p>
+				</li>
 				<li class="editer editer_fraicheur_sauvegarde">
 					<label for="fraicheur_sauvegarde"><:dashboard:label_fraicheur_sauvegarde:></label>
 					<input type="number" class="text" name="fraicheur_sauvegarde" id="fraicheur_sauvegarde" min="0" step="60" value="[(#ENV{fraicheur_sauvegarde}|entites_html)]" />

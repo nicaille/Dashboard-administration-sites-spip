@@ -51,11 +51,17 @@ if (!defined('_DASHBOARD_CHANTIER_ABANDON')) {
  */
 function dashboard_chantier_etapes($operation) {
 	$etapes = [
-		'plugin_maj'      => ['sauvegarde', 'plugin', 'sync'],
+		// Le catalogue des dépôts est relu d'abord : c'est lui qui dit quelles
+		// versions existent, et il ne se rafraîchit pas tout seul. Mettre à jour
+		// depuis un catalogue vieux de trois semaines, c'est croire à jour un
+		// site qui ne l'est pas — ou déployer une version déjà dépassée.
+		'plugin_maj'      => ['depots', 'sauvegarde', 'plugin', 'sync'],
 		// Un inventaire relu juste avant de constituer la file : entre le clic
 		// et la sauvegarde, il a pu se passer plusieurs minutes, et mettre à
 		// jour depuis une liste périmée n'aurait guère de sens.
-		'plugin_maj_tous' => ['sauvegarde', 'sync', 'plugins', 'sync'],
+		'plugin_maj_tous' => ['depots', 'sauvegarde', 'sync', 'plugins', 'sync'],
+		// Relire les dépôts et rien d'autre, pour savoir où l'on en est.
+		'depots_maj'      => ['depots', 'sync'],
 		'core_maj'        => ['sauvegarde', 'preflight', 'core', 'base', 'sync'],
 		'base_maj'        => ['sauvegarde', 'base', 'sync'],
 	];
@@ -281,6 +287,9 @@ function dashboard_chantier_executer_etape($chantier) {
 	$cible   = (string) $chantier['cible'];
 
 	switch ((string) $chantier['etape']) {
+		case 'depots':
+			return dashboard_chantier_etape_depots($id_site);
+
 		case 'sauvegarde':
 			return dashboard_chantier_etape_sauvegarde($id_site);
 
@@ -425,6 +434,53 @@ function dashboard_chantier_etape_base($chantier) {
 	}
 
 	return ['ok' => true, 'message' => (string) $reponse['message']];
+}
+
+/**
+ * Relit le catalogue des dépôts du site géré, un dépôt par avancement.
+ *
+ * C'est la réponse à un travers qu'on a constaté en vrai : le tableau de bord
+ * annonçait « tous les plugins à jour », et un passage à la main dans l'espace
+ * privé du site géré — actualiser les dépôts — faisait aussitôt apparaître une
+ * mise à jour. Notre inventaire n'était pas faux, il lisait un catalogue périmé.
+ *
+ * Un site sans SVP n'a pas de dépôt : l'étape passe alors sans rien faire.
+ *
+ * @param int $id_site
+ * @return array
+ */
+function dashboard_chantier_etape_depots($id_site) {
+	$reponse = dashboard_operation_depots_actualiser($id_site, 0);
+
+	if (empty($reponse['ok'])) {
+		// L'absence de SVP n'est pas un échec : le site n'a simplement pas de
+		// catalogue à relire, et la mise à jour suivra le chemin de l'archive.
+		if ((string) ($reponse['data']['raison'] ?? '') === 'svp_absent') {
+			return ['ok' => true, 'message' => 'Pas de dépôt à relire sur ce site'];
+		}
+
+		return ['ok' => false, 'message' => 'Dépôts : ' . (string) $reponse['message']];
+	}
+
+	$data = (array) $reponse['data'];
+	if (empty($data['termine'])) {
+		return [
+			'ok'      => true,
+			'rester'  => true,
+			'message' => 'Dépôt « ' . (string) ($data['actualise'] ?? '') . ' » relu — reste '
+				. (int) ($data['reste'] ?? 0),
+		];
+	}
+
+	$depots = (array) ($data['depots'] ?? []);
+	$titre  = (string) ($data['actualise'] ?? '');
+
+	return [
+		'ok'      => true,
+		'message' => $titre === ''
+			? 'Catalogue des dépôts déjà à jour'
+			: count($depots) . ' dépôt(s) relu(s), dont « ' . $titre . ' »',
+	];
 }
 
 /**
@@ -663,6 +719,7 @@ function dashboard_chantier_libelle($operation, $cible = '') {
 	$libelles = [
 		'plugin_maj'      => 'Mise à jour du plugin ' . $cible,
 		'plugin_maj_tous' => 'Mise à jour de tous les plugins',
+		'depots_maj'      => 'Relecture des dépôts de plugins',
 		'core_maj'        => 'Mise à jour du core SPIP',
 		'base_maj'        => 'Migration de la base',
 	];

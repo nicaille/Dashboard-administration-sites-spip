@@ -11,6 +11,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'a_mettre_a_jour'          => 'à mettre à jour',
 	'action_base_maj' => 'Migrer la base maintenant',
 	'action_core_maj'          => 'Mettre à jour SPIP maintenant',
+	'action_depots_maj' => 'Relire les dépôts',
 	'action_maj'               => 'Mettre à jour',
 	'action_maj_tous'          => 'Tout mettre à jour',
 	'action_purger'            => 'Vider',
@@ -58,6 +59,12 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'core_maj_texte'         => 'Ce site tourne en SPIP @version_actuelle@ alors que la version @version_cible@ est disponible dans la même branche.',
 
 	// D
+	'depots_avertissement' => 'les versions disponibles annoncées peuvent être périmées',
+	'depots_heures' => 'il y a @n@ heure(s)',
+	'depots_jamais' => 'jamais',
+	'depots_jours' => 'il y a @n@ jour(s)',
+	'depots_minutes' => 'il y a @n@ minute(s)',
+	'depots_relus' => 'Catalogue des dépôts relu',
 	'derniere_erreur' => 'Dernière erreur :',
 
 	// E
@@ -73,6 +80,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'erreur_url_site'          => 'L’adresse publique doit commencer par http:// ou https://',
 	'erreur_versions_manuelles' => 'Ligne invalide : @ligne@ (format attendu : 4.2 = 4.2.16)',
 	'etape_base'       => 'Migration du schéma de base…',
+	'etape_depots'     => 'Relecture des dépôts de plugins…',
 	'etape_core'       => 'Remplacement des fichiers du core…',
 	'etape_plugin'     => 'Déploiement du plugin…',
 	'etape_plugins'    => 'Déploiement des plugins…',
@@ -83,6 +91,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'explication_chantier' => 'L’opération se déroule étape par étape. Vous pouvez quitter cette page : elle se poursuivra d’elle-même et son issue sera portée au journal.',
 	'explication_generer_secret' => 'Le secret est affiché une seule fois après enregistrement : recopiez-le aussitôt dans la configuration de l’agent, sur le site géré.',
 	'explication_groupe'       => 'Facultatif : sert à regrouper les sites d’un même client ou d’un même hébergement.',
+	'explication_fraicheur_depots' => 'Le catalogue des versions disponibles vit sur le site géré, et ne se rafraîchit pas tout seul : sans cela le parc annonce « à jour » des sites qui ne le sont pas. Au-delà de ce délai, en secondes, la synchronisation le fait relire. Zéro pour ne jamais le rafraîchir automatiquement — les mises à jour le feront tout de même avant d’agir.',
 	'explication_fraicheur_sauvegarde' => 'Toute mise à jour commence par une sauvegarde rapatriée du site géré, sans exception. Une sauvegarde plus récente que ce délai, en secondes, est réutilisée telle quelle plutôt que refaite. Zéro pour en exiger une neuve à chaque fois.',
 	'explication_secret_clair' => 'Collez ici le secret généré sur le site géré. Il n’est jamais réaffiché ensuite.',
 	'explication_serveur' => 'Ces informations sont lues à la demande sur le site géré, jamais conservées ici. Les valeurs qui ressemblent à des identifiants — mots de passe, clés, jetons, aléas de session — sont masquées par l’agent avant de partir. Cette consultation exige que le site géré l’ait explicitement autorisée.',
@@ -117,6 +126,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'label_notes'              => 'Notes',
 	'label_retention_journal'  => 'Conserver le journal (jours)',
 	'label_retention_sauvegardes' => 'Conserver les sauvegardes rapatriées (jours)',
+	'label_fraicheur_depots'   => 'Durée de validité du catalogue des dépôts (secondes)',
 	'label_fraicheur_sauvegarde' => 'Durée de validité d’une sauvegarde préalable (secondes)',
 	'label_secret_clair'       => 'Secret partagé',
 	'label_statut'             => 'Supervision',
@@ -148,6 +158,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 
 	// O
 	'operation_base_maj' => 'Migration de la base',
+	'operation_depots_maj'      => 'Relecture des dépôts',
 	'operation_core_maj'        => 'Mise à jour du core',
 	'operation_plugin_maj'      => 'Mise à jour de plugin',
 	'operation_plugin_maj_tous' => 'Mise à jour des plugins',

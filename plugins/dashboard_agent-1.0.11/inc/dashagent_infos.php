@@ -30,10 +30,27 @@ function dashagent_infos_collecter($args = []) {
 
 	$infos['plugins'] = $avec_plugins ? dashagent_infos_plugins() : null;
 	$infos['procures'] = $avec_plugins ? dashagent_infos_procures() : null;
+	// La fraîcheur du catalogue de SVP : « aucune mise à jour disponible » ne
+	// vaut que ce que vaut la date à laquelle il a été relu.
+	$infos['depots'] = $avec_plugins ? dashagent_infos_depots() : null;
 	$infos['caches']  = $avec_caches ? dashagent_infos_caches() : null;
 	$infos['capacites'] = dashagent_infos_capacites();
 
 	return $infos;
+}
+
+/**
+ * État et fraîcheur des dépôts de plugins.
+ *
+ * @return array
+ */
+function dashagent_infos_depots() {
+	if (!find_in_path('inc/svp_decider.php')) {
+		return [];
+	}
+	include_spip('inc/dashagent_svp');
+
+	return dashagent_svp_depots();
 }
 
 /**

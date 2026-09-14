@@ -26,6 +26,14 @@ function dashboard_synchroniser($id_dashboard_site, $options = []) {
 		return ['ok' => false, 'message' => 'Site inconnu', 'site' => null];
 	}
 
+	// Le catalogue des dépôts du site géré ne se rafraîchit pas tout seul : sans
+	// cela, l'inventaire est exact mais lit une liste de versions périmée, et le
+	// parc annonce « à jour » des sites qui ne le sont pas. Le seuil de fraîcheur
+	// évite d'en refaire le tour à chaque passage de la tâche de fond.
+	if (empty($options['sans_depots'])) {
+		dashboard_sync_rafraichir_depots($id_dashboard_site);
+	}
+
 	$reponse = dashboard_appeler($site, 'infos', ['caches' => true, 'plugins' => true], $options);
 	$maintenant = date('Y-m-d H:i:s');
 
@@ -113,6 +121,43 @@ function dashboard_enregistrer_plugins($id_dashboard_site, $plugins) {
 			'inscriptible'       => !empty($plugin['inscriptible']) ? 'oui' : 'non',
 		]);
 	}
+}
+
+/**
+ * Fait relire au site géré les catalogues de dépôts trop anciens.
+ *
+ * Un dépôt par aller-retour, et trois au plus par synchronisation : un site en a
+ * rarement davantage, et le reste attendra le passage suivant plutôt que
+ * d'allonger indéfiniment la synchronisation d'un parc entier.
+ *
+ * @param int $id_dashboard_site
+ * @return array{tentes: int, relus: int}
+ */
+function dashboard_sync_rafraichir_depots($id_dashboard_site) {
+	include_spip('inc/dashboard_operations');
+
+	$fraicheur = (int) dashboard_config('fraicheur_depots', 86400);
+	$rapport = ['tentes' => 0, 'relus' => 0];
+	if ($fraicheur <= 0) {
+		return $rapport;
+	}
+
+	for ($tour = 0; $tour < 3; $tour++) {
+		$reponse = dashboard_operation_depots_actualiser($id_dashboard_site, $fraicheur);
+		$rapport['tentes']++;
+		if (empty($reponse['ok'])) {
+			break;
+		}
+		$data = (array) $reponse['data'];
+		if (!empty($data['actualise'])) {
+			$rapport['relus']++;
+		}
+		if (!empty($data['termine'])) {
+			break;
+		}
+	}
+
+	return $rapport;
 }
 
 /**

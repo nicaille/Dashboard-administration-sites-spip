@@ -187,6 +187,25 @@
 	opacity: .8;
 }
 
+/* Fraîcheur du catalogue des dépôts : « aucune mise à jour disponible » ne vaut
+   que ce que vaut la date à laquelle il a été relu. */
+.dashboard-depots {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .6em;
+	align-items: baseline;
+	margin: 0 0 1em;
+	font-size: .9em;
+	opacity: .8;
+}
+.dashboard-depots-perimes {
+	padding: .5em .7em;
+	border-radius: 4px;
+	background: #fff8e5;
+	color: #6b4500;
+	opacity: 1;
+}
+
 /* Une base en attente de migration n'est pas un simple retard de version :
    l'espace privé du site géré est bloqué tant qu'elle n'est pas jouée. */
 .dashboard-badge-alerte {

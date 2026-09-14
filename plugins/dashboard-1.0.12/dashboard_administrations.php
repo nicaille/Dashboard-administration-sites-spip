@@ -243,6 +243,7 @@ function dashboard_initialiser_configuration() {
 		'sync_auto'            => 'on',
 		'sync_frequence'       => 6,
 		'url_archives_spip'    => 'https://files.spip.net/spip/archives/',
+		'fraicheur_depots'     => 86400,
 		'version_spip_cible'   => '',
 		'confirmer_core_maj'   => 'on',
 		'retention_sauvegardes' => 30,
