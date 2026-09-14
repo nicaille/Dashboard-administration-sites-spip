@@ -2,7 +2,7 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/dashboard-1.0.12`,
+`plugins/<prefixe>-<version>` : `plugins/dashboard-1.0.13`,
 `plugins/dashboard_agent-1.0.11`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
@@ -55,6 +55,50 @@ fichiers :
 
 Le code des plugins, lui, ne doit jamais mentionner son propre nom de dossier.
 SPIP fournit `_DIR_PLUGIN_<PREFIXE>` pour cela.
+
+## L'habillage est celui du privé, pas le nôtre
+
+Le thème de l'espace privé habille déjà tout ce dont ces squelettes ont besoin.
+Redéfinir par-dessus produit surtout des accidents : un fond blanc posé sans
+redéfinir la couleur du texte, que le thème met en blanc, donnait des libellés
+invisibles sur les boutons de pagination.
+
+- **Boutons** : `class="btn"`, `btn btn_secondaire`, `btn btn_danger`. Jamais de
+  classe maison.
+- **Actions** : `#BOUTON_ACTION{libelle,url,classes[,confirmation]}`, qui rend un
+  formulaire POST. Une action qui change l'état d'un site ne se déclenche pas en
+  suivant un lien. Les vrais liens de navigation restent des `<a class="btn …">`.
+- **Pagination** : `{pagination N}` sur la boucle, puis
+  `[<nav class="pagination" role="navigation">(#PAGINATION{precedent_suivant})</nav>]`.
+  Le modèle s'appelle `pagination_precedent_suivant.html` : `#PAGINATION{X}`
+  cherche `modeles/pagination_X.html` et retombe en silence sur le modèle par
+  défaut s'il ne le trouve pas.
+- **Listes paginées côté JavaScript** (le contenu des tables d'un site géré ne
+  vient d'aucune boucle) : reprendre le balisage à l'identique —
+  `nav.pagination` > `ul.pagination-items.pagination_precedent_suivant` >
+  `li.pagination-item.prev|next[.disabled]` > `a.pagination-item-label`.
+- **Champs de formulaire hors formulaire** : les envelopper dans
+  `div.formulaire_spip > div.editer > label + champ`, sinon un `select` reste
+  celui du navigateur.
+- **Retour à l'encadré** : chaque bloc porte une ancre (`id="plugins"`), et
+  l'URL de retour des actions la désigne — sinon la page recharge en haut et le
+  compte rendu reste hors de vue.
+
+## Trois pièges du compilateur, tous rencontrés
+
+1. **Une balise à accolades dans un argument composite** (`op/#ID/#GET{x}`)
+   désorganise l'analyse : les balises voisines arrivent littéralement dans la
+   sortie. Calculer l'argument à part avec `#SET`.
+2. **Un filtre à accolades dans l'argument d'un autre filtre**
+   (`|lien_ou_expose{…,#GET{x}|=={non},…}`) est relu comme la suite de la chaîne
+   de filtres : SPIP cherche alors un filtre nommé `non,btn btn_secondaire`.
+   Même remède.
+3. **SPIP compile les balises jusque dans les commentaires** — les commentaires
+   JavaScript compris. Un `#PAGINATION` écrit dans un `/* … */` pour
+   l'explication produit une erreur de compilation que rien, sur la page, ne
+   rattache au commentaire fautif.
+
+`tests/test_structure.php` vérifie les trois.
 
 ## Tests à passer avant tout commit
 

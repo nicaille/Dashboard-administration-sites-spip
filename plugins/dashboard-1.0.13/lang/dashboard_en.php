@@ -152,6 +152,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'memoire' => 'of memory',
 
 	// N
+	'nav_explication' => 'Take stock of the site, or remove it from the fleet. Removing it only affects the dashboard: the site itself is untouched.',
 	'nav_parc'            => 'Fleet overview',
 	'nav_retour_parc'     => 'Back to the fleet',
 	'nav_sites_en_erreur' => 'Unreachable sites',
@@ -174,6 +175,9 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'origine_plugin'    => 'provided by',
 	'origine_spip'    => 'shipped with SPIP',
 	'php_vide'          => 'No PHP extension inventoried: synchronise the site.',
+	'plugins_distribues' => 'Shipped with SPIP',
+	'plugins_installes' => 'Installed on the site',
+	'plugins_tous' => 'All',
 	'plugins_vide'      => 'No plugin inventoried: synchronise the site.',
 	'purge_css_js'      => 'Minified CSS and JS',
 	'purge_images'      => 'Computed images',

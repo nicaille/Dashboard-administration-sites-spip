@@ -152,6 +152,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'memoire' => 'de mémoire',
 
 	// N
+	'nav_explication' => 'Relever l’état du site, ou le retirer du parc. Le retirer n’agit que sur le tableau de bord : le site lui-même n’est pas touché.',
 	'nav_parc'            => 'Vue d’ensemble du parc',
 	'nav_retour_parc'     => 'Retour au parc',
 	'nav_sites_en_erreur' => 'Sites injoignables',
@@ -174,6 +175,9 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'origine_plugin'    => 'fournie par',
 	'origine_spip'    => 'livrée avec SPIP',
 	'php_vide'          => 'Aucune extension PHP inventoriée : synchronisez le site.',
+	'plugins_distribues' => 'Livrés avec SPIP',
+	'plugins_installes' => 'Installés sur le site',
+	'plugins_tous' => 'Tous',
 	'plugins_vide'      => 'Aucun plugin inventorié : synchronisez le site.',
 	'purge_css_js'      => 'CSS et JS compactés',
 	'purge_images'      => 'Images calculées',

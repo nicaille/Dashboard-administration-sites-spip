@@ -27,8 +27,6 @@
 		<p class="explication"><:dashboard:api_optionnelle_manquante:> <code>[(#GET{api_optionnelle})]</code></p>
 	]
 	<p class="boutons">
-		<a class="dashboard-bouton" href="[(#URL_ACTION_AUTEUR{dashboard_installer,installer,#SELF})]">
-			<:dashboard:action_reparer:>
-		</a>
+		[(#BOUTON_ACTION{<:dashboard:action_reparer:>,#URL_ACTION_AUTEUR{dashboard_installer,installer,#SELF},btn})]
 	</p>
 </div>

@@ -67,9 +67,15 @@ async function ouvrir(page, titre, url) {
 	return page.locator('body').innerText();
 }
 
-/** Suit un bouton du plugin (les libellés du menu de SPIP se ressemblent). */
+/**
+ * Déclenche un bouton du plugin (les libellés du menu de SPIP se ressemblent).
+ *
+ * Les actions sont des formulaires POST — le balisage de #BOUTON_ACTION — et
+ * non plus des liens : une action qui change l'état d'un site ne se déclenche
+ * pas en suivant un lien.
+ */
 async function bouton(page, libelle) {
-	const lien = page.locator('a.dashboard-bouton', { hasText: libelle }).first();
+	const lien = page.locator('form.bouton_action_post button', { hasText: libelle }).first();
 	if (!(await lien.count())) { dit(`bouton « ${libelle} »`, false, 'introuvable'); return ''; }
 	// Pas de Promise.all avec la navigation : si le serveur tarde, l'attente
 	// conjointe échoue au lieu de laisser l'opération se terminer.
@@ -178,7 +184,7 @@ await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { wai
 
 const ligneMaj = page.locator('tr', { hasText: 'ZZZTEST' });
 dit('mise à jour proposée pour ZZZTEST', await ligneMaj.count() > 0);
-const boutonMaj = ligneMaj.locator('a.dashboard-bouton').first();
+const boutonMaj = ligneMaj.locator('form.bouton_action_post button').first();
 if (await boutonMaj.count()) {
 	await boutonMaj.click();
 	await page.waitForLoadState('domcontentloaded').catch(() => {});
@@ -270,6 +276,47 @@ for (const [nom, url] of [
 	dit(`${nom} : rien d’étranger à l’écran`, trouves.length === 0, trouves.join(' | '));
 }
 
+console.log('\n### Habillage repris du privé');
+
+// Les boutons du plugin doivent être ceux du thème : sans `.btn`, ils héritent
+// du style des `button` nus, dont le texte est blanc — d'où des libellés
+// invisibles sur les fonds clairs qu'on leur donnait.
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+const classesBoutons = await page.locator('form.bouton_action_post button').evaluateAll(
+	(b) => b.map((n) => n.className));
+dit('des actions sont proposées', classesBoutons.length > 3, classesBoutons.length + ' boutons');
+dit('chaque bouton d’action porte la classe du thème',
+	classesBoutons.every((c) => /\bbtn\b/.test(c)),
+	classesBoutons.filter((c) => !/\bbtn\b/.test(c)).join(' | '));
+dit('aucun bouton maison ne subsiste',
+	(await page.locator('.dashboard-bouton').count()) === 0);
+
+// Chaque action rend la main sous l'encadré qui l'a déclenchée, sans quoi la
+// page revient en haut et le compte rendu reste hors de vue.
+const ancres = await page.locator('form.bouton_action_post').evaluateAll(
+	(f) => f.map((n) => decodeURIComponent(n.getAttribute('action') || '')));
+dit('les actions reviennent à leur encadré',
+	ancres.filter((a) => /#(etat|caches|plugins|sauvegardes|core)\b/.test(a)).length >= 4,
+	ancres.filter((a) => !/#/.test(a)).length + ' sans ancre');
+
+// Les trois vues de la liste des plugins.
+const filtres = page.locator('.dashboard-filtres a, .dashboard-filtres .on');
+dit('trois vues pour la liste des plugins', (await filtres.count()) === 3,
+	(await filtres.count()) + ' vues');
+const compte = async (url) => {
+	await page.goto(base + url, { waitUntil: 'domcontentloaded' });
+	return page.locator('#panneau-plugins tbody tr').count();
+};
+const tous = await compte('/ecrire/?exec=dashboard_site&id_dashboard_site=1');
+const installes = await compte('/ecrire/?exec=dashboard_site&id_dashboard_site=1&distribue=non');
+const livres = await compte('/ecrire/?exec=dashboard_site&id_dashboard_site=1&distribue=oui');
+dit('la vue « installés » écarte les plugins livrés avec SPIP',
+	installes > 0 && installes < tous, installes + ' sur ' + tous);
+dit('la vue « livrés avec SPIP » écarte les autres',
+	livres > 0 && livres < tous, livres + ' sur ' + tous);
+dit('les deux vues se partagent la liste', installes + livres === tous,
+	installes + ' + ' + livres + ' = ' + tous);
+
 console.log('\n### Onglets « Plugins » et « PHP »');
 await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
 const panneauPlugins = page.locator('#panneau-plugins');
@@ -319,10 +366,13 @@ dit('aucune extension PHP dans l’onglet « Plugins »',
  */
 async function urlsDActions(page, nom, url) {
 	await page.goto(base + url, { waitUntil: 'domcontentloaded' });
-	const liens = await page.locator('a.dashboard-bouton').evaluateAll((l) => l.map((a) => a.getAttribute('href') || ''));
-	const brutes = liens.filter((h) => /%23|#[A-Z_]{3,}/.test(h));
+	const liens = await page.locator('form.bouton_action_post').evaluateAll(
+		(f) => f.map((form) => form.getAttribute('action') || ''));
+	// Les URL de retour portent une ancre en minuscules (`%23plugins`) : ce
+	// n'est pas une balise non compilée. Une balise, elle, est en capitales.
+	const brutes = liens.filter((h) => /%23[A-Z_]{3,}|#[A-Z_]{3,}/.test(h));
 	dit(`${nom} : aucune balise non compilée dans les URL d’action`, brutes.length === 0,
-		brutes.map((h) => (h.match(/%23[A-Za-z_:]+|#[A-Z_]{3,}/) || [''])[0]).join(', '));
+		brutes.map((h) => (h.match(/%23[A-Z_:]+|#[A-Z_]{3,}/) || [''])[0]).join(', '));
 	const args = liens.map((h) => decodeURIComponent((h.match(/[?&]arg=([^&]*)/) || ['', ''])[1]))
 		.filter((a) => /^(core_maj|plugin_maj|plugin_maj_tous|sync|purger|sauvegarde)\b/.test(a));
 	const malFormes = args.filter((a) => !/^[a-z_]+\/\d+(\/|$)/.test(a));
@@ -395,26 +445,33 @@ dit('les tables du site sont listées', (await choix.locator('option').count()) 
 	(await choix.locator('option').count()) + ' entrées');
 await choix.selectOption('spip_meta');
 await page.waitForTimeout(1500);
-const total = Number(((await bloc.locator('.dashboard-serveur-pagination').innerText()).match(/sur (\d+)/) || [0, 0])[1]);
+// La pagination reprend le balisage de SPIP : `nav.pagination`, une liste
+// `.pagination-items` et des `.pagination-item`. C'est ce qui lui vaut d'hériter
+// des styles du privé au lieu d'écrire du blanc sur du blanc.
+const pagination = bloc.locator('nav.pagination');
+const total = Number(((await pagination.innerText()).match(/sur (\d+)/) || [0, 0])[1]);
 dit('le contenu d’une table s’affiche', (await bloc.locator('tbody tr').count()) > 0,
 	(await bloc.locator('tbody tr').count()) + ' lignes sur ' + total);
+dit('la pagination reprend le balisage de SPIP',
+	(await pagination.locator('ul.pagination-items li.pagination-item').count()) === 2,
+	(await pagination.locator('li.pagination-item').count()) + ' éléments');
 
 await bloc.locator('thead th button').first().click();
 await page.waitForTimeout(1200);
 dit('le tri s’applique sur une colonne', /[↑↓]/.test(await bloc.locator('thead th').first().innerText()));
 
 if (total > 50) {
-	await bloc.locator('.dashboard-serveur-pagination button', { hasText: 'suivant' }).click();
+	await pagination.locator('.pagination-item.next a').click();
 	await page.waitForTimeout(1200);
 	dit('la pagination avance',
-		/^51/.test((await bloc.locator('.dashboard-serveur-pagination').innerText()).trim()),
-		(await bloc.locator('.dashboard-serveur-pagination').innerText()).replace(/\s+/g, ' ').trim());
+		/^51/.test((await pagination.innerText()).trim()),
+		(await pagination.innerText()).replace(/\s+/g, ' ').trim());
 }
 
 await bloc.locator('select').nth(1).selectOption('nom');
 await bloc.locator('input[type=search]').fill('version');
 await page.waitForTimeout(1500);
-const filtre = Number(((await bloc.locator('.dashboard-serveur-pagination').innerText()).match(/sur (\d+)/) || [0, 0])[1]);
+const filtre = Number(((await pagination.innerText()).match(/sur (\d+)/) || [0, 0])[1]);
 dit('le filtre restreint la sélection', filtre > 0 && filtre < total, filtre + ' sur ' + total);
 
 // Le point qui compte : rien de secret ne doit atteindre l'écran.
@@ -499,7 +556,7 @@ await bouton(page, 'Synchroniser');
 await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
 await urlsDActions(page, 'fiche du site, mise à jour du core proposée',
 	'/ecrire/?exec=dashboard_site&id_dashboard_site=1');
-const boutonCore = page.locator('a.dashboard-bouton-danger').first();
+const boutonCore = page.locator('#core form.bouton_action_post button').first();
 dit('mise à jour du core proposée', (await boutonCore.count()) > 0);
 
 // État d'avant, pour prouver ensuite que ce sont bien les fichiers de l'archive
@@ -600,7 +657,7 @@ dit('plus de migration de base en attente', apres.base_maj === 'non', apres.base
 dit('l’espace privé du site n’est plus bloqué',
 	!/procédure de mise à jour doit être lancée/.test(await page.locator('body').innerText()));
 dit('plus de mise à jour de core proposée',
-	(await page.locator('a.dashboard-bouton-danger').count()) === 0);
+	(await page.locator('#core').count()) === 0);
 
 console.log('\n### Restauration du dump');
 try {

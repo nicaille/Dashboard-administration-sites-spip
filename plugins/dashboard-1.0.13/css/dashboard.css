@@ -80,32 +80,20 @@
 
 .dashboard-ligne-maj { background: rgba(255, 213, 128, .18); }
 
-.dashboard-actions { white-space: nowrap; }
-.dashboard-bouton {
+/* Les boutons sont ceux du thème privé : `.btn` et `.btn.btn_secondaire`. On
+   redéfinissait ici un fond blanc sans redéfinir la couleur du texte, que le
+   thème met en blanc — d'où des libellés invisibles sur les boutons de
+   pagination. Il ne reste que la mise en ligne des actions d'un tableau. */
+.dashboard-actions {
+	white-space: nowrap;
+}
+.dashboard-actions .btn,
+.dashboard-actions .bouton_action_post {
 	display: inline-block;
-	margin: .1em .25em .1em 0;
-	padding: .25em .7em;
-	border: 1px solid rgba(0, 0, 0, .2);
-	border-radius: 3px;
-	background: #fff;
-	font-size: .9em;
-	text-decoration: none;
+	margin: 0 .25em .25em 0;
+	vertical-align: middle;
 }
-.dashboard-bouton:hover,
-.dashboard-bouton:focus { background: #f0f0f0; }
-.dashboard-bouton-primaire {
-	border-color: #2b6ca3;
-	background: #2b6ca3;
-	color: #fff;
-}
-.dashboard-bouton-primaire:hover,
-.dashboard-bouton-primaire:focus { background: #1f5580; }
-.dashboard-bouton-danger {
-	border-color: #a4001c;
-	background: #a4001c;
-	color: #fff;
-}
-.dashboard-lien-danger { color: #a4001c; }
+.dashboard-lien-danger { color: var(--spip-color-danger, #a4001c); }
 
 .dashboard-journal-erreur td { color: #a4001c; }
 
@@ -187,6 +175,22 @@
 	opacity: .8;
 }
 
+/* Les trois vues de la liste des plugins. Le thème habille déjà `.btn` et
+   l'état exposé (`.on`) : il ne reste qu'à les poser en ligne. */
+.dashboard-filtres {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .4em;
+	align-items: center;
+	margin: 0 0 1em;
+	padding: 0;
+	list-style: none;
+}
+.dashboard-filtres .on {
+	padding: var(--spip-btn-padding-y, .3em) var(--spip-btn-padding-x, .8em);
+	border-bottom: 2px solid currentColor;
+}
+
 /* Fraîcheur du catalogue des dépôts : « aucune mise à jour disponible » ne vaut
    que ce que vaut la date à laquelle il a été relu. */
 .dashboard-depots {
@@ -228,11 +232,21 @@
 	background: rgba(0, 0, 0, .06);
 	font-size: .9em;
 }
+/* Les champs reprennent l'habillage de `.formulaire_spip`, posés en ligne. */
 .dashboard-serveur-barre {
 	display: flex;
 	flex-wrap: wrap;
-	gap: .5em;
-	align-items: center;
+	gap: .8em;
+	align-items: flex-end;
+	margin: 0 0 1em;
+}
+.dashboard-serveur-barre .editer {
+	margin: 0;
+}
+.dashboard-serveur-barre label {
+	display: block;
+	font-size: .85em;
+	opacity: .8;
 }
 .dashboard-serveur-defilement {
 	overflow-x: auto;
@@ -246,26 +260,35 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
+/* Le tri d'une colonne : un bouton, mais qui doit se lire comme un en-tête —
+   le thème donne aux `button` nus un fond plein qui écraserait la ligne. */
 .dashboard-serveur-tri {
+	display: inline;
 	padding: 0;
+	margin: 0;
 	border: 0;
 	background: none;
 	font: inherit;
 	font-weight: bold;
 	color: inherit;
 	cursor: pointer;
+	text-decoration: underline dotted;
+}
+.dashboard-serveur-tri:hover,
+.dashboard-serveur-tri:focus {
+	background: none;
+	color: inherit;
+	text-decoration: underline;
+}
+.dashboard-serveur-tri.on {
+	text-decoration: none;
 }
 .dashboard-serveur-masquee {
 	font-weight: normal;
 	font-size: .85em;
 	opacity: .7;
 }
-.dashboard-serveur-pagination {
-	display: flex;
-	align-items: center;
-	gap: .4em;
-	margin: .6em 0 0;
-}
+
 .dashboard-serveur-fichier {
 	margin: 0 0 .4em;
 }

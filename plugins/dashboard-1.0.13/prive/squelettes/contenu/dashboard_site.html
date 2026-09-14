@@ -13,6 +13,19 @@
 
 #SET{version_cible,#VERSION_SPIP|dashboard_version_disponible}
 
+[(#REM)
+	Après un envoi, SPIP recharge la page en haut : sur une fiche qui tient sur
+	trois écrans, le compte rendu de l'action reste invisible. Chaque bloc porte
+	donc une ancre, et l'URL de retour de ses actions la désigne. Les adresses
+	sont calculées ici, une fois : une balise à accolades glissée dans un
+	argument composite désorganise l'analyse des arguments.
+]
+#SET{retour_etat,#SELF|ancre_url{etat}}
+#SET{retour_caches,#SELF|ancre_url{caches}}
+#SET{retour_plugins,#SELF|ancre_url{plugins}}
+#SET{retour_sauvegardes,#SELF|ancre_url{sauvegardes}}
+#SET{retour_core,#SELF|ancre_url{core}}
+
 <h1 class="grostitre">#TITRE</h1>
 
 [(#ENV{dashboard_message}|oui)
@@ -49,18 +62,13 @@
 	<p><:dashboard:base_maj_texte:></p>
 	[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
 	<p class="boutons">
-		<a class="dashboard-bouton dashboard-bouton-danger"
-		   href="[(#URL_ACTION_AUTEUR{dashboard_operation,base_maj/#ID_DASHBOARD_SITE,#SELF})]"
-		   data-confirmation="<:dashboard:base_maj_confirmation:>"
-		   onclick="return confirm(this.dataset.confirmation);">
-			<:dashboard:action_base_maj:>
-		</a>
+		[(#BOUTON_ACTION{<:dashboard:action_base_maj:>,#URL_ACTION_AUTEUR{dashboard_operation,base_maj/#ID_DASHBOARD_SITE,#GET{retour_etat}},btn btn_danger,<:dashboard:base_maj_confirmation:>})]
 	</p>
 	]
 </div>
 ]
 
-<div class="dashboard-fiche">
+<div class="dashboard-fiche" id="etat">
 	<h2><:dashboard:titre_etat:></h2>
 	<table class="spip">
 		<tbody>
@@ -83,9 +91,9 @@
 	</table>
 
 	<p class="boutons dashboard-actions">
-		<a class="dashboard-bouton" href="[(#URL_ACTION_AUTEUR{dashboard_operation,sync/#ID_DASHBOARD_SITE,#SELF})]"><:dashboard:action_sync:></a>
+		[(#BOUTON_ACTION{<:dashboard:action_sync:>,#URL_ACTION_AUTEUR{dashboard_operation,sync/#ID_DASHBOARD_SITE,#GET{retour_etat}},btn})]
 		[(#AUTORISER{modifier,dashboard_site,#ID_DASHBOARD_SITE})
-			<a class="dashboard-bouton" href="[(#URL_ECRIRE{dashboard_site,id_dashboard_site=#ID_DASHBOARD_SITE&modifier=oui})]"><:dashboard:icone_modifier_site:></a>
+			<a class="btn btn_secondaire" href="[(#URL_ECRIRE{dashboard_site,id_dashboard_site=#ID_DASHBOARD_SITE&modifier=oui}|ancre_url{etat})]"><:dashboard:icone_modifier_site:></a>
 		]
 	</p>
 </div>
@@ -99,7 +107,7 @@
 ]
 
 [(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
-<div class="dashboard-fiche">
+<div class="dashboard-fiche" id="caches">
 	<h2><:dashboard:titre_caches:></h2>
 	<table class="spip liste">
 		<thead><tr>
@@ -114,13 +122,13 @@
 					<th scope="row">[(#VALEUR|dashboard_libelle_cache)]</th>
 					<td>[(#_site:INFOS|dashboard_cache_info{#VALEUR,fichiers})]</td>
 					<td>[(#_site:INFOS|dashboard_cache_info{#VALEUR,octets}|dashboard_taille)]</td>
-					<td><a class="dashboard-bouton" href="[(#URL_ACTION_AUTEUR{dashboard_operation,purger/#_site:ID_DASHBOARD_SITE/#VALEUR,#SELF})]"><:dashboard:action_purger:></a></td>
+					<td>[(#BOUTON_ACTION{<:dashboard:action_purger:>,#URL_ACTION_AUTEUR{dashboard_operation,purger/#_site:ID_DASHBOARD_SITE/#VALEUR,#_site:GET{retour_caches}},btn btn_secondaire})]</td>
 				</tr>
 			</BOUCLE_caches>
 			<tr>
 				<th scope="row"><:dashboard:purge_tout:></th>
 				<td colspan="2"><em><:dashboard:purge_tout_explication:></em></td>
-				<td><a class="dashboard-bouton dashboard-bouton-primaire" href="[(#URL_ACTION_AUTEUR{dashboard_operation,purger/#ID_DASHBOARD_SITE/tout,#SELF})]"><:dashboard:action_purger:></a></td>
+				<td>[(#BOUTON_ACTION{<:dashboard:action_purger:>,#URL_ACTION_AUTEUR{dashboard_operation,purger/#ID_DASHBOARD_SITE/tout,#GET{retour_caches}},btn})]</td>
 			</tr>
 		</tbody>
 	</table>
@@ -152,23 +160,43 @@
 		<section id="panneau-plugins" role="tabpanel" aria-labelledby="onglet-plugins">
 	[(#INFOS|dashboard_depots_age|oui)
 		<p class="dashboard-depots[(#INFOS|dashboard_depots_perimes|oui) dashboard-depots-perimes]">
-			<:dashboard:depots_relus:> [(#INFOS|dashboard_depots_age)][(#INFOS|dashboard_depots_perimes|oui) — <:dashboard:depots_avertissement:>]
+			<span><:dashboard:depots_relus:> [(#INFOS|dashboard_depots_age)][(#INFOS|dashboard_depots_perimes|oui) — <:dashboard:depots_avertissement:>]</span>
 			[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
-			<a class="dashboard-bouton" href="[(#URL_ACTION_AUTEUR{dashboard_operation,depots_maj/#ID_DASHBOARD_SITE,#SELF})]">
-				<:dashboard:action_depots_maj:>
-			</a>
+			[(#BOUTON_ACTION{<:dashboard:action_depots_maj:>,#URL_ACTION_AUTEUR{dashboard_operation,depots_maj/#ID_DASHBOARD_SITE,#GET{retour_plugins}},btn btn_secondaire})]
 			]
 		</p>
 	]
 	[(#NB_PLUGINS_MAJ|>{0}|oui)
 			[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
 			<p class="boutons">
-				<a class="dashboard-bouton dashboard-bouton-primaire" href="[(#URL_ACTION_AUTEUR{dashboard_operation,plugin_maj_tous/#ID_DASHBOARD_SITE,#SELF})]">
-					<:dashboard:action_maj_tous:> ([(#NB_PLUGINS_MAJ)])
-				</a>
+				[(#BOUTON_ACTION{<:dashboard:action_maj_tous:> (#NB_PLUGINS_MAJ),#URL_ACTION_AUTEUR{dashboard_operation,plugin_maj_tous/#ID_DASHBOARD_SITE,#GET{retour_plugins}},btn})]
 			</p>
 			]
 		]
+
+	[(#REM)
+		Trois vues : ce que l'hébergeur du site a installé, ce que SPIP apporte
+		de lui-même, et tout. La distinction compte — on ne met pas à jour un
+		plugin livré avec le core, il suit le core.
+	]
+	#SET{filtre_plugins,#ENV{distribue}}
+	#SET{url_plugins_installes,#SELF|parametre_url{distribue,non}|ancre_url{plugins}}
+	#SET{url_plugins_distribues,#SELF|parametre_url{distribue,oui}|ancre_url{plugins}}
+	#SET{url_plugins_tous,#SELF|parametre_url{distribue,''}|ancre_url{plugins}}
+	[(#REM)
+		Les conditions d'exposition sont calculées à part : un filtre à accolades
+		écrit dans l'argument d'un autre filtre (`|=={non}`) est relu comme la
+		suite de la chaîne de filtres, et SPIP cherche alors un filtre nommé
+		« non,btn btn_secondaire ».
+	]
+	#SET{plugins_sur_installes,#GET{filtre_plugins}|=={non}}
+	#SET{plugins_sur_distribues,#GET{filtre_plugins}|=={oui}}
+	#SET{plugins_sur_tous,#GET{filtre_plugins}|non}
+	<ul class="dashboard-filtres liste-items">
+		<li>[(#GET{url_plugins_installes}|lien_ou_expose{<:dashboard:plugins_installes:>,#GET{plugins_sur_installes},btn btn_secondaire})]</li>
+		<li>[(#GET{url_plugins_distribues}|lien_ou_expose{<:dashboard:plugins_distribues:>,#GET{plugins_sur_distribues},btn btn_secondaire})]</li>
+		<li>[(#GET{url_plugins_tous}|lien_ou_expose{<:dashboard:plugins_tous:>,#GET{plugins_sur_tous},btn btn_secondaire})]</li>
+	</ul>
 
 	<B_plugins>
 		<table class="spip liste">
@@ -180,7 +208,7 @@
 				<th scope="col"><:dashboard:col_actions:></th>
 			</tr></thead>
 			<tbody>
-			<BOUCLE_plugins(DASHBOARD_PLUGINS){id_dashboard_site}{par prefixe}>
+			<BOUCLE_plugins(DASHBOARD_PLUGINS){id_dashboard_site}{distribue ?}{par prefixe}{pagination 30}>
 				<tr class="[(#MAJ_DISPONIBLE|=={oui}|?{dashboard-ligne-maj,})]">
 					<th scope="row">[(#NOM|dashboard_nom_lisible|sinon{#PREFIXE})] <small><code>#PREFIXE</code></small></th>
 					<td><code>#VERSION</code></td>
@@ -193,7 +221,7 @@
 						[(#MAJ_DISPONIBLE|=={oui}|oui)
 							[(#DISTRIBUE|=={non}|oui)
 								[(#AUTORISER{operer,dashboard_site,#_site:ID_DASHBOARD_SITE})
-									<a class="dashboard-bouton" href="[(#URL_ACTION_AUTEUR{dashboard_operation,plugin_maj/#_site:ID_DASHBOARD_SITE/#PREFIXE,#SELF})]"><:dashboard:action_maj:></a>
+									[(#BOUTON_ACTION{<:dashboard:action_maj:>,#URL_ACTION_AUTEUR{dashboard_operation,plugin_maj/#_site:ID_DASHBOARD_SITE/#PREFIXE,#_site:GET{retour_plugins}},btn btn_secondaire})]
 								]
 							]
 						]
@@ -202,6 +230,7 @@
 			</BOUCLE_plugins>
 			</tbody>
 		</table>
+		[<nav class="pagination" role="navigation">(#PAGINATION{precedent_suivant})</nav>]
 		</B_plugins>
 			<p class="petition"><:dashboard:plugins_vide:></p>
 			<//B_plugins>
@@ -259,12 +288,12 @@
 </div>
 
 [(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
-<div class="dashboard-fiche">
+<div class="dashboard-fiche" id="sauvegardes">
 	<h2><:dashboard:titre_sauvegardes:></h2>
 
 	<p class="boutons dashboard-actions">
-		<a class="dashboard-bouton dashboard-bouton-primaire" href="[(#URL_ACTION_AUTEUR{dashboard_operation,sauvegarde/#ID_DASHBOARD_SITE,#SELF})]"><:dashboard:action_sauvegarder:></a>
-		<a class="dashboard-bouton" href="[(#URL_ACTION_AUTEUR{dashboard_operation,sauvegarde/#ID_DASHBOARD_SITE/legere,#SELF})]"><:dashboard:action_sauvegarder_legere:></a>
+		[(#BOUTON_ACTION{<:dashboard:action_sauvegarder:>,#URL_ACTION_AUTEUR{dashboard_operation,sauvegarde/#ID_DASHBOARD_SITE,#GET{retour_sauvegardes}},btn})]
+		[(#BOUTON_ACTION{<:dashboard:action_sauvegarder_legere:>,#URL_ACTION_AUTEUR{dashboard_operation,sauvegarde/#ID_DASHBOARD_SITE/legere,#GET{retour_sauvegardes}},btn btn_secondaire})]
 	</p>
 
 	<B_sauvegardes>
@@ -276,25 +305,26 @@
 			<th scope="col"><:dashboard:col_actions:></th>
 		</tr></thead>
 		<tbody>
-		<BOUCLE_sauvegardes(DASHBOARD_SAUVEGARDES){id_dashboard_site}{par date}{inverse}{0,15}>
+		<BOUCLE_sauvegardes(DASHBOARD_SAUVEGARDES){id_dashboard_site}{par date}{inverse}{pagination 15}>
 			<tr>
 				<td>[(#DATE|affdate_heure)]</td>
 				<td>[(#OCTETS|dashboard_taille)]</td>
 				<td>[(#STATUT|=={locale}|oui)<:dashboard:sauvegarde_locale:>][(#STATUT|=={locale}|non)<:dashboard:sauvegarde_distante:>]</td>
 				<td>[(#STATUT|=={locale}|oui)
-					<a class="dashboard-bouton" href="[(#URL_ACTION_AUTEUR{dashboard_telecharger,#ID_DASHBOARD_SAUVEGARDE})]"><:dashboard:action_telecharger:></a>
+					<a class="btn btn_secondaire" href="[(#URL_ACTION_AUTEUR{dashboard_telecharger,#ID_DASHBOARD_SAUVEGARDE})]"><:dashboard:action_telecharger:></a>
 				]</td>
 			</tr>
 		</BOUCLE_sauvegardes>
 		</tbody>
 	</table>
+	[<nav class="pagination" role="navigation">(#PAGINATION{precedent_suivant})</nav>]
 	</B_sauvegardes>
 	<p class="petition"><:dashboard:sauvegardes_vide:></p>
 	<//B_sauvegardes>
 </div>
 
 [(#CORE_MAJ|=={oui}|oui)
-<div class="dashboard-fiche dashboard-fiche-alerte">
+<div class="dashboard-fiche dashboard-fiche-alerte" id="core">
 	<h2><:dashboard:titre_core_maj:></h2>
 	<p>
 		<:dashboard:core_maj_texte{version_actuelle=#VERSION_SPIP,version_cible=#GET{version_cible}}:>
@@ -309,18 +339,13 @@
 		     configuration et au moment de l'execution.
 		     Ne pas ecrire de syntaxe de balise dans un commentaire : SPIP la
 		     compile quand meme, et une balise invalide emporte le bloc. -->
-		<a class="dashboard-bouton dashboard-bouton-danger"
-		   href="[(#URL_ACTION_AUTEUR{dashboard_operation,core_maj/#ID_DASHBOARD_SITE,#SELF})]"
-		   data-confirmation="<:dashboard:core_maj_confirmation:>"
-		   onclick="return confirm(this.dataset.confirmation);">
-			<:dashboard:action_core_maj:>
-		</a>
+		[(#BOUTON_ACTION{<:dashboard:action_core_maj:>,#URL_ACTION_AUTEUR{dashboard_operation,core_maj/#ID_DASHBOARD_SITE,#GET{retour_core}},btn btn_danger,<:dashboard:core_maj_confirmation:>})]
 	</p>
 </div>
 ]
 ]
 
-<div class="dashboard-fiche">
+<div class="dashboard-fiche" id="journal">
 	<h2><:dashboard:titre_journal:></h2>
 	<B_journal>
 	<table class="spip liste">
@@ -341,7 +366,7 @@
 		</BOUCLE_journal>
 		</tbody>
 	</table>
-	#PAGINATION
+	[<nav class="pagination" role="navigation">(#PAGINATION{precedent_suivant})</nav>]
 	</B_journal>
 	<p class="petition"><:dashboard:journal_vide:></p>
 	<//B_journal>
@@ -565,17 +590,25 @@
 			choix.appendChild(o);
 		});
 
-		var barre = document.createElement('p');
-		barre.className = 'dashboard-serveur-barre';
-		barre.appendChild(choix);
-
 		var filtre = document.createElement('input');
 		filtre.type = 'search';
 		filtre.placeholder = 'filtrer…';
 		filtre.className = 'text';
 		var colonneFiltre = document.createElement('select');
-		barre.appendChild(colonneFiltre);
-		barre.appendChild(filtre);
+
+		/* Le privé habille ses champs par `.formulaire_spip .editer` : hors de
+		   cette enveloppe, un select reste celui du navigateur, et détonne. */
+		var barre = document.createElement('div');
+		barre.className = 'formulaire_spip dashboard-serveur-barre';
+		[[choix, 'Table'], [colonneFiltre, 'Colonne'], [filtre, 'Filtre']].forEach(function (paire) {
+			var champ = document.createElement('div');
+			champ.className = 'editer';
+			var etiquette = document.createElement('label');
+			etiquette.textContent = paire[1];
+			champ.appendChild(etiquette);
+			champ.appendChild(paire[0]);
+			barre.appendChild(champ);
+		});
 		cible.appendChild(barre);
 
 		var contenu = document.createElement('div');
@@ -641,7 +674,8 @@
 			th.scope = 'col';
 			var bouton = document.createElement('button');
 			bouton.type = 'button';
-			bouton.className = 'dashboard-serveur-tri';
+			bouton.className = 'dashboard-serveur-tri'
+				+ (r.tri === c.nom ? ' on ' + (r.sens === 'desc' ? 'desc' : 'asc') : '');
 			bouton.textContent = c.nom + (r.tri === c.nom ? (r.sens === 'desc' ? ' ↓' : ' ↑') : '');
 			bouton.addEventListener('click', function () {
 				etatTable.sens = (etatTable.tri === c.nom && etatTable.sens === 'asc') ? 'desc' : 'asc';
@@ -686,27 +720,54 @@
 			cible.appendChild(rien);
 		}
 
-		var pagination = document.createElement('p');
-		pagination.className = 'dashboard-serveur-pagination';
+		/* Ces lignes viennent du site géré : aucune boucle SPIP ne les a
+		   produites, donc pas de balise de pagination possible ici. On reprend
+		   son balisage mot pour mot, pour hériter des styles du privé plutôt
+		   que d'en inventer — c'est ce qui donnait des libellés blancs sur fond
+		   blanc. Ne jamais écrire de syntaxe de balise dans un commentaire,
+		   fût-il en JavaScript : SPIP la compile quand même. */
 		var fin = r.debut + r.lignes.length;
+		var pagination = document.createElement('nav');
+		pagination.className = 'pagination';
+		pagination.setAttribute('role', 'navigation');
+
 		var compte = document.createElement('span');
-		compte.textContent = r.lignes.length
-			? (r.debut + 1) + '–' + fin + (r.total === null ? '' : ' sur ' + r.total) + '  '
+		compte.className = 'pagination-label';
+		var etiquette = document.createElement('span');
+		etiquette.className = 'label';
+		etiquette.textContent = r.lignes.length
+			? (r.debut + 1) + '–' + fin + (r.total === null ? '' : ' sur ' + r.total)
 			: '';
+		compte.appendChild(etiquette);
 		pagination.appendChild(compte);
 
-		[['‹ précédent', Math.max(0, r.debut - r.lot), r.debut > 0],
-		 ['suivant ›', r.debut + r.lot, r.total === null ? r.lignes.length === r.lot : fin < r.total]]
+		var items = document.createElement('ul');
+		items.className = 'pagination-items pagination_precedent_suivant';
+		[['prev', '‹ précédent', Math.max(0, r.debut - r.lot), r.debut > 0],
+		 ['next', 'suivant ›', r.debut + r.lot,
+			r.total === null ? r.lignes.length === r.lot : fin < r.total]]
 			.forEach(function (p) {
-				var b = document.createElement('button');
-				b.type = 'button';
-				b.className = 'dashboard-bouton';
-				b.textContent = p[0];
-				b.disabled = !p[2];
-				b.addEventListener('click', function () { etatTable.debut = p[1]; recharger(); });
-				pagination.appendChild(b);
-				pagination.appendChild(document.createTextNode(' '));
+				var li = document.createElement('li');
+				li.className = 'pagination-item ' + p[0] + (p[3] ? '' : ' disabled');
+				var lien;
+				if (p[3]) {
+					lien = document.createElement('a');
+					lien.href = '#';
+					lien.className = 'pagination-item-label lien_pagination';
+					lien.addEventListener('click', function (e) {
+						e.preventDefault();
+						etatTable.debut = p[2];
+						recharger();
+					});
+				} else {
+					lien = document.createElement('span');
+					lien.className = 'pagination-item-label';
+				}
+				lien.textContent = p[1];
+				li.appendChild(lien);
+				items.appendChild(li);
 			});
+		pagination.appendChild(items);
 		cible.appendChild(pagination);
 	}
 
@@ -816,9 +877,7 @@
 	[<p><:dashboard:tables_manquantes:> <code>(#VAL|dashboard_tables_absentes)</code></p>]
 	[(#AUTORISER{configurer,_dashboard})
 	<p class="boutons">
-		<a class="dashboard-bouton dashboard-bouton-primaire" href="[(#URL_ACTION_AUTEUR{dashboard_installer,installer,#SELF})]">
-			<:dashboard:action_installer:>
-		</a>
+		[(#BOUTON_ACTION{<:dashboard:action_installer:>,#URL_ACTION_AUTEUR{dashboard_installer,installer,#SELF},btn})]
 	</p>
 	]
 </div>
