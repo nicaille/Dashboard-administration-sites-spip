@@ -165,11 +165,34 @@ $id_depot = sql_insertq('spip_depots', ['titre' => 'Dépôt de test', 'type' => 
 $id_plugin = sql_getfetsel('id_plugin', 'spip_plugins', 'prefixe = ' . sql_quote('ZZZTEST'))
 	?: sql_insertq('spip_plugins', ['prefixe' => 'ZZZTEST', 'nom' => 'Plugin de test']);
 sql_delete('spip_paquets', 'id_depot = ' . intval($id_depot));
+// SVP range les versions normalisées et l'état sous forme numérique : insérer
+// autrement donnerait une ligne que ses propres requêtes ne retrouveraient pas.
+include_spip('inc/svp_outiller');
 sql_insertq('spip_paquets', ['id_plugin' => $id_plugin, 'id_depot' => $id_depot,
-	'version' => '1.0.1', 'etat' => 'test', 'nom_archive' => 'zzztest.zip',
-	'src_archive' => 'auto/zzztest/v1.0.1/']);
+	'prefixe' => 'ZZZTEST', 'version' => normaliser_version('1.0.1'),
+	'etat' => 'test', 'etatnum' => 3, 'obsolete' => 'non',
+	'compatibilite_spip' => '[4.1.0;4.*]',
+	'nom_archive' => 'zzztest.zip', 'src_archive' => 'auto/zzztest/v1.0.1/']);
+
+// Faire découvrir à SVP les plugins présents sur le disque, puis lui faire
+// constater la mise à jour disponible : sans ces deux passes, il n'a pas de
+// paquet local pour ZZZTEST et l'agent retomberait sur le déploiement d'archive.
+include_spip('inc/svp_depoter_local');
+svp_actualiser_paquets_locaux();
+svp_actualiser_maj_version();
+
+$local = sql_fetsel(['pa.version', 'pa.maj_version'], ['spip_paquets AS pa', 'spip_plugins AS pl'],
+	['pa.id_plugin = pl.id_plugin', 'pa.id_depot = 0', 'pl.prefixe = ' . sql_quote('ZZZTEST')]);
 $actifs = array_keys(unserialize($GLOBALS['meta']['plugin'] ?? '') ?: []);
-echo in_array('ZZZTEST', $actifs, true) ? "DEPOT_PRET\n" : "ECHEC : zzztest inactif\n";
+if (!in_array('ZZZTEST', $actifs, true)) {
+	echo "ECHEC : zzztest inactif\n";
+} elseif (!$local) {
+	echo "ECHEC : aucun paquet local SVP pour zzztest\n";
+} elseif (!$local['maj_version']) {
+	echo "ECHEC : SVP n'annonce pas de mise à jour pour zzztest\n";
+} else {
+	echo "DEPOT_PRET\n";
+}
 PHPEOF
 curl -s --noproxy '*' -o /dev/null "$BASE/spip.php"
 # Comme pour l'activation initiale : la liste des plugins actifs n'est visible

@@ -90,7 +90,7 @@ Ce qui reste exposé malgré tout est décrit dans [docs/securite.md](docs/secur
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/dashboard-1.0.10`, `plugins/dashboard_agent-1.0.9`. Ce n'est pas
+`plugins/dashboard-1.0.11`, `plugins/dashboard_agent-1.0.10`. Ce n'est pas
 décoratif : en déposant la nouvelle version **à côté** de l'ancienne plutôt que
 par-dessus, on évite le travers classique de la mise en ligne par FTP, où les
 fichiers supprimés entre deux versions survivent dans le dossier écrasé et
@@ -108,12 +108,17 @@ de la comparaison entre la version du `paquet.xml` et celle mémorisée en meta
 gain des dossiers versionnés est ailleurs : pas de fichier fantôme, et un retour
 arrière immédiat.
 
-**Les sites administrés suivent la même règle.** Une mise à jour de plugin par
-archive n'écrase pas le dossier existant : elle installe la nouvelle version à
-côté, dans un dossier qui porte son numéro — `auto/saisies/v6.3.4` devient
-`auto/saisies/v6.3.6`, `saisies` devient `saisies-6.3.6` — puis écarte l'ancien.
-Le nom du dossier retenu est repris au journal. Voir
-[docs/exploitation.md](docs/exploitation.md#le-dossier-déployé-porte-la-version-installée).
+**Les sites administrés suivent la même règle**, et c'est le plus souvent SVP
+qui s'en charge : quand le site géré en dispose — c'est le cas par défaut, SVP
+est livré avec SPIP — la mise à jour lui est déléguée. Il vérifie les
+dépendances avant d'agir, installe dans `plugins/auto/<prefixe>/v<version>`,
+écarte l'ancien dossier et enchaîne la migration de schéma du plugin.
+
+À défaut de SVP, l'agent déploie l'archive lui-même, sans écraser : la nouvelle
+version s'installe à côté, dans un dossier qui porte son numéro —
+`auto/saisies/v6.3.4` devient `auto/saisies/v6.3.6`, `saisies` devient
+`saisies-6.3.6`. Le nom du dossier retenu est repris au journal. Voir
+[docs/exploitation.md](docs/exploitation.md#mettre-à-jour-les-plugins).
 
 ## Installation rapide
 

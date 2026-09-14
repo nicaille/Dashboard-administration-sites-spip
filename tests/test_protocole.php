@@ -683,6 +683,44 @@ verifier('la version en place est intacte', is_file($cible . '/paquet.xml'));
 
 dashagent_supprimer_repertoire($bac, true);
 
+echo "\n== Délégation à SVP ==\n";
+
+/* La distinction qui compte : un refus de SVP ne se contourne pas en déployant
+   l'archive, une indisponibilité si. */
+verifier('SVP absent : repli sur l’archive', dashboard_chantier_svp_repli('svp_absent'));
+verifier('aucun paquet local : repli sur l’archive', dashboard_chantier_svp_repli('paquet_inconnu'));
+/* Sur un site où SVP suit ce plugin, son « aucune mise à jour » est un avis,
+   pas une panne : il écarte peut-être une version trop instable ou incompatible.
+   Passer outre installerait ce qu'il refuse. */
+verifier('aucune mise à jour annoncée : pas de repli', !dashboard_chantier_svp_repli('maj_inconnue'));
+verifier('erreur sans code : repli sur l’archive', dashboard_chantier_svp_repli(''));
+verifier('refus de dépendance : pas de repli', !dashboard_chantier_svp_repli('dependances'));
+verifier('verrou d’un autre administrateur : pas de repli', !dashboard_chantier_svp_repli('verrou'));
+verifier('auto/ non inscriptible : pas de repli', !dashboard_chantier_svp_repli('dir_auto'));
+verifier('code inconnu : pas de repli', !dashboard_chantier_svp_repli('quelque_chose'));
+
+/* Ce que SVP affiche pendant ses actions ne doit ni casser le JSON ni gonfler
+   la réponse. */
+verifier('le HTML de SVP est réduit à du texte',
+	dashagent_svp_texte('<p>Plugin <b>installé</b></p>') === 'Plugin installé',
+	dashagent_svp_texte('<p>Plugin <b>installé</b></p>'));
+verifier('les blancs sont resserrés',
+	dashagent_svp_texte("a\n\n\t  b") === 'a b', dashagent_svp_texte("a\n\n\t  b"));
+$long = dashagent_svp_texte(str_repeat('x', 5000));
+verifier('un journal démesuré est coupé', substr($long, 0, 2000) === str_repeat('x', 2000)
+	&& substr($long, 2000) === '…', strlen($long));
+verifier('un journal vide reste vide', dashagent_svp_texte('') === '');
+
+/* Les tampons de sortie : SVP écrit pendant qu'on lui parle en JSON. */
+$niveau = ob_get_level();
+ob_start();
+echo 'premier';
+ob_start();
+echo 'second';
+$pris = dashagent_svp_vider_tampons($niveau);
+verifier('les tampons imbriqués sont rendus dans l’ordre', $pris === 'premiersecond', $pris);
+verifier('le niveau de départ est retrouvé', ob_get_level() === $niveau);
+
 echo "\n----------------------------------------\n";
 echo ($total - $echecs) . " / $total vérifications passées\n";
 

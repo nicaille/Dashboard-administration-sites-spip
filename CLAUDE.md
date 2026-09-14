@@ -2,8 +2,8 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/dashboard-1.0.10`,
-`plugins/dashboard_agent-1.0.9`.
+`plugins/<prefixe>-<version>` : `plugins/dashboard-1.0.11`,
+`plugins/dashboard_agent-1.0.10`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
 dans le même commit que le changement de `version=` dans son `paquet.xml`. Un
@@ -21,13 +21,26 @@ la plus élevée quand deux dossiers déclarent le même (`ecrire/inc/plugin.php
 À ne pas confondre avec le déclenchement des migrations : `maj_plugin()` compare
 la version du `paquet.xml` à celle mémorisée en meta, jamais le nom du dossier.
 
-**L'agent applique la même règle aux sites qu'il administre** : une mise à jour
-de plugin par archive installe la nouvelle version dans un dossier à son numéro
-et écarte l'ancien, au lieu de déployer par-dessus
-(`dashagent_dossier_versionne()` et `dashagent_installer_a_cote()`, dans
-`inc/dashagent_maj.php`). Comme SPIP tient sa liste de plugins actifs par
+**Sur les sites administrés, c'est SVP qui applique la règle** quand il est là :
+`inc/dashagent_svp.php` lui délègue la mise à jour, et il range les plugins dans
+`plugins/auto/<prefixe>/v<version>`. Un refus de sa part ne se contourne pas —
+voir `dashboard_chantier_svp_repli()`.
+
+À défaut de SVP, l'agent déploie l'archive lui-même sans écraser :
+`dashagent_dossier_versionne()` et `dashagent_installer_a_cote()`, dans
+`inc/dashagent_maj.php`. Comme SPIP tient sa liste de plugins actifs par
 dossier, le nouveau lui est déclaré dans la foulée — sans quoi le plugin serait
 désactivé par son propre changement de nom.
+
+### Un piège de SPIP 4.4 : autoriser_exception() et les types en `_`
+
+`autoriser_exception('ajouter', '_plugins', '*')` — la formule qu'emploient SVP
+comme spip-cli — **n'a aucun effet**. L'exception est rangée sous le type réduit
+(`plugins`), mais `autoriser()` la relit en repassant par `autoriser_type()`,
+qui le transforme une seconde fois en `plugin` : la clé consultée n'est jamais
+celle qui a été écrite. Il faut déclarer les deux orthographes
+(`dashagent_svp_autoriser()`). Sans cela, `action/teleporter.php` refuse le
+téléchargement avec un laconique « Chargement impossible de la source ».
 
 ### Ne pas figer la version dans les références
 

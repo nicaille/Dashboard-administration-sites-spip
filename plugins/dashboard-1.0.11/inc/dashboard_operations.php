@@ -176,6 +176,87 @@ function dashboard_rapatrier_sauvegarde($id_dashboard_site, $id_dashboard_sauveg
 }
 
 /**
+ * Fait calculer à SVP, sur le site géré, ce qu'une mise à jour impliquerait.
+ *
+ * Rien n'est engagé : c'est l'occasion d'apprendre qu'une dépendance manque
+ * **avant** de sauvegarder et de télécharger, plutôt qu'après avoir déployé un
+ * plugin que SPIP refusera d'activer.
+ *
+ * @param int $id_dashboard_site
+ * @param string $prefixe
+ * @return array
+ */
+function dashboard_operation_plugin_svp_preflight($id_dashboard_site, $prefixe) {
+	return dashboard_appeler_svp($id_dashboard_site, 'plugin_svp_preflight', $prefixe);
+}
+
+/**
+ * Fige sur le site géré la file d'actions que SVP jouera.
+ *
+ * @param int $id_dashboard_site
+ * @param string $prefixe
+ * @param bool $forcer Passer outre un verrou SVP existant
+ * @return array
+ */
+function dashboard_operation_plugin_svp_preparer($id_dashboard_site, $prefixe, $forcer = false) {
+	return dashboard_appeler_svp($id_dashboard_site, 'plugin_svp_preparer', $prefixe, ['forcer' => (bool) $forcer]);
+}
+
+/**
+ * Joue une action de la file SVP, et une seule.
+ *
+ * @param int $id_dashboard_site
+ * @param string $prefixe
+ * @return array
+ */
+function dashboard_operation_plugin_svp_avancer($id_dashboard_site, $prefixe) {
+	return dashboard_appeler_svp($id_dashboard_site, 'plugin_svp_avancer', $prefixe);
+}
+
+/**
+ * Libère une file SVP restée en plan sur le site géré.
+ *
+ * @param int $id_dashboard_site
+ * @param string $prefixe
+ * @return array
+ */
+function dashboard_operation_plugin_svp_liberer($id_dashboard_site, $prefixe = '') {
+	return dashboard_appeler_svp($id_dashboard_site, 'plugin_svp_liberer', $prefixe);
+}
+
+/**
+ * Le passage obligé des quatre opérations SVP : même chargement, même erreurs.
+ *
+ * @param int $id_dashboard_site
+ * @param string $op
+ * @param string $prefixe
+ * @param array $args
+ * @return array
+ */
+function dashboard_appeler_svp($id_dashboard_site, $op, $prefixe, $args = []) {
+	include_spip('inc/dashboard_client');
+
+	$site = dashboard_charger_site($id_dashboard_site);
+	if (!$site) {
+		return ['ok' => false, 'message' => 'Site inconnu', 'data' => []];
+	}
+
+	$args['prefixe'] = strtoupper((string) $prefixe);
+	$reponse = dashboard_appeler($site, $op, $args, ['timeout' => dashboard_config('timeout_long', 300)]);
+
+	if (!$reponse['ok']) {
+		return [
+			'ok' => false,
+			'message' => (string) ($reponse['erreur']['message'] ?? ''),
+			'code' => (string) ($reponse['erreur']['code'] ?? ''),
+			'data' => $reponse['data'],
+		];
+	}
+
+	return ['ok' => true, 'message' => '', 'data' => $reponse['data']];
+}
+
+/**
  * Met à jour un plugin sur un site géré.
  *
  * @param int $id_dashboard_site

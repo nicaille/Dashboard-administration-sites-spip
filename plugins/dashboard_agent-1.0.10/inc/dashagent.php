@@ -142,6 +142,13 @@ function dashagent_operation_autorisee($operation) {
 		'sauvegarde_supprimer'    => 'op_sauvegarde',
 		'plugin_maj'              => 'op_plugin_maj',
 		'plugin_maj_preflight'    => 'op_plugin_maj',
+		// Même autorisation : c'est la même chose, faite par SVP plutôt qu'à la
+		// main. Un site qui refuse la mise à jour de ses plugins la refuse par
+		// les deux chemins.
+		'plugin_svp_preflight'    => 'op_plugin_maj',
+		'plugin_svp_preparer'     => 'op_plugin_maj',
+		'plugin_svp_avancer'      => 'op_plugin_maj',
+		'plugin_svp_liberer'      => 'op_plugin_maj',
 		'core_maj'                => 'op_core_maj',
 		'core_maj_preflight'      => 'op_core_maj',
 		// La migration du schéma va de pair avec le remplacement des fichiers :
