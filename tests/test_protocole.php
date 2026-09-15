@@ -239,6 +239,25 @@ verifier('capacité fournie par un plugin écartée', !dashagent_est_un_plugin(
 verifier('core SPIP lui-même écarté', !dashagent_est_un_plugin(
 	['dir' => '', 'dir_type' => '_DIR_RESTREINT']));
 
+echo "\n== Ce qu’on annonce à mettre à jour ==\n";
+
+/* Le décompte est celui des mises à jour qu'on peut faire. Un plugin livré avec
+   SPIP suit le core : pas de bouton sur sa ligne, et « Tout mettre à jour » ne
+   le prend pas. Le compter laissait la pastille allumée après une mise à jour
+   réussie, et le bilan annoncer « 1 plugin encore à mettre à jour » sans que
+   rien, sur la page, ne permette d'y remédier. */
+$inventaire = [
+	['prefixe' => 'SAISIES', 'maj_disponible' => true,  'distribue' => false],
+	['prefixe' => 'MOTS',    'maj_disponible' => true,  'distribue' => true],
+	['prefixe' => 'CFG',     'maj_disponible' => false, 'distribue' => false],
+];
+verifier('seules les mises à jour réalisables sont comptées',
+	dashboard_compter_maj($inventaire) === 1, dashboard_compter_maj($inventaire));
+verifier('un plugin livré avec SPIP ne compte pas',
+	dashboard_compter_maj([['prefixe' => 'MOTS', 'maj_disponible' => true, 'distribue' => true]]) === 0);
+verifier('un inventaire vide ne compte rien', dashboard_compter_maj([]) === 0);
+verifier('une entrée illisible est ignorée', dashboard_compter_maj(['n’importe quoi']) === 0);
+
 echo "\n== Versions normalisées par SVP ==\n";
 
 verifier('004.003.003 redevient 4.3.3', dashagent_denormaliser_version('004.003.003') === '4.3.3',

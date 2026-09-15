@@ -59,12 +59,7 @@ function dashboard_synchroniser($id_dashboard_site, $options = []) {
 	$version_spip = (string) ($infos['spip']['version'] ?? '');
 	$cible        = dashboard_version_cible($version_spip);
 
-	$nb_maj = 0;
-	foreach ($plugins as $plugin) {
-		if (!empty($plugin['maj_disponible'])) {
-			$nb_maj++;
-		}
-	}
+	$nb_maj = dashboard_compter_maj($plugins);
 
 	sql_updateq('spip_dashboard_sites', [
 		'etat'           => 'ok',
@@ -94,6 +89,36 @@ function dashboard_synchroniser($id_dashboard_site, $options = []) {
 	], $reponse['duree_ms']);
 
 	return ['ok' => true, 'message' => '', 'site' => dashboard_charger_site($id_dashboard_site)];
+}
+
+/**
+ * Combien de plugins ce site a-t-il à mettre à jour ?
+ *
+ * Le décompte est celui des mises à jour **qu'on peut faire**, pas de celles qui
+ * existent. Un plugin livré avec SPIP suit le core : il n'a pas de bouton, et
+ * « Tout mettre à jour » ne le prend pas — la file du chantier filtre sur
+ * `distribue = non`. Le compter ici laissait la pastille allumée après une mise
+ * à jour pourtant réussie, et le bilan annoncer « 1 plugin encore à mettre à
+ * jour » sans que rien, sur la page, ne permette d'y remédier.
+ *
+ * Le surlignage de la ligne, lui, reste posé sur la version : qu'une version
+ * plus récente existe est une information, même quand elle viendra par le core.
+ *
+ * @param array $plugins Inventaire remonté par l'agent
+ * @return int
+ */
+function dashboard_compter_maj($plugins) {
+	$n = 0;
+	foreach ((array) $plugins as $plugin) {
+		if (!is_array($plugin)) {
+			continue;
+		}
+		if (!empty($plugin['maj_disponible']) && empty($plugin['distribue'])) {
+			$n++;
+		}
+	}
+
+	return $n;
 }
 
 /**

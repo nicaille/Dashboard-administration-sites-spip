@@ -256,6 +256,18 @@ dit('la pastille des mises à jour s’explique au survol',
 	/mettre à jour/.test((await enRetard.getAttribute('title')) || ''),
 	(await enRetard.getAttribute('title')) || '');
 
+// La pastille compte ce qu'on peut faire, pas ce qui existe : un plugin livré
+// avec SPIP suit le core, il n'a pas de bouton et « Tout mettre à jour » ne le
+// prend pas. L'y compter laisserait la pastille allumée après une mise à jour
+// réussie, sans rien pour l'éteindre.
+const realisables = JSON.parse(sql(
+	"SELECT COUNT(*) AS n FROM spip_dashboard_plugins WHERE maj_disponible = 'oui' AND distribue = 'non'"))[0].n;
+const enregistre = JSON.parse(sql(
+	'SELECT nb_plugins_maj AS n FROM spip_dashboard_sites WHERE id_dashboard_site = 1'))[0].n;
+dit('le décompte enregistré est celui des mises à jour réalisables',
+	String(enregistre) === String(realisables),
+	enregistre + ' enregistré(s) pour ' + realisables + ' réalisable(s)');
+
 // La couleur est le message : vérifier la classe ne prouverait rien, le thème
 // du privé ayant déjà donné du blanc sur blanc à des boutons bien classés.
 const teinte = await enRetard.evaluate((n) => {
