@@ -59,9 +59,19 @@ requête mourir en silence.
 
 | Opération | Étapes |
 |---|---|
-| Un plugin | sauvegarde → plugin → inventaire |
-| Tous les plugins | sauvegarde → inventaire → plugins, un par un → inventaire |
+| Un plugin | dépôts → sauvegarde → plugin → inventaire |
+| Tous les plugins | dépôts → sauvegarde → inventaire → plugins, un par un → inventaire |
 | Le core | sauvegarde → contrôles → remplacement → migration du schéma → inventaire |
+
+Les **dépôts d'abord** : le catalogue des versions disponibles vit sur le site
+géré et ne se rafraîchit pas tout seul. Sans cette étape, le parc annonce « à
+jour » des sites qui ne le sont pas — c'est un travers constaté en vrai. La
+synchronisation relit aussi les catalogues plus vieux qu'un seuil réglable,
+l'onglet *Plugins* affiche la date de la dernière relecture et le nombre de
+plugins en retard, et la vue d'ensemble date **le plus ancien catalogue du
+parc** : c'est lui qui borne la confiance qu'on peut accorder au total annoncé.
+Un bouton y relit les dépôts de tous les sites, un à la fois, et réinventorie
+chacun dans la foulée.
 
 L'encadré nomme **ce qui est en cours** — « Contrôles préalables sur le site… » —
 en plus du compte rendu de l'étape précédente : lire le second pour le premier
@@ -90,7 +100,7 @@ Ce qui reste exposé malgré tout est décrit dans [docs/securite.md](docs/secur
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/dashboard-1.0.11`, `plugins/dashboard_agent-1.0.10`. Ce n'est pas
+`plugins/dashboard-1.0.15`, `plugins/dashboard_agent-1.0.11`. Ce n'est pas
 décoratif : en déposant la nouvelle version **à côté** de l'ancienne plutôt que
 par-dessus, on évite le travers classique de la mise en ligne par FTP, où les
 fichiers supprimés entre deux versions survivent dans le dossier écrasé et

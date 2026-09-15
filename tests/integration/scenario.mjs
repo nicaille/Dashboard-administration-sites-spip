@@ -25,6 +25,11 @@ const sql = (requete) => execFileSync('php', ['-r',
 	`$db=new SQLite3(getenv("BDD"));$r=$db->query(getenv("REQ"));$o=[];while($x=$r->fetchArray(SQLITE3_ASSOC))$o[]=$x;echo json_encode($o);`,
 ], { env: { ...process.env, BDD: bdd, REQ: requete } }).toString();
 
+/** Écrire dans la base du site, pour poser un état que le parcours ne produit pas. */
+const sqlEcrire = (requete) => execFileSync('php', ['-r',
+	`$db=new SQLite3(getenv("BDD"));$db->exec(getenv("REQ"));`,
+], { env: { ...process.env, BDD: bdd, REQ: requete } }).toString();
+
 /** Une page SPIP en échec affiche une trace PHP ou un bloc d'erreur de squelette. */
 async function erreurs(page) {
 	const t = await page.locator('body').innerText();
@@ -67,9 +72,15 @@ async function ouvrir(page, titre, url) {
 	return page.locator('body').innerText();
 }
 
-/** Suit un bouton du plugin (les libellés du menu de SPIP se ressemblent). */
+/**
+ * Déclenche un bouton du plugin (les libellés du menu de SPIP se ressemblent).
+ *
+ * Les actions sont des formulaires POST — le balisage de #BOUTON_ACTION — et
+ * non plus des liens : une action qui change l'état d'un site ne se déclenche
+ * pas en suivant un lien.
+ */
 async function bouton(page, libelle) {
-	const lien = page.locator('a.dashboard-bouton', { hasText: libelle }).first();
+	const lien = page.locator('form.bouton_action_post button', { hasText: libelle }).first();
 	if (!(await lien.count())) { dit(`bouton « ${libelle} »`, false, 'introuvable'); return ''; }
 	// Pas de Promise.all avec la navigation : si le serveur tarde, l'attente
 	// conjointe échoue au lieu de laisser l'opération se terminer.
@@ -174,11 +185,87 @@ await page.waitForTimeout(700);
 
 await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
 await bouton(page, 'Synchroniser');
+
+console.log('\n### Vue d’ensemble : relire les dépôts du parc');
+
+// Pour voir un catalogue périmé il faut en avoir un : on coupe le
+// rafraîchissement automatique, on vieillit le dépôt de trois jours, puis on
+// relève l'inventaire — qui n'y touchera donc pas. Couper le rafraîchissement
+// ne fait pas taire l'avertissement : c'est le cas où plus rien ne rajeunit le
+// catalogue, et l'âge s'apprécie alors sur la validité par défaut d'un jour.
+await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
+await page.fill('[name="fraicheur_depots"]', '0');
+await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').last().click()]);
+await page.waitForTimeout(500);
+sqlEcrire("UPDATE spip_depots SET maj = datetime('now', '-3 days')");
+await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+await bouton(page, 'Synchroniser');
+
+const fraicheur = page.locator('#depots');
+dit('la fraîcheur des catalogues est affichée sur le parc',
+	/3 jour/.test(await fraicheur.innerText()), (await fraicheur.innerText()).replace(/\s+/g, ' ').trim());
+dit('un catalogue périmé est signalé',
+	(await page.locator('#depots.dashboard-depots-perimes').count()) === 1);
+dit('le compte du parc est celui des sites',
+	(await page.locator('.dashboard-synthese li').last().innerText()).trim().startsWith(
+		String(JSON.parse(sql('SELECT SUM(nb_plugins_maj) AS n FROM spip_dashboard_sites'))[0].n)),
+	(await page.locator('.dashboard-synthese li').last().innerText()).replace(/\s+/g, ' ').trim());
+
+// Le tour du parc, un site à la fois : c'est ce qui rend le compte réel.
+const relire = page.locator('[data-dashboard-depots-parc]');
+dit('un bouton relit les dépôts de tout le parc', (await relire.count()) === 1);
+await relire.click();
+await page.waitForFunction(() => !document.querySelector('[data-dashboard-depots-parc]')
+	|| !document.querySelector('.dashboard-depots-perimes'), null, { timeout: 60000 }).catch(() => {});
+await page.waitForTimeout(2500);
+
+const relu = JSON.parse(sql("SELECT maj FROM spip_depots ORDER BY maj DESC LIMIT 1"))[0].maj;
+dit('le catalogue a bien été relu', (Date.now() - Date.parse(relu.replace(' ', 'T'))) < 10 * 60 * 1000, relu);
+await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+dit('plus de catalogue périmé après le tour du parc',
+	(await page.locator('#depots.dashboard-depots-perimes').count()) === 0,
+	(await page.locator('#depots').innerText()).replace(/\s+/g, ' ').trim());
+dit('le compte du parc reste celui des sites',
+	(await page.locator('.dashboard-synthese li').last().innerText()).trim().startsWith(
+		String(JSON.parse(sql('SELECT SUM(nb_plugins_maj) AS n FROM spip_dashboard_sites'))[0].n)),
+	(await page.locator('.dashboard-synthese li').last().innerText()).replace(/\s+/g, ' ').trim());
+
+// Rendre au parc son rafraîchissement automatique pour la suite du parcours.
+await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
+await page.fill('[name="fraicheur_depots"]', '86400');
+await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').last().click()]);
+await page.waitForTimeout(500);
+
 await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
 
 const ligneMaj = page.locator('tr', { hasText: 'ZZZTEST' });
 dit('mise à jour proposée pour ZZZTEST', await ligneMaj.count() > 0);
-const boutonMaj = ligneMaj.locator('a.dashboard-bouton').first();
+
+// L'onglet porte deux décomptes tant qu'un plugin est en retard : le total, et
+// le nombre à mettre à jour — la seule information de cet onglet qui appelle un
+// geste, d'où les couleurs de l'alerte.
+const compteurs = page.locator('#onglet-plugins .dashboard-compteur');
+dit('l’onglet « Plugins » porte deux décomptes', (await compteurs.count()) === 2,
+	(await compteurs.allInnerTexts()).map((t) => t.trim()).join(' | '));
+const enRetard = page.locator('#onglet-plugins .dashboard-compteur-maj');
+const surlignees = await page.locator('#panneau-plugins tr.dashboard-ligne-maj').count();
+dit('le décompte des mises à jour est celui de la liste',
+	(await enRetard.innerText()).trim() === String(surlignees),
+	(await enRetard.innerText()).trim() + ' en pastille, ' + surlignees + ' lignes surlignées');
+dit('la pastille des mises à jour s’explique au survol',
+	/mettre à jour/.test((await enRetard.getAttribute('title')) || ''),
+	(await enRetard.getAttribute('title')) || '');
+
+// La couleur est le message : vérifier la classe ne prouverait rien, le thème
+// du privé ayant déjà donné du blanc sur blanc à des boutons bien classés.
+const teinte = await enRetard.evaluate((n) => {
+	const s = getComputedStyle(n);
+	return { fond: s.backgroundColor, texte: s.color };
+});
+dit('la pastille est jaune et son texte rouge',
+	teinte.fond === 'rgb(255, 233, 176)' && teinte.texte === 'rgb(164, 0, 28)',
+	'fond ' + teinte.fond + ', texte ' + teinte.texte);
+const boutonMaj = ligneMaj.locator('form.bouton_action_post button').first();
 if (await boutonMaj.count()) {
 	await boutonMaj.click();
 	await page.waitForLoadState('domcontentloaded').catch(() => {});
@@ -223,6 +310,21 @@ dit('l’ancienne version est toujours là, intacte',
 
 // L'inventaire de SVP doit avoir suivi : sans cela le site géré continue
 // d'annoncer l'ancienne version à son propre administrateur.
+// Le catalogue du dépôt est relu avant toute décision de mise à jour : c'est lui
+// qui dit quelles versions existent, et il ne se rafraîchit pas tout seul. Sa
+// date de relecture le prouve mieux qu'un message aperçu au vol.
+const depotRelu = execFileSync('php', ['-r',
+	`$db=new SQLite3(getenv('BDD'));echo (string) $db->querySingle('SELECT maj FROM spip_depots ORDER BY maj DESC LIMIT 1');`,
+], { env: { ...process.env, BDD: bdd } }).toString().trim();
+dit('le catalogue du dépôt a été relu à l’instant',
+	depotRelu !== '' && (Date.now() - Date.parse(depotRelu.replace(' ', 'T'))) < 10 * 60 * 1000, depotRelu);
+
+// Et le tableau de bord en garde la fraîcheur, pour pouvoir la montrer.
+const depotsVus = execFileSync('php', ['-r',
+	`$db=new SQLite3(getenv('BDD'));$i=json_decode((string) $db->querySingle('SELECT infos FROM spip_dashboard_sites WHERE id_dashboard_site=1'),true);echo count($i['depots'] ?? []),':',($i['depots'][0]['age'] ?? 'nul');`,
+], { env: { ...process.env, BDD: bdd } }).toString().trim();
+dit('la fraîcheur des dépôts est remontée au parc', /^1:\d+$/.test(depotsVus), depotsVus);
+
 // SVP range les versions normalisées : « 1.0.1 » s'y écrit « 001.000.001 ».
 const paquetLocal = execFileSync('php', ['-r',
 	`$db=new SQLite3(getenv('BDD'));$r=$db->querySingle('SELECT pa.version FROM spip_paquets pa JOIN spip_plugins pl ON pl.id_plugin=pa.id_plugin WHERE pa.id_depot=0 AND pl.prefixe="ZZZTEST" ORDER BY pa.version DESC',true);echo $r['version'] ?? '?';`,
@@ -255,6 +357,47 @@ for (const [nom, url] of [
 	dit(`${nom} : rien d’étranger à l’écran`, trouves.length === 0, trouves.join(' | '));
 }
 
+console.log('\n### Habillage repris du privé');
+
+// Les boutons du plugin doivent être ceux du thème : sans `.btn`, ils héritent
+// du style des `button` nus, dont le texte est blanc — d'où des libellés
+// invisibles sur les fonds clairs qu'on leur donnait.
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+const classesBoutons = await page.locator('form.bouton_action_post button').evaluateAll(
+	(b) => b.map((n) => n.className));
+dit('des actions sont proposées', classesBoutons.length > 3, classesBoutons.length + ' boutons');
+dit('chaque bouton d’action porte la classe du thème',
+	classesBoutons.every((c) => /\bbtn\b/.test(c)),
+	classesBoutons.filter((c) => !/\bbtn\b/.test(c)).join(' | '));
+dit('aucun bouton maison ne subsiste',
+	(await page.locator('.dashboard-bouton').count()) === 0);
+
+// Chaque action rend la main sous l'encadré qui l'a déclenchée, sans quoi la
+// page revient en haut et le compte rendu reste hors de vue.
+const ancres = await page.locator('form.bouton_action_post').evaluateAll(
+	(f) => f.map((n) => decodeURIComponent(n.getAttribute('action') || '')));
+dit('les actions reviennent à leur encadré',
+	ancres.filter((a) => /#(etat|caches|plugins|sauvegardes|core)\b/.test(a)).length >= 4,
+	ancres.filter((a) => !/#/.test(a)).length + ' sans ancre');
+
+// Les trois vues de la liste des plugins.
+const filtres = page.locator('.dashboard-filtres a, .dashboard-filtres .on');
+dit('trois vues pour la liste des plugins', (await filtres.count()) === 3,
+	(await filtres.count()) + ' vues');
+const compte = async (url) => {
+	await page.goto(base + url, { waitUntil: 'domcontentloaded' });
+	return page.locator('#panneau-plugins tbody tr').count();
+};
+const tous = await compte('/ecrire/?exec=dashboard_site&id_dashboard_site=1');
+const installes = await compte('/ecrire/?exec=dashboard_site&id_dashboard_site=1&distribue=non');
+const livres = await compte('/ecrire/?exec=dashboard_site&id_dashboard_site=1&distribue=oui');
+dit('la vue « installés » écarte les plugins livrés avec SPIP',
+	installes > 0 && installes < tous, installes + ' sur ' + tous);
+dit('la vue « livrés avec SPIP » écarte les autres',
+	livres > 0 && livres < tous, livres + ' sur ' + tous);
+dit('les deux vues se partagent la liste', installes + livres === tous,
+	installes + ' + ' + livres + ' = ' + tous);
+
 console.log('\n### Onglets « Plugins » et « PHP »');
 await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
 const panneauPlugins = page.locator('#panneau-plugins');
@@ -262,6 +405,13 @@ const panneauPhp = page.locator('#panneau-php');
 dit('trois onglets présents', (await page.locator('[data-dashboard-onglets] [role="tab"]').count()) === 3,
 	(await page.locator('[data-dashboard-onglets] [role="tab"]').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim()).join(' | '));
 dit('« Plugins » ouvert par défaut', (await panneauPlugins.isVisible()) && !(await panneauPhp.isVisible()));
+
+// Le parc est à jour à ce stade : la pastille d'alerte a disparu. Une pastille
+// à zéro serait du bruit, et l'œil finirait par ne plus la voir du tout.
+dit('un parc à jour n’affiche pas de pastille d’alerte',
+	(await page.locator('#onglet-plugins .dashboard-compteur-maj').count()) === 0
+		&& (await page.locator('#onglet-plugins .dashboard-compteur').count()) === 1,
+	(await page.locator('#onglet-plugins').innerText()).replace(/\s+/g, ' ').trim());
 
 await page.locator('#onglet-php').click();
 await page.waitForTimeout(200);
@@ -304,10 +454,13 @@ dit('aucune extension PHP dans l’onglet « Plugins »',
  */
 async function urlsDActions(page, nom, url) {
 	await page.goto(base + url, { waitUntil: 'domcontentloaded' });
-	const liens = await page.locator('a.dashboard-bouton').evaluateAll((l) => l.map((a) => a.getAttribute('href') || ''));
-	const brutes = liens.filter((h) => /%23|#[A-Z_]{3,}/.test(h));
+	const liens = await page.locator('form.bouton_action_post').evaluateAll(
+		(f) => f.map((form) => form.getAttribute('action') || ''));
+	// Les URL de retour portent une ancre en minuscules (`%23plugins`) : ce
+	// n'est pas une balise non compilée. Une balise, elle, est en capitales.
+	const brutes = liens.filter((h) => /%23[A-Z_]{3,}|#[A-Z_]{3,}/.test(h));
 	dit(`${nom} : aucune balise non compilée dans les URL d’action`, brutes.length === 0,
-		brutes.map((h) => (h.match(/%23[A-Za-z_:]+|#[A-Z_]{3,}/) || [''])[0]).join(', '));
+		brutes.map((h) => (h.match(/%23[A-Z_:]+|#[A-Z_]{3,}/) || [''])[0]).join(', '));
 	const args = liens.map((h) => decodeURIComponent((h.match(/[?&]arg=([^&]*)/) || ['', ''])[1]))
 		.filter((a) => /^(core_maj|plugin_maj|plugin_maj_tous|sync|purger|sauvegarde)\b/.test(a));
 	const malFormes = args.filter((a) => !/^[a-z_]+\/\d+(\/|$)/.test(a));
@@ -380,26 +533,33 @@ dit('les tables du site sont listées', (await choix.locator('option').count()) 
 	(await choix.locator('option').count()) + ' entrées');
 await choix.selectOption('spip_meta');
 await page.waitForTimeout(1500);
-const total = Number(((await bloc.locator('.dashboard-serveur-pagination').innerText()).match(/sur (\d+)/) || [0, 0])[1]);
+// La pagination reprend le balisage de SPIP : `nav.pagination`, une liste
+// `.pagination-items` et des `.pagination-item`. C'est ce qui lui vaut d'hériter
+// des styles du privé au lieu d'écrire du blanc sur du blanc.
+const pagination = bloc.locator('nav.pagination');
+const total = Number(((await pagination.innerText()).match(/sur (\d+)/) || [0, 0])[1]);
 dit('le contenu d’une table s’affiche', (await bloc.locator('tbody tr').count()) > 0,
 	(await bloc.locator('tbody tr').count()) + ' lignes sur ' + total);
+dit('la pagination reprend le balisage de SPIP',
+	(await pagination.locator('ul.pagination-items li.pagination-item').count()) === 2,
+	(await pagination.locator('li.pagination-item').count()) + ' éléments');
 
 await bloc.locator('thead th button').first().click();
 await page.waitForTimeout(1200);
 dit('le tri s’applique sur une colonne', /[↑↓]/.test(await bloc.locator('thead th').first().innerText()));
 
 if (total > 50) {
-	await bloc.locator('.dashboard-serveur-pagination button', { hasText: 'suivant' }).click();
+	await pagination.locator('.pagination-item.next a').click();
 	await page.waitForTimeout(1200);
 	dit('la pagination avance',
-		/^51/.test((await bloc.locator('.dashboard-serveur-pagination').innerText()).trim()),
-		(await bloc.locator('.dashboard-serveur-pagination').innerText()).replace(/\s+/g, ' ').trim());
+		/^51/.test((await pagination.innerText()).trim()),
+		(await pagination.innerText()).replace(/\s+/g, ' ').trim());
 }
 
 await bloc.locator('select').nth(1).selectOption('nom');
 await bloc.locator('input[type=search]').fill('version');
 await page.waitForTimeout(1500);
-const filtre = Number(((await bloc.locator('.dashboard-serveur-pagination').innerText()).match(/sur (\d+)/) || [0, 0])[1]);
+const filtre = Number(((await pagination.innerText()).match(/sur (\d+)/) || [0, 0])[1]);
 dit('le filtre restreint la sélection', filtre > 0 && filtre < total, filtre + ' sur ' + total);
 
 // Le point qui compte : rien de secret ne doit atteindre l'écran.
@@ -484,7 +644,7 @@ await bouton(page, 'Synchroniser');
 await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
 await urlsDActions(page, 'fiche du site, mise à jour du core proposée',
 	'/ecrire/?exec=dashboard_site&id_dashboard_site=1');
-const boutonCore = page.locator('a.dashboard-bouton-danger').first();
+const boutonCore = page.locator('#core form.bouton_action_post button').first();
 dit('mise à jour du core proposée', (await boutonCore.count()) > 0);
 
 // État d'avant, pour prouver ensuite que ce sont bien les fichiers de l'archive
@@ -585,7 +745,63 @@ dit('plus de migration de base en attente', apres.base_maj === 'non', apres.base
 dit('l’espace privé du site n’est plus bloqué',
 	!/procédure de mise à jour doit être lancée/.test(await page.locator('body').innerText()));
 dit('plus de mise à jour de core proposée',
-	(await page.locator('a.dashboard-bouton-danger').count()) === 0);
+	(await page.locator('#core').count()) === 0);
+
+console.log('\n### Un site géré ne doit pas pouvoir écrire de code chez nous');
+
+// Le tableau de bord affiche l'inventaire d'un site dans son espace privé, à un
+// webmestre qui détient les secrets de tout le parc. L'échappement de SPIP ne
+// couvre pas ce cas : interdire_scripts() laisse passer <svg onload> — vérifié
+// sur SPIP 4.4.23. Un site compromis qui répondrait cela comme numéro de version
+// prendrait donc la tour de contrôle, et avec elle le parc entier.
+//
+// La charge est écrite directement en base, donc *après* le filtre d'entrée :
+// ce qui est éprouvé ici est le rendu, seul rempart pour les inventaires relevés
+// avant le correctif.
+const charge = '<svg onload="window.__xss=(window.__xss||0)+1">';
+const injections = [
+	['version de SPIP',        `UPDATE spip_dashboard_sites SET version_spip='${charge}' WHERE id_dashboard_site=1`],
+	['version de PHP',         `UPDATE spip_dashboard_sites SET php_version='${charge}' WHERE id_dashboard_site=1`],
+	['version de la base',     `UPDATE spip_dashboard_sites SET sql_version='${charge}' WHERE id_dashboard_site=1`],
+	['version de l’agent',     `UPDATE spip_dashboard_sites SET agent_version='${charge}' WHERE id_dashboard_site=1`],
+	['message d’erreur',       `UPDATE spip_dashboard_sites SET erreur='${charge}', etat='erreur' WHERE id_dashboard_site=1`],
+	['nom d’un plugin',        `UPDATE spip_dashboard_plugins SET nom='${charge}' WHERE id_dashboard_site=1`],
+	['version d’un plugin',    `UPDATE spip_dashboard_plugins SET version='${charge}' WHERE id_dashboard_site=1`],
+	['version disponible',     `UPDATE spip_dashboard_plugins SET version_disponible='${charge}' WHERE id_dashboard_site=1`],
+	['préfixe d’un plugin',    `UPDATE spip_dashboard_plugins SET prefixe='${charge}' WHERE id_dashboard_site=1`],
+	['journal du parc',        `UPDATE spip_dashboard_journal SET message='${charge}'`],
+];
+
+for (const [quoi, requete] of injections) {
+	sqlEcrire(requete);
+	await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'networkidle' });
+	const execute = await page.evaluate(() => { const n = window.__xss || 0; window.__xss = 0; return n; });
+	const vif = (await page.content()).includes('<svg onload=');
+	const ok = (execute === 0 && !vif);
+	dit(`inerte : ${quoi}`, ok, ok ? '' : (execute ? 'script exécuté' : 'rendu en HTML vif'));
+}
+
+// L'inventaire est aussi affiché par des filtres qui le tirent du JSON mémorisé.
+const infos = JSON.parse(JSON.parse(sql('SELECT infos FROM spip_dashboard_sites WHERE id_dashboard_site=1'))[0].infos);
+infos.serveur = infos.serveur || {};
+infos.serveur.memory_limit = charge;
+if (Array.isArray(infos.procures) && infos.procures[0]) { infos.procures[0].nom = charge; }
+sqlEcrire(`UPDATE spip_dashboard_sites SET infos='${JSON.stringify(infos).replace(/'/g, "''")}' WHERE id_dashboard_site=1`);
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'networkidle' });
+dit('inerte : inventaire mémorisé',
+	(await page.evaluate(() => window.__xss || 0)) === 0 && !(await page.content()).includes('<svg onload='));
+
+// Et la vue d'ensemble, qui affiche les mêmes champs pour tout le parc.
+await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'networkidle' });
+dit('inerte : vue d’ensemble du parc',
+	(await page.evaluate(() => window.__xss || 0)) === 0 && !(await page.content()).includes('<svg onload='));
+
+// Le filtre d'entrée, maintenant : une synchronisation réelle doit rendre inerte
+// ce que l'agent a répondu, sans que le rendu ait à s'en occuper.
+await bouton(page, 'Synchroniser');
+const apresSync = JSON.parse(sql('SELECT version_spip, infos FROM spip_dashboard_sites WHERE id_dashboard_site=1'))[0];
+dit('la synchronisation a rétabli un inventaire propre',
+	!/[<>]/.test(apresSync.version_spip) && !/<svg/.test(apresSync.infos), apresSync.version_spip);
 
 console.log('\n### Restauration du dump');
 try {

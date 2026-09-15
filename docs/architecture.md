@@ -56,6 +56,7 @@ Installé une seule fois, sur la tour de contrôle.
 | `action/dashboard_chantier.php` | avancement d'une étape, appelé en boucle par la fiche du site |
 | `genie/dashboard_chantiers.php` | reprise des chantiers laissés en plan |
 | `action/dashboard_serveur.php` | relais vers les consultations de l'agent, liste d'opérations fermée |
+| `action/dashboard_parc.php` | relit un dépôt d'un site et le réinventorie ; la vue d'ensemble l'appelle site après site |
 
 La table `spip_dashboard_sites` est déclarée **deux fois** : dans
 `declarer_tables_objets_sql`, qui lui donne la machinerie d'objet éditorial

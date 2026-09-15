@@ -141,6 +141,34 @@ rm -rf "$TRAVAIL/paquet"; mkdir -p "$TRAVAIL/paquet/zzztest"
 sed 's/version="1.0.0"/version="1.0.1"/' "$SITE/plugins/zzztest/paquet.xml" > "$TRAVAIL/paquet/zzztest/paquet.xml"
 echo 'VERSION 1.0.1' > "$TRAVAIL/paquet/zzztest/marqueur.txt"
 (cd "$TRAVAIL/paquet" && zip -qr "$SITE/zzztest-archives/zzztest.zip" zzztest)
+# Le catalogue du dépôt, au format que SVP sait lire : c'est lui qu'il relira, et
+# c'est de lui qu'il tirera la version disponible. L'écrire à la main en base
+# aurait testé notre SQL, pas la chaîne réelle.
+taille_zip="$(stat -c%s "$SITE/zzztest-archives/zzztest.zip")"
+cat > "$SITE/zzztest-archives/paquets.xml" <<XMLEOF
+<?xml version="1.0" encoding="utf-8"?>
+<depot>
+	<titre>Dépôt de test</titre>
+	<type>http</type>
+	<url_archives>$BASE/zzztest-archives</url_archives>
+</depot>
+<archives>
+	<archive dtd="paquet">
+		<zip>
+			<file>zzztest.zip</file>
+			<size>$taille_zip</size>
+			<date>$(date '+%s')</date>
+			<last_commit>$(date '+%Y-%m-%d %H:%M:%S')</last_commit>
+			<source>auto/zzztest/v1.0.1/</source>
+		</zip>
+		<paquet prefix="zzztest" categorie="outil" version="1.0.1" etat="test" compatibilite="[4.1.0;4.*]">
+			<nom>Plugin de test</nom>
+			<auteur>Test</auteur>
+			<licence>GPL 3</licence>
+		</paquet>
+	</archive>
+</archives>
+XMLEOF
 # Le site de test sert ses archives en http sur la boucle locale.
 cat > "$SITE/config/mes_options.php" <<'OPTEOF'
 <?php
@@ -161,22 +189,18 @@ plugin_installes_meta();
 lire_metas();
 sql_delete('spip_depots', 'titre = ' . sql_quote('Dépôt de test'));
 $id_depot = sql_insertq('spip_depots', ['titre' => 'Dépôt de test', 'type' => 'http',
-	'url_archives' => url_de_base() . 'zzztest-archives']);
-$id_plugin = sql_getfetsel('id_plugin', 'spip_plugins', 'prefixe = ' . sql_quote('ZZZTEST'))
-	?: sql_insertq('spip_plugins', ['prefixe' => 'ZZZTEST', 'nom' => 'Plugin de test']);
-sql_delete('spip_paquets', 'id_depot = ' . intval($id_depot));
-// SVP range les versions normalisées et l'état sous forme numérique : insérer
-// autrement donnerait une ligne que ses propres requêtes ne retrouveraient pas.
-include_spip('inc/svp_outiller');
-sql_insertq('spip_paquets', ['id_plugin' => $id_plugin, 'id_depot' => $id_depot,
-	'prefixe' => 'ZZZTEST', 'version' => normaliser_version('1.0.1'),
-	'etat' => 'test', 'etatnum' => 3, 'obsolete' => 'non',
-	'compatibilite_spip' => '[4.1.0;4.*]',
-	'nom_archive' => 'zzztest.zip', 'src_archive' => 'auto/zzztest/v1.0.1/']);
+	'url_archives' => url_de_base() . 'zzztest-archives',
+	'xml_paquets' => url_de_base() . 'zzztest-archives/paquets.xml']);
 
-// Faire découvrir à SVP les plugins présents sur le disque, puis lui faire
-// constater la mise à jour disponible : sans ces deux passes, il n'a pas de
-// paquet local pour ZZZTEST et l'agent retomberait sur le déploiement d'archive.
+// C'est SVP qui lit le catalogue et en tire les paquets distants : écrire nous-
+// mêmes la ligne en base testerait notre SQL, pas la chaîne que le tableau de
+// bord déclenchera à distance.
+include_spip('inc/svp_depoter_distant');
+$lu = svp_actualiser_depot($id_depot);
+
+// Puis les plugins présents sur le disque, et la mise à jour constatée : sans
+// ces deux passes, SVP n'a pas de paquet local pour ZZZTEST et l'agent
+// retomberait sur le déploiement d'archive.
 include_spip('inc/svp_depoter_local');
 svp_actualiser_paquets_locaux();
 svp_actualiser_maj_version();
@@ -184,7 +208,9 @@ svp_actualiser_maj_version();
 $local = sql_fetsel(['pa.version', 'pa.maj_version'], ['spip_paquets AS pa', 'spip_plugins AS pl'],
 	['pa.id_plugin = pl.id_plugin', 'pa.id_depot = 0', 'pl.prefixe = ' . sql_quote('ZZZTEST')]);
 $actifs = array_keys(unserialize($GLOBALS['meta']['plugin'] ?? '') ?: []);
-if (!in_array('ZZZTEST', $actifs, true)) {
+if (!$lu) {
+	echo "ECHEC : catalogue du dépôt de test illisible par SVP\n";
+} elseif (!in_array('ZZZTEST', $actifs, true)) {
 	echo "ECHEC : zzztest inactif\n";
 } elseif (!$local) {
 	echo "ECHEC : aucun paquet local SVP pour zzztest\n";

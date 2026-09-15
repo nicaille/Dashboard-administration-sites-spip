@@ -12,7 +12,7 @@
 $racine = dirname(__DIR__);
 
 /**
- * Les dossiers de plugins portent leur version (`dashboard-1.0.11`), pour qu'une
+ * Les dossiers de plugins portent leur version (`dashboard-1.0.15`), pour qu'une
  * mise en ligne n'écrase pas la version précédente. On les retrouve donc par
  * préfixe, sans quoi ce fichier serait à retoucher à chaque montée de version.
  *
@@ -504,9 +504,12 @@ foreach ($plugins as $plugin) {
 
 		// Une chaîne de langue dans un argument entre quotes n'est pas
 		// interprétée : elle s'affiche telle quelle, `<:module:cle:>` compris.
+		// La quote et la chaîne doivent être dans les mêmes accolades : sans
+		// cette précision, un argument vide (`|parametre_url{distribue,''}`)
+		// s'appariait avec le premier `<:` venu, des lignes plus bas.
 		verifier(
 			"$affiche : pas de <:…:> dans un argument entre quotes",
-			!preg_match("/\\|[a-z_?]+\\{[^}]*'[^']*<:/i", $source)
+			!preg_match("/\\|[a-z_?]+\\{[^}']*'[^'}]*<:/i", $source)
 		);
 
 		// Une balise à accolades placée dans un argument *composite* — collée à
@@ -524,16 +527,20 @@ foreach ($plugins as $plugin) {
 			premiere_occurrence($compose, $source)
 		);
 
-		// SPIP compile les balises jusque dans les commentaires HTML : une
-		// syntaxe de balise écrite là pour l'explication est évaluée pour de
-		// bon, et une balise invalide emporte silencieusement le bloc entier.
+		// SPIP compile les balises jusque dans les commentaires : une syntaxe
+		// de balise écrite là pour l'explication est évaluée pour de bon, et
+		// une balise invalide emporte silencieusement le bloc entier. Les
+		// commentaires JavaScript comptent aussi — un `#PAGINATION` écrit dans
+		// un `/* … */` a produit une erreur de compilation que rien, sur la
+		// page, ne rattachait au commentaire qui l'avait causée.
+		$balise = '/#[A-Z_]{3,}|#(GET|SET|ENV|VAL)\\{/';
 		$commentaires = [];
-		preg_match_all('/<!--.*?-->/s', $source, $commentaires);
+		preg_match_all('/<!--.*?-->|\\/\\*.*?\\*\\//s', $source, $commentaires);
 		foreach ($commentaires[0] as $commentaire) {
 			verifier(
-				"$affiche : pas de syntaxe de balise dans un commentaire HTML",
-				!preg_match('/#[A-Z_]{3,}|#(GET|SET|ENV|VAL)\\{/', $commentaire),
-				premiere_occurrence('/#[A-Z_]{3,}|#(GET|SET|ENV|VAL)\\{/', $commentaire)
+				"$affiche : pas de syntaxe de balise dans un commentaire",
+				!preg_match($balise, $commentaire),
+				premiere_occurrence($balise, $commentaire)
 			);
 		}
 	}
@@ -599,7 +606,7 @@ $api_spip = [
 	// SVP, quand le site géré en dispose : c'est lui qui sait mettre à jour un
 	// plugin proprement, dépendances comprises. Les classes Decideur et
 	// Actionneur ne passent pas par ici — seules les fonctions sont analysées.
-	'svp_actualiser_paquets_locaux',
+	'svp_actualiser_paquets_locaux', 'svp_actualiser_maj_version', 'svp_actualiser_depot',
 ];
 
 $definies = [];
@@ -721,6 +728,8 @@ $fournisseur = [
 	'maj_tables'           => 'base/create',
 	'maj_plugin'           => 'base/upgrade',
 	'svp_actualiser_paquets_locaux' => 'inc/svp_depoter_local',
+	'svp_actualiser_maj_version'    => 'inc/svp_depoter_local',
+	'svp_actualiser_depot'          => 'inc/svp_depoter_distant',
 	'formulaires_editer_objet_charger'  => 'inc/editer',
 	'formulaires_editer_objet_verifier' => 'inc/editer',
 	'formulaires_editer_objet_traiter'  => 'inc/editer',

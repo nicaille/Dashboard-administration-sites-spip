@@ -1,0 +1,192 @@
+[(#AUTORISER{voir, dashboard}|sinon_interdire_acces)]
+<link rel="stylesheet" href="[(#CHEMIN{css/dashboard.css}|timestamp|direction_css)]" type="text/css" />
+
+<h1 class="grostitre"><:dashboard:titre_dashboard:></h1>
+
+[(#ENV{dashboard_message}|oui)
+	<p class="[(#ENV{dashboard_statut}|=={ok}|?{reponse_formulaire_ok,reponse_formulaire_erreur})] reponse_formulaire">
+		[(#ENV{dashboard_message}|textebrut)]
+	</p>
+]
+
+<BOUCLE_installe(CONDITION){si #VAL|dashboard_tables_presentes}>
+
+#SET{synthese,#VAL|dashboard_synthese}
+<ul class="dashboard-synthese">
+	<li><strong>[(#GET{synthese}|table_valeur{supervises})]</strong> <:dashboard:synthese_supervises:></li>
+	<li class="dashboard-erreur"><strong>[(#GET{synthese}|table_valeur{en_erreur})]</strong> <:dashboard:synthese_erreurs:></li>
+	<li class="dashboard-attention"><strong>[(#GET{synthese}|table_valeur{core_retard})]</strong> <:dashboard:synthese_core_retard:></li>
+	<li class="dashboard-attention"><strong>[(#GET{synthese}|table_valeur{base_retard})]</strong> <:dashboard:synthese_base_retard:></li>
+	<li class="dashboard-attention"><strong>[(#GET{synthese}|table_valeur{plugins_maj})]</strong> <:dashboard:synthese_plugins_maj:></li>
+</ul>
+
+[(#VAL|dashboard_depots_parc_age|oui)
+	[(#REM)
+		Ce nombre est la somme de ce que chaque site a relevé, et chaque site ne
+		relève que ce que son propre catalogue lui dit. Le donner sans le dater,
+		c'est affirmer « tout va bien » sans avoir regardé.
+	]
+	#SET{depots_perimes,#VAL|dashboard_depots_parc_perimes}
+	<p class="dashboard-depots[(#GET{depots_perimes}|>{0}|oui) dashboard-depots-perimes]"
+	   id="depots">
+		<span>
+			<:dashboard:depots_parc_relus:> [(#VAL|dashboard_depots_parc_age)][(#GET{depots_perimes}|>{0}|oui)
+			&mdash; <:dashboard:depots_parc_perimes{nb=#GET{depots_perimes}}:>]
+		</span>
+		[(#AUTORISER{operer,dashboard_site})
+		<button type="button" class="btn btn_secondaire" data-dashboard-depots-parc>
+			<:dashboard:action_depots_parc:>
+		</button>
+		<span class="dashboard-depots-avancement" role="status" aria-live="polite"></span>
+		]
+	</p>
+
+	[(#AUTORISER{operer,dashboard_site})
+	[(#REM)
+		La file des sites à relire, en clair dans la page : le pilote la lit et
+		l'enchaîne. Chaque adresse est signée pour son site, comme n'importe
+		quelle action — aucune n'est fabriquée en JavaScript.
+	]
+	<ul class="dashboard-parc-file" hidden>
+		<BOUCLE_file(DASHBOARD_SITES){statut = publie}{par titre}>
+			[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+			<li><a href="[(#URL_ACTION_AUTEUR{dashboard_parc,#ID_DASHBOARD_SITE})]">#TITRE</a></li>
+			]
+		</BOUCLE_file>
+	</ul>
+	]
+]
+
+<B_sites>
+<table class="spip liste dashboard-parc">
+	<caption><:dashboard:parc_caption:></caption>
+	<thead>
+		<tr>
+			<th scope="col"><:dashboard:col_site:></th>
+			<th scope="col"><:dashboard:col_etat:></th>
+			<th scope="col"><:dashboard:col_spip:></th>
+			<th scope="col"><:dashboard:col_plugins:></th>
+			<th scope="col"><:dashboard:col_sync:></th>
+			<th scope="col"><:dashboard:col_actions:></th>
+		</tr>
+	</thead>
+	<tbody>
+	<BOUCLE_sites(DASHBOARD_SITES){statut != poubelle}{par groupe, titre}{pagination 25}>
+		<tr class="[(#COMPTEUR_BOUCLE|alterner{odd,even})] [(#ETAT|dashboard_classe_etat)]">
+			<th scope="row">
+				<a href="[(#URL_ECRIRE{dashboard_site,id_dashboard_site=#ID_DASHBOARD_SITE})]">#TITRE</a>
+				[<br /><span class="dashboard-groupe">(#GROUPE)</span>]
+				[<br /><a class="dashboard-lien-public" href="(#URL_SITE)" rel="noreferrer">(#URL_SITE|couper{48})</a>]
+			</th>
+			<td class="dashboard-etat">
+				[(#ETAT|=={ok}|oui)<span class="dashboard-pastille dashboard-pastille-ok"></span>]
+				[(#ETAT|=={ok}|non)<span class="dashboard-pastille dashboard-pastille-ko"></span>]
+				[(#STATUT|=={prepa}|oui)<em><:dashboard:statut_pause:></em>]
+				[<span class="dashboard-message-erreur">(#ERREUR|couper{90})</span>]
+			</td>
+			<td>
+				[<code>(#VERSION_SPIP|entites_html)</code>]
+				[(#CORE_MAJ|=={oui}|oui)
+					<span class="dashboard-badge dashboard-badge-maj" title="<:dashboard:core_maj_disponible:>">
+						&rarr; [(#VERSION_SPIP|dashboard_version_disponible|entites_html)]
+					</span>
+				]
+				[(#BASE_MAJ|=={oui}|oui)
+					<span class="dashboard-badge dashboard-badge-alerte" title="<:dashboard:base_maj_disponible:>">
+						<:dashboard:badge_base_maj:>
+					</span>
+				]
+			</td>
+			<td>
+				#NB_PLUGINS
+				[(#NB_PLUGINS_MAJ|>{0}|oui)
+					<span class="dashboard-badge dashboard-badge-maj">[(#NB_PLUGINS_MAJ)] <:dashboard:a_mettre_a_jour:></span>
+				]
+			</td>
+			<td>[(#DATE_SYNC|dashboard_date_lisible{jour})][(#DATE_SYNC|dashboard_date_lisible{jour}|non)<:dashboard:jamais:>]</td>
+			<td class="dashboard-actions">
+				[(#BOUTON_ACTION{<:dashboard:action_sync:>,#URL_ACTION_AUTEUR{dashboard_operation,sync/#ID_DASHBOARD_SITE,#SELF},btn btn_secondaire})]
+				[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+					[(#BOUTON_ACTION{<:dashboard:action_purger:>,#URL_ACTION_AUTEUR{dashboard_operation,purger/#ID_DASHBOARD_SITE/tout,#SELF},btn btn_secondaire})]
+				]
+			</td>
+		</tr>
+	</BOUCLE_sites>
+	</tbody>
+</table>
+[<nav class="pagination" role="navigation">(#PAGINATION{precedent_suivant})</nav>]
+</B_sites>
+<p class="petition"><:dashboard:parc_vide:></p>
+<//B_sites>
+
+[(#AUTORISER{creer,dashboard_site})
+<p class="boutons">
+	<a class="btn" href="[(#URL_ECRIRE{dashboard_site,new=oui})]"><:dashboard:icone_creer_site:></a>
+</p>
+]
+
+<script type="text/javascript">
+/* Relecture des catalogues de tout le parc, un site à la fois.
+   Sans JavaScript, le bouton ne fait rien et rien n'est perdu : la
+   synchronisation de fond relit les catalogues trop anciens d'elle-même. */
+(function () {
+	var bouton = document.querySelector('[data-dashboard-depots-parc]');
+	var file = document.querySelector('.dashboard-parc-file');
+	if (!bouton || !file) { return; }
+
+	var etapes = Array.prototype.map.call(file.querySelectorAll('a'), function (a) {
+		return { url: a.getAttribute('href'), titre: a.textContent.trim() };
+	});
+	var avancement = document.querySelector('.dashboard-depots-avancement');
+	if (!etapes.length) { bouton.disabled = true; return; }
+
+	function dire(texte) {
+		if (avancement) { avancement.textContent = texte; }
+	}
+
+	function relire(rang) {
+		if (rang >= etapes.length) {
+			dire('Terminé, actualisation…');
+			window.location.reload();
+			return;
+		}
+		dire('(' + (rang + 1) + '/' + etapes.length + ') ' + etapes[rang].titre + '…');
+		fetch(etapes[rang].url, {
+			credentials: 'same-origin',
+			headers: { 'X-Requested-With': 'XMLHttpRequest' }
+		})
+			.then(function (r) {
+				if (!r.ok) { throw new Error('HTTP ' + r.status); }
+				return r.json();
+			})
+			.then(function (etat) {
+				if (etat.message) { dire('(' + (rang + 1) + '/' + etapes.length + ') ' + etat.message); }
+				// Un site qui reste sur le même rang a encore des dépôts à relire.
+				relire(etat.termine ? rang + 1 : rang);
+			})
+			.catch(function () {
+				// Un site injoignable n'arrête pas le tour : on passe au suivant.
+				dire('(' + (rang + 1) + '/' + etapes.length + ') ' + etapes[rang].titre + ' : sans réponse');
+				window.setTimeout(function () { relire(rang + 1); }, 800);
+			});
+	}
+
+	bouton.addEventListener('click', function () {
+		bouton.disabled = true;
+		relire(0);
+	});
+})();
+</script>
+
+</BOUCLE_installe>
+<div class="dashboard-fiche dashboard-fiche-alerte">
+	<h2><:dashboard:titre_tables_absentes:></h2>
+	<p><:dashboard:explication_tables_absentes:></p>
+	[<p><:dashboard:tables_manquantes:> <code>(#VAL|dashboard_tables_absentes)</code></p>]
+	[(#AUTORISER{configurer,_dashboard})
+	<p class="boutons">
+		[(#BOUTON_ACTION{<:dashboard:action_installer:>,#URL_ACTION_AUTEUR{dashboard_installer,installer,#SELF},btn})]
+	</p>
+	]
+</div>
+<//B_installe>

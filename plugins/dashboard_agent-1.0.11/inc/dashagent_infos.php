@@ -1,0 +1,527 @@
+<?php
+/**
+ * Inventaire du site géré : core, environnement, plugins, caches, base.
+ *
+ * @package SPIP\Dashagent\Inc
+ */
+
+if (!defined('_ECRIRE_INC_VERSION')) {
+	return;
+}
+
+/**
+ * Construit l'inventaire complet renvoyé au dashboard.
+ *
+ * @param array $args
+ *     - bool `caches` : mesurer les caches (défaut true)
+ *     - bool `plugins` : inventorier les plugins (défaut true)
+ * @return array
+ */
+function dashagent_infos_collecter($args = []) {
+	$avec_caches  = !isset($args['caches']) || $args['caches'];
+	$avec_plugins = !isset($args['plugins']) || $args['plugins'];
+
+	$infos = [
+		'site'    => dashagent_infos_site(),
+		'spip'    => dashagent_infos_spip(),
+		'serveur' => dashagent_infos_serveur(),
+		'base'    => dashagent_infos_base(),
+	];
+
+	$infos['plugins'] = $avec_plugins ? dashagent_infos_plugins() : null;
+	$infos['procures'] = $avec_plugins ? dashagent_infos_procures() : null;
+	// La fraîcheur du catalogue de SVP : « aucune mise à jour disponible » ne
+	// vaut que ce que vaut la date à laquelle il a été relu.
+	$infos['depots'] = $avec_plugins ? dashagent_infos_depots() : null;
+	$infos['caches']  = $avec_caches ? dashagent_infos_caches() : null;
+	$infos['capacites'] = dashagent_infos_capacites();
+
+	return $infos;
+}
+
+/**
+ * État et fraîcheur des dépôts de plugins.
+ *
+ * @return array
+ */
+function dashagent_infos_depots() {
+	if (!find_in_path('inc/svp_decider.php')) {
+		return [];
+	}
+	include_spip('inc/dashagent_svp');
+
+	return dashagent_svp_depots();
+}
+
+/**
+ * Identité du site.
+ *
+ * @return array
+ */
+function dashagent_infos_site() {
+	$adresse = (string) ($GLOBALS['meta']['adresse_site'] ?? '');
+
+	return [
+		'nom'    => (string) ($GLOBALS['meta']['nom_site'] ?? ''),
+		'url'    => url_de_base(),
+		'langue' => (string) ($GLOBALS['meta']['langue_site'] ?? ''),
+		'https'  => (strncmp($adresse, 'https://', 8) === 0),
+	];
+}
+
+/**
+ * Version du core et principaux réglages.
+ *
+ * @return array
+ */
+function dashagent_infos_spip() {
+	include_spip('inc/dashagent_base');
+	$branche = (string) ($GLOBALS['spip_version_branche'] ?? '');
+	$code    = $GLOBALS['spip_version_code'] ?? null;
+	$base    = dashagent_base_etat();
+
+	return [
+		'version'         => $branche,
+		'version_code'    => $code,
+		'version_base'    => $base['version_base'],
+		// Ce que les fichiers attendent : sans les deux nombres, le tableau de
+		// bord ne peut pas voir qu'une migration de schéma est en attente.
+		'version_base_attendue' => $base['version_base_attendue'],
+		'base_maj_requise'      => $base['maj_requise'],
+		'base_plus_recente'     => $base['base_plus_recente'],
+		'ecran_securite'  => defined('_ECRAN_SECURITE') ? _ECRAN_SECURITE : null,
+		'charset'         => (string) ($GLOBALS['meta']['charset'] ?? ''),
+		'dir_plugins'     => defined('_DIR_PLUGINS') ? _DIR_PLUGINS : '',
+		'racine_absolue'  => defined('_ROOT_RACINE') ? _ROOT_RACINE : '',
+	];
+}
+
+/**
+ * Environnement d'exécution.
+ *
+ * @return array
+ */
+function dashagent_infos_serveur() {
+	include_spip('inc/dashagent_fs');
+
+	return [
+		'php'                 => PHP_VERSION,
+		'php_sapi'            => PHP_SAPI,
+		'memory_limit'        => ini_get('memory_limit'),
+		'max_execution_time'  => (int) ini_get('max_execution_time'),
+		'upload_max_filesize' => ini_get('upload_max_filesize'),
+		'extensions'          => [
+			'zip'      => class_exists('ZipArchive'),
+			'curl'     => function_exists('curl_init'),
+			'gd'       => function_exists('imagecreatetruecolor'),
+			'zlib'     => function_exists('gzopen'),
+			'sodium'   => function_exists('sodium_crypto_secretbox'),
+		],
+		'exec_disponible'     => dashagent_exec_disponible(),
+		'disque_libre'        => dashagent_espace_disque_libre(),
+		'os'                  => PHP_OS_FAMILY,
+	];
+}
+
+/**
+ * Volumétrie de la base et du contenu éditorial.
+ *
+ * @return array
+ */
+function dashagent_infos_base() {
+	$base = [
+		'serveur'      => '',
+		'version'      => '',
+		'octets'       => null,
+		'nb_tables'    => null,
+		'contenus'     => [],
+	];
+
+	$version = sql_version();
+	if (is_string($version)) {
+		$base['version'] = $version;
+	}
+	$base['serveur'] = $GLOBALS['connexions'][0]['type'] ?? '';
+
+	$tables = sql_alltable('%');
+	if (is_array($tables)) {
+		$base['nb_tables'] = count($tables);
+	}
+
+	// Taille réelle : spécifique à MySQL/MariaDB, on échoue silencieusement ailleurs.
+	$res = sql_query('SHOW TABLE STATUS', '', 'continue');
+	if ($res) {
+		$octets = 0;
+		while ($ligne = sql_fetch($res, '')) {
+			$octets += (int) ($ligne['Data_length'] ?? 0) + (int) ($ligne['Index_length'] ?? 0);
+		}
+		$base['octets'] = $octets;
+	}
+
+	foreach (['article' => 'spip_articles', 'rubrique' => 'spip_rubriques', 'document' => 'spip_documents', 'auteur' => 'spip_auteurs'] as $clef => $table) {
+		$n = sql_countsel($table, '', '', '', '', 'continue');
+		if ($n !== false) {
+			$base['contenus'][$clef] = (int) $n;
+		}
+	}
+
+	return $base;
+}
+
+/**
+ * Inventaire des plugins actifs, avec version disponible si SVP est présent.
+ *
+ * @return array
+ */
+function dashagent_infos_plugins() {
+	include_spip('inc/plugin');
+
+	$actifs = unserialize($GLOBALS['meta']['plugin'] ?? '');
+	if (!is_array($actifs)) {
+		$actifs = [];
+	}
+
+	$disponibles = dashagent_versions_disponibles();
+	$plugins = [];
+
+	foreach ($actifs as $prefixe => $plugin) {
+		if (!dashagent_est_un_plugin($plugin)) {
+			continue;
+		}
+		$dir_type = $plugin['dir_type'] ?? '_DIR_PLUGINS';
+		$racine   = defined($dir_type) ? constant($dir_type) : _DIR_PLUGINS;
+		$chemin   = $racine . ($plugin['dir'] ?? '');
+
+		$version = (string) ($plugin['version'] ?? '');
+		$dispo   = $disponibles[strtoupper($prefixe)] ?? null;
+
+		$plugins[] = [
+			'prefixe'            => strtoupper($prefixe),
+			'nom'                => dashagent_nom_plugin($plugin),
+			'version'            => $version,
+			'version_disponible' => $dispo,
+			'maj_disponible'     => ($dispo && $version && spip_version_compare($dispo, $version, '>')),
+			'etat'               => (string) ($plugin['etat'] ?? ''),
+			'dossier'            => (string) ($plugin['dir'] ?? ''),
+			'chemin'             => $chemin,
+			'dir_type'           => $dir_type,
+			'distribue'          => ($dir_type === '_DIR_PLUGINS_DIST'),
+			'source'             => dashagent_source_plugin($chemin),
+			'inscriptible'       => is_dir($chemin) && is_writable($chemin),
+			'version_base'       => (string) ($plugin['version_base'] ?? ''),
+		];
+	}
+
+	usort($plugins, function ($a, $b) {
+		return strcasecmp($a['prefixe'], $b['prefixe']);
+	});
+
+	return $plugins;
+}
+
+/**
+ * Cette entrée de la meta « plugin » est-elle un plugin réellement installé ?
+ *
+ * SPIP y range aussi les capacités fournies — extensions PHP, bibliothèques,
+ * jQuery — sous la forme `procure:xxx`, ainsi que le core lui-même. Les faire
+ * figurer dans l'inventaire d'un parc n'a pas de sens : elles n'ont pas de
+ * répertoire, pas de mise à jour, et noient les vrais plugins.
+ *
+ * @param array $plugin
+ * @return bool
+ */
+function dashagent_est_un_plugin($plugin) {
+	$dir = (string) ($plugin['dir'] ?? '');
+	if ($dir === '' || strpos($dir, 'procure:') !== false) {
+		return false;
+	}
+
+	return in_array(
+		(string) ($plugin['dir_type'] ?? ''),
+		['_DIR_PLUGINS', '_DIR_PLUGINS_DIST', '_DIR_PLUGINS_SUPPL', '_DIR_EXTENSIONS'],
+		true
+	);
+}
+
+/**
+ * Capacités fournies au site : extensions PHP et bibliothèques.
+ *
+ * Ce sont les entrées `procure:` de la meta « plugin ». Elles n'ont ni
+ * répertoire ni mise à jour possible, mais savoir quelle version de gd, de
+ * sodium ou d'intl tourne sur chaque site du parc est précisément le genre
+ * d'information qu'on vient chercher ici. D'où une liste séparée, plutôt que
+ * mêlée aux plugins.
+ *
+ * @return array
+ */
+function dashagent_infos_procures() {
+	$actifs = unserialize($GLOBALS['meta']['plugin'] ?? '');
+	if (!is_array($actifs)) {
+		return [];
+	}
+
+	$procures = [];
+	foreach ($actifs as $prefixe => $entree) {
+		$dir = (string) ($entree['dir'] ?? '');
+		$position = strpos($dir, 'procure:');
+		if ($position === false) {
+			continue;
+		}
+
+		$nom = substr($dir, $position + strlen('procure:'));
+		// « compresseur/procure:csstidy » : la capacité est fournie par un plugin.
+		$fournie_par = $position > 0 ? rtrim(substr($dir, 0, $position), '/') : '';
+
+		$procures[] = [
+			'prefixe'     => strtoupper((string) $prefixe),
+			'nom'         => $nom !== '' ? $nom : strtolower((string) $prefixe),
+			'version'     => (string) ($entree['version'] ?? ''),
+			'fournie_par' => $fournie_par,
+			'php'         => (strncasecmp((string) $prefixe, 'PHP', 3) === 0),
+		];
+	}
+
+	usort($procures, function ($a, $b) {
+		// Les extensions PHP d'abord, puis les bibliothèques, chacune triée.
+		if ($a['php'] !== $b['php']) {
+			return $a['php'] ? -1 : 1;
+		}
+
+		return strcasecmp($a['nom'], $b['nom']);
+	});
+
+	return $procures;
+}
+
+/**
+ * Nom lisible d'un plugin, quel que soit le format stocké dans la meta.
+ *
+ * @param array $plugin
+ * @return string
+ */
+function dashagent_nom_plugin($plugin) {
+	$nom = $plugin['nom'] ?? '';
+	if (is_array($nom)) {
+		$nom = reset($nom);
+	}
+	$nom = (string) $nom;
+
+	// Les noms peuvent être des chaînes de langue non traduites hors contexte.
+	if (preg_match('/^<:.*:>$/', $nom)) {
+		return (string) ($plugin['dir'] ?? $nom);
+	}
+
+	return dashagent_texte_multi($nom);
+}
+
+/**
+ * Réduit un texte multilingue `[fr]…[en]…` à une seule langue.
+ *
+ * Les paquet.xml peuvent porter un nom multilingue ; affiché tel quel dans un
+ * tableau, il devient illisible.
+ *
+ * @param string $texte
+ * @param string $langue Langue souhaitée, celle du site par défaut
+ * @return string
+ */
+function dashagent_texte_multi($texte, $langue = '') {
+	$texte = (string) $texte;
+	if (strpos($texte, '[') === false || !preg_match('/\[[a-z]{2}(_[a-zA-Z]{2,})?\]/', $texte)) {
+		return $texte;
+	}
+
+	$langue = $langue ?: (string) ($GLOBALS['meta']['langue_site'] ?? 'fr');
+
+	if (!preg_match_all('/\[([a-z]{2}(?:_[a-zA-Z]{2,})?)\]([^\[]*)/', $texte, $trouves, PREG_SET_ORDER)) {
+		return $texte;
+	}
+
+	$blocs = [];
+	foreach ($trouves as $bloc) {
+		$valeur = trim($bloc[2]);
+		if ($valeur !== '' && !isset($blocs[$bloc[1]])) {
+			$blocs[$bloc[1]] = $valeur;
+		}
+	}
+
+	foreach ([$langue, 'fr', 'en'] as $preferee) {
+		if (!empty($blocs[$preferee])) {
+			return $blocs[$preferee];
+		}
+	}
+
+	return $blocs ? (string) reset($blocs) : $texte;
+}
+
+/**
+ * Rend sa forme usuelle à une version normalisée par SVP.
+ *
+ * SVP stocke les versions remplies de zéros à gauche pour pouvoir les trier
+ * (« 004.003.003 »). Affichée telle quelle, la version est incompréhensible ;
+ * comparée telle quelle, elle fausse les comparaisons.
+ *
+ * @param string $version
+ * @return string
+ */
+function dashagent_denormaliser_version($version) {
+	$version = (string) $version;
+	if ($version === '' || !preg_match('/^0\d/', $version)) {
+		return $version;
+	}
+
+	$morceaux = [];
+	foreach (explode('.', $version) as $nombre) {
+		$sans_zeros = ltrim($nombre, '0');
+		$morceaux[] = ($sans_zeros !== '' && $sans_zeros[0] !== '-') ? $sans_zeros : '0' . $sans_zeros;
+	}
+
+	return implode('.', $morceaux);
+}
+
+/**
+ * Détermine par quel moyen un plugin a été déployé.
+ *
+ * @param string $chemin
+ * @return string git|svp|manuel|introuvable
+ */
+function dashagent_source_plugin($chemin) {
+	if (!is_dir($chemin)) {
+		return 'introuvable';
+	}
+	if (is_dir(rtrim($chemin, '/') . '/.git')) {
+		return 'git';
+	}
+	if (file_exists(rtrim($chemin, '/') . '/.svp')) {
+		return 'svp';
+	}
+
+	return 'manuel';
+}
+
+/**
+ * Versions disponibles connues localement, via les dépôts SVP.
+ *
+ * SVP maintient déjà un miroir des dépôts : on l'interroge plutôt que de faire
+ * sortir N sites sur le réseau. Sans SVP, la comparaison de versions est faite
+ * côté dashboard.
+ *
+ * @return array Tableau prefixe majuscule => version la plus haute disponible
+ */
+function dashagent_versions_disponibles() {
+	if (!dashagent_table_existe('spip_paquets') || !dashagent_table_existe('spip_plugins')) {
+		return [];
+	}
+
+	include_spip('inc/plugin');
+	$versions = [];
+
+	$res = sql_select(
+		['pl.prefixe AS prefixe', 'pa.version AS version'],
+		['spip_paquets AS pa', 'spip_plugins AS pl'],
+		['pa.id_plugin = pl.id_plugin', 'pa.id_depot > 0'],
+		'',
+		'',
+		'',
+		'',
+		'',
+		'continue'
+	);
+	if (!$res) {
+		return [];
+	}
+
+	while ($ligne = sql_fetch($res, '')) {
+		$prefixe = strtoupper((string) $ligne['prefixe']);
+		$version = dashagent_denormaliser_version((string) $ligne['version']);
+		if ($version === '') {
+			continue;
+		}
+		if (!isset($versions[$prefixe]) || spip_version_compare($version, $versions[$prefixe], '>')) {
+			$versions[$prefixe] = $version;
+		}
+	}
+
+	return $versions;
+}
+
+/**
+ * Mesure des différents caches purgeables.
+ *
+ * @return array
+ */
+function dashagent_infos_caches() {
+	include_spip('inc/dashagent_cache');
+	include_spip('inc/dashagent_fs');
+
+	$mesures = [];
+	foreach (dashagent_cibles_cache() as $cible => $definition) {
+		$total = ['existe' => false, 'octets' => 0, 'fichiers' => 0, 'partiel' => false];
+		foreach ($definition['repertoires'] as $dir) {
+			$m = dashagent_mesurer_repertoire($dir);
+			$total['existe']   = $total['existe'] || $m['existe'];
+			$total['octets']  += $m['octets'];
+			$total['fichiers'] += $m['fichiers'];
+			$total['partiel']  = $total['partiel'] || $m['partiel'];
+		}
+		$total['libelle'] = $definition['libelle'];
+		$mesures[$cible]  = $total;
+	}
+
+	return $mesures;
+}
+
+/**
+ * Ce que l'agent est en mesure de faire ici et maintenant.
+ *
+ * Le dashboard s'en sert pour griser les actions impossibles plutôt que de les
+ * proposer puis d'échouer.
+ *
+ * @return array
+ */
+function dashagent_infos_capacites() {
+	include_spip('inc/dashagent');
+	include_spip('inc/dashagent_fs');
+
+	$capacites = [];
+	foreach (['infos', 'purger', 'sauvegarde_creer', 'plugin_maj', 'core_maj'] as $op) {
+		$capacites[$op] = dashagent_operation_autorisee($op);
+	}
+
+	$capacites['zip']              = class_exists('ZipArchive');
+	$capacites['tmp_inscriptible'] = (bool) dashagent_dir_travail();
+	$capacites['core_inscriptible'] = is_writable(_DIR_RACINE ?: '.') && is_writable(_DIR_RESTREINT_ABS ?: (_DIR_RACINE . 'ecrire/'));
+	$capacites['plugins_inscriptible'] = defined('_DIR_PLUGINS') && is_dir(_DIR_PLUGINS) && is_writable(_DIR_PLUGINS);
+	$capacites['svp']              = dashagent_table_existe('spip_paquets');
+
+	return $capacites;
+}
+
+/**
+ * La table existe-t-elle dans la base courante ?
+ *
+ * @param string $table
+ * @return bool
+ */
+function dashagent_table_existe($table) {
+	static $tables = null;
+	if ($tables === null) {
+		$liste  = sql_alltable('%');
+		$tables = is_array($liste) ? array_flip($liste) : [];
+	}
+
+	return isset($tables[$table]);
+}
+
+/**
+ * La fonction exec() est-elle réellement utilisable ?
+ *
+ * @return bool
+ */
+function dashagent_exec_disponible() {
+	if (!function_exists('exec')) {
+		return false;
+	}
+	$desactivees = array_map('trim', explode(',', (string) ini_get('disable_functions')));
+
+	return !in_array('exec', $desactivees, true);
+}

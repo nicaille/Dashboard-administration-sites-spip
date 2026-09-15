@@ -75,6 +75,72 @@ $GLOBALS['dashagent_config_test']['ips_autorisees'] = '198.51.100.0/25';
 verifier('masque non aligné sur un octet : intérieur', dashagent_ip_autorisee('198.51.100.127'));
 verifier('masque non aligné sur un octet : extérieur', !dashagent_ip_autorisee('198.51.100.128'));
 
+echo "\n== Adresse de l'appelant ==\n";
+
+/* Cette valeur est enregistrée au journal d'une requête *refusée*, donc non
+   authentifiée, et le journal s'affiche dans l'espace privé du site géré.
+   Derrière un proxy déclaré de confiance, elle vient d'un en-tête que le client
+   écrit lui-même : sans contrôle, n'importe qui y déposerait son balisage. */
+$serveur = ['REMOTE_ADDR' => '203.0.113.7'];
+verifier('sans proxy, l’adresse du socket', dashagent_ip_client($serveur) === '203.0.113.7');
+verifier('un REMOTE_ADDR qui n’est pas une IP est écarté',
+	dashagent_ip_client(['REMOTE_ADDR' => '<svg onload=alert(1)>']) === '');
+verifier('sans proxy de confiance, l’en-tête est ignoré',
+	dashagent_ip_client(['REMOTE_ADDR' => '203.0.113.7', 'HTTP_X_FORWARDED_FOR' => '198.51.100.4'])
+		=== '203.0.113.7');
+
+define('_DASHAGENT_PROXY_DE_CONFIANCE', true);
+verifier('proxy de confiance : l’en-tête fait foi',
+	dashagent_ip_client(['REMOTE_ADDR' => '10.0.0.1', 'HTTP_X_FORWARDED_FOR' => '198.51.100.4, 10.0.0.1'])
+		=== '198.51.100.4');
+verifier('un en-tête qui n’est pas une IP est refusé, pas recopié',
+	dashagent_ip_client(['REMOTE_ADDR' => '10.0.0.1', 'HTTP_X_FORWARDED_FOR' => '<svg onload=alert(1)>'])
+		=== '10.0.0.1',
+	dashagent_ip_client(['REMOTE_ADDR' => '10.0.0.1', 'HTTP_X_FORWARDED_FOR' => '<svg onload=alert(1)>']));
+verifier('X-Real-IP sert de second recours',
+	dashagent_ip_client(['REMOTE_ADDR' => '10.0.0.1', 'HTTP_X_REAL_IP' => '2001:db8::5']) === '2001:db8::5');
+
+echo "\n== Ce qu’un site géré nous répond n’est jamais du balisage ==\n";
+
+/* Le tableau de bord affiche l'inventaire d'un site dans son espace privé, à un
+   webmestre qui détient les secrets de tout le parc. L'échappement de SPIP ne
+   couvre pas ce cas : `interdire_scripts()` laisse passer `<svg onload>`. Un
+   site compromis qui répondrait cela comme numéro de version exécuterait donc
+   son code sur la tour de contrôle — soit la prise du parc entier depuis un
+   seul de ses sites. */
+verifier('un gestionnaire d’événement ne survit pas',
+	dashboard_inerte('<svg onload="alert(1)">4.4.23') === '4.4.23',
+	dashboard_inerte('<svg onload="alert(1)">4.4.23'));
+verifier('aucun chevron ne subsiste',
+	strpbrk((string) dashboard_inerte('<b>a</b> > b < c'), '<>') === false,
+	dashboard_inerte('<b>a</b> > b < c'));
+verifier('une balise ouverte non refermée emporte sa suite',
+	strpbrk((string) dashboard_inerte('4.4 <script>alert(1)'), '<>') === false);
+verifier('un numéro de version normal traverse intact',
+	dashboard_inerte('4.4.23') === '4.4.23');
+verifier('un nom de plugin normal traverse intact',
+	dashboard_inerte('Saisies & compagnie') === 'Saisies & compagnie');
+verifier('les caractères de contrôle partent',
+	dashboard_inerte("4.4\x00.23\x07") === '4.4.23');
+verifier('les entiers restent des entiers', dashboard_inerte(42) === 42);
+verifier('les booléens restent des booléens', dashboard_inerte(false) === false);
+verifier('null reste null', dashboard_inerte(null) === null);
+
+/* L'inventaire est un arbre : le filtre doit le parcourir en entier, clefs
+   comprises — une clef est affichée comme le reste. */
+$inventaire = dashboard_inerte([
+	'spip' => ['version' => '<svg onload=x>4.4.23'],
+	'plugins' => [['nom' => 'Ok', 'version' => '<img src=x onerror=y>1.0']],
+	'<b>clef</b>' => 'valeur',
+]);
+verifier('le filtre descend dans les sous-tableaux',
+	$inventaire['spip']['version'] === '4.4.23', $inventaire['spip']['version']);
+verifier('le filtre descend dans les listes',
+	$inventaire['plugins'][0]['version'] === '1.0', $inventaire['plugins'][0]['version']);
+verifier('les clefs sont traitées comme les valeurs',
+	array_key_exists('clef', $inventaire), implode(',', array_keys($inventaire)));
+verifier('ce qui était propre n’est pas abîmé', $inventaire['plugins'][0]['nom'] === 'Ok');
+
 echo "\n== Secrets ==\n";
 
 $s1 = dashagent_generer_secret();
@@ -471,17 +537,47 @@ verifier('le balisage a disparu', strpos($lisible, '<span') === false);
 
 echo "\n== Étapes d’un chantier ==\n";
 
-foreach (['plugin_maj', 'plugin_maj_tous', 'core_maj', 'base_maj'] as $operation) {
+/* L'invariant n'est pas « la sauvegarde d'abord », mais « rien qui touche au
+   site avant elle ». Relire le catalogue des dépôts ne modifie que l'inventaire
+   de SVP, qu'il régénère à volonté : cette étape-là peut la précéder, et doit
+   même le faire — mieux vaut savoir ce qu'il y a à faire avant de sauvegarder. */
+$etapes_lecture = ['depots', 'sync'];
+$etapes_ecriture = ['plugin', 'plugins', 'core', 'base'];
+
+foreach (['plugin_maj', 'plugin_maj_tous', 'core_maj', 'base_maj', 'depots_maj'] as $operation) {
 	$etapes = dashboard_chantier_etapes($operation);
-	verifier("$operation : commence par une sauvegarde", ($etapes[0] ?? '') === 'sauvegarde',
-		implode(' → ', $etapes));
+	$rang_sauvegarde = array_search('sauvegarde', $etapes, true);
+
+	$avant = $rang_sauvegarde === false ? $etapes : array_slice($etapes, 0, $rang_sauvegarde);
+	$intrus = array_intersect($avant, $etapes_ecriture);
+	verifier("$operation : rien ne touche au site avant la sauvegarde",
+		$intrus === [], implode(' → ', $etapes));
+
+	$ecrit = array_intersect($etapes, $etapes_ecriture);
+	verifier("$operation : une sauvegarde dès qu'une étape modifie le site",
+		!$ecrit || $rang_sauvegarde !== false, implode(' → ', $etapes));
+
 	verifier("$operation : finit par une synchronisation", end($etapes) === 'sync');
 }
 verifier('la mise à jour du core migre aussi le schéma',
 	in_array('base', dashboard_chantier_etapes('core_maj'), true),
 	implode(' → ', dashboard_chantier_etapes('core_maj')));
 verifier('les plugins sont relistés juste avant d’être mis à jour',
-	dashboard_chantier_etapes('plugin_maj_tous') === ['sauvegarde', 'sync', 'plugins', 'sync']);
+	dashboard_chantier_etapes('plugin_maj_tous') === ['depots', 'sauvegarde', 'sync', 'plugins', 'sync'],
+	implode(' → ', dashboard_chantier_etapes('plugin_maj_tous')));
+
+/* Le catalogue est relu avant toute décision de mise à jour : c'est lui qui dit
+   quelles versions existent, et il ne se rafraîchit pas tout seul. */
+foreach (['plugin_maj', 'plugin_maj_tous'] as $operation) {
+	verifier("$operation : les dépôts sont relus en premier",
+		(dashboard_chantier_etapes($operation)[0] ?? '') === 'depots',
+		implode(' → ', dashboard_chantier_etapes($operation)));
+}
+verifier('relire les dépôts est une opération à soi seule',
+	dashboard_chantier_operation_connue('depots_maj') === true);
+verifier('relire les dépôts ne sauvegarde pas pour rien',
+	!in_array('sauvegarde', dashboard_chantier_etapes('depots_maj'), true),
+	implode(' → ', dashboard_chantier_etapes('depots_maj')));
 verifier('opération inconnue : aucune étape', dashboard_chantier_etapes('rm_rf') === []);
 verifier('opération inconnue : refusée', dashboard_chantier_operation_connue('rm_rf') === false);
 verifier('opération connue : acceptée', dashboard_chantier_operation_connue('core_maj') === true);

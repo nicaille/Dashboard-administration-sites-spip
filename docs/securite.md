@@ -21,6 +21,8 @@ Ce qui est pris au sérieux :
 | Dashboard compromis qui abuserait d'un site | Chaque opération est révocable depuis le site géré |
 | Sauvegarde accessible par le web | Stockage sous `tmp/`, hors espace web, plus `.htaccess` de refus |
 | Secret lisible dans la base | Chiffré avec le chiffrement du core SPIP quand il est disponible |
+| Site géré qui injecterait du code dans la tour de contrôle | Tout ce qui vient d'un agent est rendu inerte à l'enregistrement, et échappé à l'affichage |
+| Journal de l'agent empoisonné par un inconnu | L'adresse de l'appelant doit être une adresse IP, en-tête de proxy compris |
 
 Ce qui n'est **pas** couvert :
 
@@ -74,6 +76,51 @@ Sur le **tour de contrôle**, trois niveaux :
 
 Lire l'état d'un parc et agir dessus ne relèvent volontairement pas du même
 droit.
+
+## Ce qu'un site géré nous répond n'est jamais du balisage
+
+Le sens de la flèche compte. On protège l'agent de ce que le tableau de bord lui
+envoie ; il faut aussi protéger le tableau de bord de ce que l'agent lui répond.
+
+Un site géré peut être compromis — c'est même l'une des raisons de superviser un
+parc. Sa réponse traverse alors une signature valide (le secret est sur le site,
+l'attaquant l'a), et son inventaire s'affiche dans l'espace privé de la tour de
+contrôle, devant un webmestre qui détient les secrets de **tous** les autres
+sites. Un numéro de version valant `<svg onload="…">` suffirait : un site pris
+prendrait le parc entier. La promesse « compromettre un site ne compromet pas
+les autres » y passerait.
+
+**L'échappement de SPIP ne suffit pas à l'empêcher.** `interdire_scripts()`, que
+le compilateur applique aux champs SQL, ne neutralise que `<?php`, `<base>` et,
+dans l'espace privé, `<script>` et `<iframe>`. `<svg onload>`, `<details
+ontoggle>`, `<b onmouseover>` passent au travers — vérifié sur SPIP 4.4.23.
+
+Deux barrières, donc :
+
+- **à l'entrée**, `dashboard_inerte()` retire le balisage de tout ce qui vient
+  d'un agent avant que cela n'atteigne la base — inventaire, versions, noms de
+  plugins, messages d'erreur, entrées de journal, messages de chantier. Un
+  inventaire n'a aucune raison de porter un chevron ; ce qui est enregistré est
+  donc déjà inoffensif, quelle que soit la manière dont un squelette le rendra ;
+- **à l'affichage**, les champs que SPIP ne protège pas sont échappés
+  explicitement (`|entites_html`). Cette seconde barrière couvre les inventaires
+  relevés avant ce correctif, et rattrape un futur champ qu'on aurait oublié de
+  filtrer à l'entrée.
+
+Le `phpinfo()` d'un site, lui, est du HTML par nature : il est rendu dans une
+`<iframe sandbox>` d'origine opaque, où aucun script ne s'exécute. Tout le reste
+de l'onglet *Serveur* est construit par `textContent`, jamais par `innerHTML`.
+
+## L'adresse de l'appelant, côté agent
+
+L'agent journalise chaque requête, **y compris celles qu'il refuse** — donc
+celles de qui n'a pas le secret. L'adresse enregistrée vient de `REMOTE_ADDR`,
+sauf si le site déclare `_DASHAGENT_PROXY_DE_CONFIANCE`, auquel cas
+`X-Forwarded-For` l'emporte. Or cet en-tête est écrit par le client : sans
+contrôle, un inconnu déposerait dans le journal du site — lisible dans son espace
+privé — le contenu de son choix. Ce qui en sort doit donc passer
+`filter_var(…, FILTER_VALIDATE_IP)`, faute de quoi on retombe sur l'adresse du
+socket.
 
 ## La consultation de l'état d'un serveur
 
