@@ -100,7 +100,7 @@ Ce qui reste exposé malgré tout est décrit dans [docs/securite.md](docs/secur
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/dashboard-1.0.15`, `plugins/dashboard_agent-1.0.11`. Ce n'est pas
+`plugins/dashboard-1.0.16`, `plugins/dashboard_agent-1.0.12`. Ce n'est pas
 décoratif : en déposant la nouvelle version **à côté** de l'ancienne plutôt que
 par-dessus, on évite le travers classique de la mise en ligne par FTP, où les
 fichiers supprimés entre deux versions survivent dans le dossier écrasé et

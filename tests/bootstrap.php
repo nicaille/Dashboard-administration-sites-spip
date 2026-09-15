@@ -76,7 +76,7 @@ function spip_version_compare($v1, $v2, $op = null) {
 /**
  * Chemin d'un plugin, retrouvé par son préfixe.
  *
- * Les dossiers de plugins portent leur version (`dashboard-1.0.15`), pour qu'une
+ * Les dossiers de plugins portent leur version (`dashboard-1.0.16`), pour qu'une
  * mise en ligne n'écrase pas la version précédente. Les retrouver par préfixe
  * évite d'avoir à toucher ce fichier à chaque montée de version.
  *
