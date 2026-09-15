@@ -75,6 +75,72 @@ $GLOBALS['dashagent_config_test']['ips_autorisees'] = '198.51.100.0/25';
 verifier('masque non aligné sur un octet : intérieur', dashagent_ip_autorisee('198.51.100.127'));
 verifier('masque non aligné sur un octet : extérieur', !dashagent_ip_autorisee('198.51.100.128'));
 
+echo "\n== Adresse de l'appelant ==\n";
+
+/* Cette valeur est enregistrée au journal d'une requête *refusée*, donc non
+   authentifiée, et le journal s'affiche dans l'espace privé du site géré.
+   Derrière un proxy déclaré de confiance, elle vient d'un en-tête que le client
+   écrit lui-même : sans contrôle, n'importe qui y déposerait son balisage. */
+$serveur = ['REMOTE_ADDR' => '203.0.113.7'];
+verifier('sans proxy, l’adresse du socket', dashagent_ip_client($serveur) === '203.0.113.7');
+verifier('un REMOTE_ADDR qui n’est pas une IP est écarté',
+	dashagent_ip_client(['REMOTE_ADDR' => '<svg onload=alert(1)>']) === '');
+verifier('sans proxy de confiance, l’en-tête est ignoré',
+	dashagent_ip_client(['REMOTE_ADDR' => '203.0.113.7', 'HTTP_X_FORWARDED_FOR' => '198.51.100.4'])
+		=== '203.0.113.7');
+
+define('_DASHAGENT_PROXY_DE_CONFIANCE', true);
+verifier('proxy de confiance : l’en-tête fait foi',
+	dashagent_ip_client(['REMOTE_ADDR' => '10.0.0.1', 'HTTP_X_FORWARDED_FOR' => '198.51.100.4, 10.0.0.1'])
+		=== '198.51.100.4');
+verifier('un en-tête qui n’est pas une IP est refusé, pas recopié',
+	dashagent_ip_client(['REMOTE_ADDR' => '10.0.0.1', 'HTTP_X_FORWARDED_FOR' => '<svg onload=alert(1)>'])
+		=== '10.0.0.1',
+	dashagent_ip_client(['REMOTE_ADDR' => '10.0.0.1', 'HTTP_X_FORWARDED_FOR' => '<svg onload=alert(1)>']));
+verifier('X-Real-IP sert de second recours',
+	dashagent_ip_client(['REMOTE_ADDR' => '10.0.0.1', 'HTTP_X_REAL_IP' => '2001:db8::5']) === '2001:db8::5');
+
+echo "\n== Ce qu’un site géré nous répond n’est jamais du balisage ==\n";
+
+/* Le tableau de bord affiche l'inventaire d'un site dans son espace privé, à un
+   webmestre qui détient les secrets de tout le parc. L'échappement de SPIP ne
+   couvre pas ce cas : `interdire_scripts()` laisse passer `<svg onload>`. Un
+   site compromis qui répondrait cela comme numéro de version exécuterait donc
+   son code sur la tour de contrôle — soit la prise du parc entier depuis un
+   seul de ses sites. */
+verifier('un gestionnaire d’événement ne survit pas',
+	dashboard_inerte('<svg onload="alert(1)">4.4.23') === '4.4.23',
+	dashboard_inerte('<svg onload="alert(1)">4.4.23'));
+verifier('aucun chevron ne subsiste',
+	strpbrk((string) dashboard_inerte('<b>a</b> > b < c'), '<>') === false,
+	dashboard_inerte('<b>a</b> > b < c'));
+verifier('une balise ouverte non refermée emporte sa suite',
+	strpbrk((string) dashboard_inerte('4.4 <script>alert(1)'), '<>') === false);
+verifier('un numéro de version normal traverse intact',
+	dashboard_inerte('4.4.23') === '4.4.23');
+verifier('un nom de plugin normal traverse intact',
+	dashboard_inerte('Saisies & compagnie') === 'Saisies & compagnie');
+verifier('les caractères de contrôle partent',
+	dashboard_inerte("4.4\x00.23\x07") === '4.4.23');
+verifier('les entiers restent des entiers', dashboard_inerte(42) === 42);
+verifier('les booléens restent des booléens', dashboard_inerte(false) === false);
+verifier('null reste null', dashboard_inerte(null) === null);
+
+/* L'inventaire est un arbre : le filtre doit le parcourir en entier, clefs
+   comprises — une clef est affichée comme le reste. */
+$inventaire = dashboard_inerte([
+	'spip' => ['version' => '<svg onload=x>4.4.23'],
+	'plugins' => [['nom' => 'Ok', 'version' => '<img src=x onerror=y>1.0']],
+	'<b>clef</b>' => 'valeur',
+]);
+verifier('le filtre descend dans les sous-tableaux',
+	$inventaire['spip']['version'] === '4.4.23', $inventaire['spip']['version']);
+verifier('le filtre descend dans les listes',
+	$inventaire['plugins'][0]['version'] === '1.0', $inventaire['plugins'][0]['version']);
+verifier('les clefs sont traitées comme les valeurs',
+	array_key_exists('clef', $inventaire), implode(',', array_keys($inventaire)));
+verifier('ce qui était propre n’est pas abîmé', $inventaire['plugins'][0]['nom'] === 'Ok');
+
 echo "\n== Secrets ==\n";
 
 $s1 = dashagent_generer_secret();

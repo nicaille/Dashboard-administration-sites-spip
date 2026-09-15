@@ -84,6 +84,31 @@ invisibles sur les boutons de pagination.
   l'URL de retour des actions la désigne — sinon la page recharge en haut et le
   compte rendu reste hors de vue.
 
+## Ce qui vient d'un site géré est inerte, toujours
+
+L'échappement de SPIP n'est pas une protection contre l'injection de balisage :
+`interdire_scripts()` laisse passer `<svg onload>` et `<details ontoggle>`. Or un
+site géré peut être compromis, et son inventaire s'affiche dans l'espace privé de
+la tour de contrôle, qui détient les secrets de tout le parc.
+
+- **à l'entrée** : tout ce qu'un agent répond passe par `dashboard_inerte()`
+  avant d'atteindre la base — `dashboard_synchroniser()`,
+  `dashboard_enregistrer_plugins()`, `dashboard_journaliser()`,
+  `dashboard_chantier_ecrire()`. Un nouveau champ venu de l'agent se range
+  derrière l'un de ces quatre points, pas à côté ;
+- **à l'affichage** : un champ SQL rendu tel quel (`#VERSION_SPIP`, `#PREFIXE`…)
+  porte `|entites_html`. `|textebrut` et `|couper{N}` suffisent aussi — ils
+  retirent les balises ; `|typo` ne suffit qu'à moitié (il ôte les attributs,
+  garde la balise).
+
+Le `phpinfo()` d'un site est la seule exception, parce que c'est du HTML par
+nature : il va dans une `<iframe sandbox>`, et nulle part ailleurs. Le reste de
+l'onglet *Serveur* se construit par `textContent` — aucun `innerHTML` ne reçoit
+autre chose que `''`.
+
+`tests/test_protocole.php` vérifie le filtre, `tests/integration/scenario.mjs`
+le rendu, charge utile à l'appui.
+
 ## Trois pièges du compilateur, tous rencontrés
 
 1. **Une balise à accolades dans un argument composite** (`op/#ID/#GET{x}`)

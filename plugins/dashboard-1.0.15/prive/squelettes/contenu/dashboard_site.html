@@ -11,7 +11,14 @@
 
 <BOUCLE_site(DASHBOARD_SITES){id_dashboard_site}{statut != poubelle}>
 
-#SET{version_cible,#VERSION_SPIP|dashboard_version_disponible}
+[(#REM)
+	Les deux numéros de version viennent du site géré et du dépôt d'archives :
+	ils sont échappés une fois ici, et les trois endroits qui les affichent
+	reprennent la variable. Un filtre écrit dans l'argument d'une chaîne de
+	langue serait relu comme la suite de cet argument.
+]
+#SET{version_spip,#VERSION_SPIP|entites_html}
+#SET{version_cible,#VERSION_SPIP|dashboard_version_disponible|entites_html}
 
 [(#REM)
 	Après un envoi, SPIP recharge la page en haut : sur une fiche qui tient sur
@@ -75,16 +82,16 @@
 			<tr><th scope="row"><:dashboard:label_url_site:></th><td>[<a href="(#URL_SITE)" rel="noreferrer">(#URL_SITE)</a>]</td></tr>
 			<tr><th scope="row"><:dashboard:label_url_agent:></th><td><code>[(#URL_AGENT|couper{90})]</code></td></tr>
 			<tr><th scope="row"><:dashboard:col_spip:></th><td>
-				[<code>(#VERSION_SPIP)</code>]
+				[<code>(#VERSION_SPIP|entites_html)</code>]
 				[(#CORE_MAJ|=={oui}|oui)<span class="dashboard-badge dashboard-badge-maj">&rarr; #GET{version_cible}</span>]
 			</td></tr>
-			<tr><th scope="row">PHP</th><td>[<code>(#PHP_VERSION)</code>] [(#INFOS|dashboard_info{serveur/memory_limit}) <:dashboard:memoire:>]</td></tr>
+			<tr><th scope="row">PHP</th><td>[<code>(#PHP_VERSION|entites_html)</code>] [(#INFOS|dashboard_info{serveur/memory_limit}) <:dashboard:memoire:>]</td></tr>
 			<tr><th scope="row"><:dashboard:label_base:></th><td>
-				[<code>(#SQL_VERSION)</code>]
+				[<code>(#SQL_VERSION|entites_html)</code>]
 				[&mdash; (#INFOS|dashboard_info{base/octets}|dashboard_taille)]
 				[&mdash; (#INFOS|dashboard_info{base/contenus/article}) <:dashboard:articles:>]
 			</td></tr>
-			<tr><th scope="row"><:dashboard:label_agent:></th><td>[<code>(#AGENT_VERSION)</code>]</td></tr>
+			<tr><th scope="row"><:dashboard:label_agent:></th><td>[<code>(#AGENT_VERSION|entites_html)</code>]</td></tr>
 			<tr><th scope="row"><:dashboard:col_sync:></th><td>[(#DATE_SYNC|dashboard_date_lisible)][(#DATE_SYNC|dashboard_date_lisible|non)<:dashboard:jamais:>]</td></tr>
 			[<tr><th scope="row"><:dashboard:label_notes:></th><td>(#NOTES|propre)</td></tr>]
 		</tbody>
@@ -213,9 +220,9 @@
 			<tbody>
 			<BOUCLE_plugins(DASHBOARD_PLUGINS){id_dashboard_site}{distribue ?}{par prefixe}{pagination 30}>
 				<tr class="[(#MAJ_DISPONIBLE|=={oui}|?{dashboard-ligne-maj,})]">
-					<th scope="row">[(#NOM|dashboard_nom_lisible|sinon{#PREFIXE})] <small><code>#PREFIXE</code></small></th>
-					<td><code>#VERSION</code></td>
-					<td>[<code>(#VERSION_DISPONIBLE)</code>]</td>
+					<th scope="row">[(#NOM|dashboard_nom_lisible|sinon{#PREFIXE})] <small><code>[(#PREFIXE|entites_html)]</code></small></th>
+					<td><code>[(#VERSION|entites_html)]</code></td>
+					<td>[<code>(#VERSION_DISPONIBLE|entites_html)</code>]</td>
 					<td>
 						[(#DISTRIBUE|=={oui}|oui)<em><:dashboard:plugin_distribue:></em>]
 						[(#DISTRIBUE|=={non}|oui)#SOURCE]
@@ -251,10 +258,10 @@
 				<tbody>
 				<BOUCLE_procures(DATA){source table, #_site:INFOS|dashboard_procures}>
 					<tr>
-						<th scope="row"><code>[(#VALEUR|table_valeur{nom})]</code></th>
-						<td>[(#VALEUR|table_valeur{version})]</td>
+						<th scope="row"><code>[(#VALEUR|table_valeur{nom}|entites_html)]</code></th>
+						<td>[(#VALEUR|table_valeur{version}|entites_html)]</td>
 						<td>
-							[(#VALEUR|table_valeur{origine}|=={plugin}|oui)<:dashboard:origine_plugin:> <code>[(#VALEUR|table_valeur{fournie_par})]</code>]
+							[(#VALEUR|table_valeur{origine}|=={plugin}|oui)<:dashboard:origine_plugin:> <code>[(#VALEUR|table_valeur{fournie_par}|entites_html)]</code>]
 							[(#VALEUR|table_valeur{origine}|=={php}|oui)<:dashboard:origine_hebergement:>]
 							[(#VALEUR|table_valeur{origine}|=={spip}|oui)<:dashboard:origine_spip:>]
 						</td>
@@ -330,7 +337,7 @@
 <div class="dashboard-fiche dashboard-fiche-alerte" id="core">
 	<h2><:dashboard:titre_core_maj:></h2>
 	<p>
-		<:dashboard:core_maj_texte{version_actuelle=#VERSION_SPIP,version_cible=#GET{version_cible}}:>
+		<:dashboard:core_maj_texte{version_actuelle=#GET{version_spip},version_cible=#GET{version_cible}}:>
 	</p>
 	<p class="explication"><:dashboard:core_maj_avertissement:></p>
 	<p class="boutons">

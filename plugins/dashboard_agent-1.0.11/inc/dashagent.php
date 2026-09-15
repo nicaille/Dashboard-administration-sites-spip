@@ -189,6 +189,10 @@ function dashagent_operation_autorisee($operation) {
  * @return void
  */
 function dashagent_journaliser($operation, $statut, $message = '', $detail = null, $duree = 0) {
+	// L'adresse de l'appelant est un contrôle d'accès avant d'être une colonne
+	// de journal : elle est définie avec ses voisines, dans le module de sécurité.
+	include_spip('inc/dashagent_securite');
+
 	sql_insertq('spip_dashagent_journal', [
 		'date'      => date('Y-m-d H:i:s'),
 		'operation' => substr((string) $operation, 0, 64),
@@ -215,28 +219,6 @@ function dashagent_purger_journal() {
 	$retention = max(1, (int) dashagent_config('retention_journal', 90));
 	sql_delete('spip_dashagent_journal', 'date < ' . sql_quote(date('Y-m-d H:i:s', time() - $retention * 86400)));
 	sql_delete('spip_dashagent_nonces', 'date < ' . sql_quote(date('Y-m-d H:i:s', time() - 86400)));
-}
-
-/**
- * Adresse IP de l'appelant.
- *
- * Les en-têtes de proxy ne sont pris en compte que si le site les déclare
- * explicitement dignes de confiance, sinon ils sont trivialement falsifiables.
- *
- * @return string
- */
-function dashagent_ip_client() {
-	if (defined('_DASHAGENT_PROXY_DE_CONFIANCE') && _DASHAGENT_PROXY_DE_CONFIANCE) {
-		foreach (['HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP'] as $entete) {
-			if (!empty($_SERVER[$entete])) {
-				$ips = explode(',', $_SERVER[$entete]);
-
-				return trim(reset($ips));
-			}
-		}
-	}
-
-	return isset($_SERVER['REMOTE_ADDR']) ? (string) $_SERVER['REMOTE_ADDR'] : '';
 }
 
 /**

@@ -366,7 +366,7 @@ function dashagent_dezipper($archive, $destination) {
 	$racines = [];
 	for ($i = 0; $i < $zip->numFiles; $i++) {
 		$nom = $zip->getNameIndex($i);
-		if ($nom === false) {
+		if ($nom === false || $nom === '') {
 			continue;
 		}
 		if (strpos($nom, '..') !== false || strpos($nom, "\0") !== false || $nom[0] === '/' || preg_match('#^[a-z]:#i', $nom)) {

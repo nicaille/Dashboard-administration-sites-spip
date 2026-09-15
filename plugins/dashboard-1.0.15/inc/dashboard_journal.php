@@ -22,6 +22,12 @@ if (!defined('_ECRIRE_INC_VERSION')) {
  */
 function dashboard_journaliser($id_dashboard_site, $operation, $statut, $message = '', $detail = null, $duree = 0) {
 	include_spip('inc/session');
+	include_spip('inc/dashboard_client');
+
+	// Message et détail citent la réponse du site géré : ils sont rendus inertes
+	// avant d'être enregistrés, comme le reste de ce qui vient de là-bas.
+	$message = dashboard_inerte($message);
+	$detail = dashboard_inerte($detail);
 
 	return (int) sql_insertq('spip_dashboard_journal', [
 		'id_dashboard_site' => (int) $id_dashboard_site,

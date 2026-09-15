@@ -130,6 +130,53 @@ function dashboard_signer($op, $args, $ts, $nonce, $secret) {
 }
 
 /**
+ * Rend inerte ce qu'un site géré nous a répondu.
+ *
+ * Tout ce qui vient d'un agent — numéros de version, noms de plugins, chemins,
+ * messages d'erreur — est du texte, jamais du balisage. Mais c'est du texte
+ * écrit par une machine que nous n'administrons pas forcément, et le tableau de
+ * bord l'affiche dans son espace privé, à un webmestre qui détient les secrets
+ * de tout le parc. Un site compromis qui répondrait
+ * `<svg onload="…">` comme numéro de version ferait donc exécuter son code
+ * chez nous : une prise de contrôle du parc entier depuis un seul de ses sites.
+ *
+ * L'échappement de SPIP ne suffit pas à l'arrêter. `interdire_scripts()` ne
+ * neutralise que `<?php`, `<base>` et — dans l'espace privé — `<script>` et
+ * `<iframe>` ; `<svg onload>` et `<details ontoggle>` passent au travers, ce
+ * qui a été vérifié sur SPIP 4.4.23.
+ *
+ * On coupe donc à l'entrée, une fois pour toutes, plutôt qu'à chaque affichage :
+ * ce qui est enregistré est déjà inoffensif, quelle que soit la manière dont un
+ * squelette le rendra ensuite. Les `<` et `>` résiduels partent avec le reste —
+ * un inventaire n'a aucune raison d'en porter, et c'est ce qui rend le résultat
+ * inerte quoi qu'il advienne.
+ *
+ * @param mixed $valeur Chaîne, tableau ou scalaire
+ * @return mixed De même forme, expurgé
+ */
+function dashboard_inerte($valeur) {
+	if (is_array($valeur)) {
+		$propre = [];
+		foreach ($valeur as $clef => $sous) {
+			$propre[is_string($clef) ? dashboard_inerte($clef) : $clef] = dashboard_inerte($sous);
+		}
+
+		return $propre;
+	}
+	if (!is_string($valeur) || $valeur === '') {
+		return $valeur;
+	}
+
+	$texte = strip_tags($valeur);
+	$texte = str_replace(['<', '>'], '', $texte);
+	// Les caractères de contrôle ne s'affichent pas mais brouillent les journaux
+	// et les comparaisons ; la tabulation et les fins de ligne restent.
+	$texte = preg_replace('/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/', '', $texte);
+
+	return trim((string) $texte);
+}
+
+/**
  * Charge un site du parc.
  *
  * @param int $id_dashboard_site

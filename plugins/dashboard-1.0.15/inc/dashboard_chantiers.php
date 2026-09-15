@@ -165,6 +165,10 @@ function dashboard_chantier_charger($id_dashboard_chantier) {
  * @return void
  */
 function dashboard_chantier_ecrire($id_dashboard_chantier, $champs) {
+	include_spip('inc/dashboard_client');
+	// Les messages d'étape reprennent souvent mot pour mot ce que le site géré a
+	// répondu : ils passent par le même filtre que le reste. Voir dashboard_inerte().
+	$champs = dashboard_inerte($champs);
 	$champs['date_etape'] = date('Y-m-d H:i:s');
 	sql_updateq('spip_dashboard_chantiers', $champs, 'id_dashboard_chantier = ' . (int) $id_dashboard_chantier);
 }

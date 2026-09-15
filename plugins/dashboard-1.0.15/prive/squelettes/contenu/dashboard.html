@@ -85,10 +85,10 @@
 				[<span class="dashboard-message-erreur">(#ERREUR|couper{90})</span>]
 			</td>
 			<td>
-				[<code>(#VERSION_SPIP)</code>]
+				[<code>(#VERSION_SPIP|entites_html)</code>]
 				[(#CORE_MAJ|=={oui}|oui)
 					<span class="dashboard-badge dashboard-badge-maj" title="<:dashboard:core_maj_disponible:>">
-						&rarr; [(#VERSION_SPIP|dashboard_version_disponible)]
+						&rarr; [(#VERSION_SPIP|dashboard_version_disponible|entites_html)]
 					</span>
 				]
 				[(#BASE_MAJ|=={oui}|oui)

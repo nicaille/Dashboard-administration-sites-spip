@@ -309,7 +309,16 @@ function dashboard_info($json, $chemin, $defaut = '') {
 		$infos = $infos[$clef];
 	}
 
-	return ($infos === null || $infos === '') ? $defaut : $infos;
+	if ($infos === null || $infos === '') {
+		return $defaut;
+	}
+
+	// L'inventaire est rendu inerte à l'enregistrement, mais celui d'un site
+	// synchronisé avant ce correctif ne l'est pas : ce filtre est le passage
+	// obligé de tout ce qui en sort vers un squelette. Voir dashboard_inerte().
+	include_spip('inc/dashboard_client');
+
+	return dashboard_inerte($infos);
 }
 
 /**

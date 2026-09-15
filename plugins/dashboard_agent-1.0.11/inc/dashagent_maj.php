@@ -290,7 +290,15 @@ function dashagent_verifier_archive_plugin($racine, $prefixe) {
 	if (strtoupper($m[1]) !== strtoupper($prefixe)) {
 		return ['ok' => false, 'erreur' => 'Archive incohérente : préfixe ' . $m[1] . ' au lieu de ' . $prefixe, 'version' => ''];
 	}
-	$version = preg_match('/\sversion\s*=\s*"([^"]+)"/i', $xml, $v) ? $v[1] : '';
+	// Ce numéro sert ensuite à nommer un répertoire : il vient du `paquet.xml`
+	// d'une archive téléchargée, donc d'ailleurs. Un `version="../.."` n'aurait
+	// aucune chance d'aboutir — les composants intermédiaires n'existent pas —
+	// mais on ne laisse pas une valeur étrangère approcher un chemin sans la
+	// borner d'abord.
+	$version = preg_match('/\sversion\s*=\s*"([^"]+)"/i', $xml, $v) ? trim($v[1]) : '';
+	if ($version !== '' && !preg_match('/^[A-Za-z0-9][A-Za-z0-9._+-]{0,31}$/', $version)) {
+		return ['ok' => false, 'erreur' => 'Archive invalide : numéro de version inexploitable', 'version' => ''];
+	}
 
 	return ['ok' => true, 'erreur' => '', 'version' => $version];
 }
@@ -335,8 +343,14 @@ function dashagent_dossier_versionne($chemin, $version_avant, $version_apres) {
 	}
 
 	// Un nom vide ou réduit à des séparateurs rendrait le chemin inutilisable.
+	// Un nom qui porte un séparateur, lui, ferait sortir du répertoire des
+	// plugins : le numéro de version vient d'une archive, il n'a rien à décider
+	// de l'endroit où l'on écrit.
 	$nouveau = trim($nouveau, '/');
 	if ($nouveau === '' || $nouveau === '.' || $nouveau === '..') {
+		return $chemin;
+	}
+	if (strpbrk($nouveau, "/\\\0") !== false || strpos($nouveau, '..') !== false) {
 		return $chemin;
 	}
 

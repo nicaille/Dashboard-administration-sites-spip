@@ -747,6 +747,62 @@ dit('l’espace privé du site n’est plus bloqué',
 dit('plus de mise à jour de core proposée',
 	(await page.locator('#core').count()) === 0);
 
+console.log('\n### Un site géré ne doit pas pouvoir écrire de code chez nous');
+
+// Le tableau de bord affiche l'inventaire d'un site dans son espace privé, à un
+// webmestre qui détient les secrets de tout le parc. L'échappement de SPIP ne
+// couvre pas ce cas : interdire_scripts() laisse passer <svg onload> — vérifié
+// sur SPIP 4.4.23. Un site compromis qui répondrait cela comme numéro de version
+// prendrait donc la tour de contrôle, et avec elle le parc entier.
+//
+// La charge est écrite directement en base, donc *après* le filtre d'entrée :
+// ce qui est éprouvé ici est le rendu, seul rempart pour les inventaires relevés
+// avant le correctif.
+const charge = '<svg onload="window.__xss=(window.__xss||0)+1">';
+const injections = [
+	['version de SPIP',        `UPDATE spip_dashboard_sites SET version_spip='${charge}' WHERE id_dashboard_site=1`],
+	['version de PHP',         `UPDATE spip_dashboard_sites SET php_version='${charge}' WHERE id_dashboard_site=1`],
+	['version de la base',     `UPDATE spip_dashboard_sites SET sql_version='${charge}' WHERE id_dashboard_site=1`],
+	['version de l’agent',     `UPDATE spip_dashboard_sites SET agent_version='${charge}' WHERE id_dashboard_site=1`],
+	['message d’erreur',       `UPDATE spip_dashboard_sites SET erreur='${charge}', etat='erreur' WHERE id_dashboard_site=1`],
+	['nom d’un plugin',        `UPDATE spip_dashboard_plugins SET nom='${charge}' WHERE id_dashboard_site=1`],
+	['version d’un plugin',    `UPDATE spip_dashboard_plugins SET version='${charge}' WHERE id_dashboard_site=1`],
+	['version disponible',     `UPDATE spip_dashboard_plugins SET version_disponible='${charge}' WHERE id_dashboard_site=1`],
+	['préfixe d’un plugin',    `UPDATE spip_dashboard_plugins SET prefixe='${charge}' WHERE id_dashboard_site=1`],
+	['journal du parc',        `UPDATE spip_dashboard_journal SET message='${charge}'`],
+];
+
+for (const [quoi, requete] of injections) {
+	sqlEcrire(requete);
+	await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'networkidle' });
+	const execute = await page.evaluate(() => { const n = window.__xss || 0; window.__xss = 0; return n; });
+	const vif = (await page.content()).includes('<svg onload=');
+	const ok = (execute === 0 && !vif);
+	dit(`inerte : ${quoi}`, ok, ok ? '' : (execute ? 'script exécuté' : 'rendu en HTML vif'));
+}
+
+// L'inventaire est aussi affiché par des filtres qui le tirent du JSON mémorisé.
+const infos = JSON.parse(JSON.parse(sql('SELECT infos FROM spip_dashboard_sites WHERE id_dashboard_site=1'))[0].infos);
+infos.serveur = infos.serveur || {};
+infos.serveur.memory_limit = charge;
+if (Array.isArray(infos.procures) && infos.procures[0]) { infos.procures[0].nom = charge; }
+sqlEcrire(`UPDATE spip_dashboard_sites SET infos='${JSON.stringify(infos).replace(/'/g, "''")}' WHERE id_dashboard_site=1`);
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'networkidle' });
+dit('inerte : inventaire mémorisé',
+	(await page.evaluate(() => window.__xss || 0)) === 0 && !(await page.content()).includes('<svg onload='));
+
+// Et la vue d'ensemble, qui affiche les mêmes champs pour tout le parc.
+await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'networkidle' });
+dit('inerte : vue d’ensemble du parc',
+	(await page.evaluate(() => window.__xss || 0)) === 0 && !(await page.content()).includes('<svg onload='));
+
+// Le filtre d'entrée, maintenant : une synchronisation réelle doit rendre inerte
+// ce que l'agent a répondu, sans que le rendu ait à s'en occuper.
+await bouton(page, 'Synchroniser');
+const apresSync = JSON.parse(sql('SELECT version_spip, infos FROM spip_dashboard_sites WHERE id_dashboard_site=1'))[0];
+dit('la synchronisation a rétabli un inventaire propre',
+	!/[<>]/.test(apresSync.version_spip) && !/<svg/.test(apresSync.infos), apresSync.version_spip);
+
 console.log('\n### Restauration du dump');
 try {
 	const verdict = execFileSync('php', ['-r', `

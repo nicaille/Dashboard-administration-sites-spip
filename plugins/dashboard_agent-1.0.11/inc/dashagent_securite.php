@@ -137,6 +137,44 @@ function dashagent_consommer_nonce($nonce) {
 }
 
 /**
+ * Adresse IP de l'appelant.
+ *
+ * Les en-têtes de proxy ne sont pris en compte que si le site les déclare
+ * explicitement dignes de confiance, sinon ils sont trivialement falsifiables.
+ *
+ * Même déclaré de confiance, le proxy transmet un en-tête que le client a pu
+ * écrire : ce qui en sort doit ressembler à une adresse IP et à rien d'autre.
+ * Cette valeur est enregistrée au journal — y compris pour une requête refusée,
+ * donc non authentifiée — et le journal s'affiche dans l'espace privé du site.
+ * Sans ce contrôle, n'importe qui connaissant l'URL de l'agent y déposerait le
+ * balisage de son choix.
+ *
+ * @param array|null $serveur Variables serveur, injectables pour les tests
+ * @return string
+ */
+function dashagent_ip_client($serveur = null) {
+	$serveur = is_array($serveur) ? $serveur : $_SERVER;
+	$distante = isset($serveur['REMOTE_ADDR']) ? (string) $serveur['REMOTE_ADDR'] : '';
+
+	if (defined('_DASHAGENT_PROXY_DE_CONFIANCE') && _DASHAGENT_PROXY_DE_CONFIANCE) {
+		foreach (['HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP'] as $entete) {
+			if (empty($serveur[$entete])) {
+				continue;
+			}
+			$ips = explode(',', (string) $serveur[$entete]);
+			$annoncee = trim((string) reset($ips));
+			if (filter_var($annoncee, FILTER_VALIDATE_IP) !== false) {
+				return $annoncee;
+			}
+		}
+	}
+
+	// REMOTE_ADDR vient du serveur, mais le valider ne coûte rien et ferme la
+	// question pour de bon.
+	return (filter_var($distante, FILTER_VALIDATE_IP) !== false) ? $distante : '';
+}
+
+/**
  * L'adresse IP est-elle dans la liste blanche ?
  *
  * Une liste vide vaut « pas de filtrage » : la signature reste la protection

@@ -38,7 +38,7 @@ function dashboard_synchroniser($id_dashboard_site, $options = []) {
 	$maintenant = date('Y-m-d H:i:s');
 
 	if (!$reponse['ok']) {
-		$message = $reponse['erreur']['message'] ?? 'Erreur inconnue';
+		$message = dashboard_inerte($reponse['erreur']['message'] ?? 'Erreur inconnue');
 		sql_updateq('spip_dashboard_sites', [
 			'etat'      => 'erreur',
 			'erreur'    => $message,
@@ -50,7 +50,10 @@ function dashboard_synchroniser($id_dashboard_site, $options = []) {
 		return ['ok' => false, 'message' => $message, 'site' => dashboard_charger_site($id_dashboard_site)];
 	}
 
-	$infos   = $reponse['data']['infos'] ?? [];
+	// Ce que répond un site géré est du texte, jamais du balisage : on le rend
+	// inerte ici, une fois, plutôt que d'y penser à chaque affichage. Voir
+	// dashboard_inerte().
+	$infos   = dashboard_inerte($reponse['data']['infos'] ?? []);
 	$plugins = is_array($infos['plugins'] ?? null) ? $infos['plugins'] : [];
 
 	$version_spip = (string) ($infos['spip']['version'] ?? '');
@@ -69,7 +72,7 @@ function dashboard_synchroniser($id_dashboard_site, $options = []) {
 		'version_spip'   => $version_spip,
 		'php_version'    => (string) ($infos['serveur']['php'] ?? ''),
 		'sql_version'    => (string) ($infos['base']['version'] ?? ''),
-		'agent_version'  => (string) ($reponse['agent'] ?? ''),
+		'agent_version'  => (string) dashboard_inerte((string) ($reponse['agent'] ?? '')),
 		'nb_plugins'     => count($plugins),
 		'nb_plugins_maj' => $nb_maj,
 		'core_maj'       => $cible ? 'oui' : 'non',
@@ -101,6 +104,11 @@ function dashboard_synchroniser($id_dashboard_site, $options = []) {
  * @return void
  */
 function dashboard_enregistrer_plugins($id_dashboard_site, $plugins) {
+	include_spip('inc/dashboard_client');
+	// Déjà fait par l'appelant, mais cette fonction écrit en base ce qu'on lui
+	// donne : elle ne doit pas dépendre de la vigilance de qui l'appelle.
+	$plugins = dashboard_inerte($plugins);
+
 	sql_delete('spip_dashboard_plugins', 'id_dashboard_site = ' . (int) $id_dashboard_site);
 
 	foreach ($plugins as $plugin) {
