@@ -483,21 +483,25 @@
 	// finissait le travail sans que rien ne le montre.
 	var echecs = 0;
 	var ECHECS_MAX = 5;
+	var ATTENTE_LONGUE = 30000;
 
 	function reessayer() {
 		echecs++;
-		if (echecs > ECHECS_MAX) {
-			if (message) {
-				message.textContent = message.textContent
-					+ ' — le navigateur ne peut plus suivre l’opération ; elle se poursuit d’elle-même, rechargez la page dans quelques minutes';
-			}
-			return;
-		}
+
+		// Passé quelques échecs rapprochés, on ralentit — mais on ne renonce
+		// jamais tant que l'onglet est ouvert. Renoncer laissait le chantier en
+		// plan, et avec lui un site géré dont les fichiers sont remplacés mais
+		// dont la base n'est pas encore migrée : son espace privé est alors
+		// bloqué jusqu'à ce que quelqu'un s'en aperçoive. Une tentative toutes
+		// les trente secondes ne coûte rien et finit le travail.
+		var attente = (echecs > ECHECS_MAX) ? ATTENTE_LONGUE : echecs * 5000;
 		if (message) {
-			message.textContent = message.textContent
-				+ ' — interruption, nouvel essai (' + echecs + '/' + ECHECS_MAX + ')';
+			message.textContent = message.textContent.replace(/ — (interruption|reprise)[^—]*$/, '')
+				+ (echecs > ECHECS_MAX
+					? ' — reprise automatique toutes les ' + (ATTENTE_LONGUE / 1000) + ' s ; vous pouvez fermer cette page, la tâche de fond prendra le relais'
+					: ' — interruption, nouvel essai (' + echecs + '/' + ECHECS_MAX + ')');
 		}
-		window.setTimeout(avancer, echecs * 5000);
+		window.setTimeout(avancer, attente);
 	}
 
 	function avancer() {
