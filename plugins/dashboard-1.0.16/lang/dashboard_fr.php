@@ -33,6 +33,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'base_maj_confirmation' => 'Lancer la migration de la base de ce site ? Une sauvegarde est prise au préalable.',
 	'base_maj_disponible' => 'La base de ce site attend sa migration : son espace privé est bloqué.',
 	'base_maj_texte' => 'Les fichiers de ce site attendent une migration de leur base de données. Tant qu’elle n’est pas jouée, SPIP bloque l’espace privé du site géré derrière sa page de mise à niveau.',
+	'bilan_explication' => 'Ce compte rendu disparaît de lui-même au bout d’une heure ; le journal, plus bas, en garde la trace.',
 	'col_actions'    => 'Actions',
 	'col_cache'      => 'Cache',
 	'col_composant'  => 'Composant',
@@ -212,6 +213,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 
 	// T
 	'titre_base_maj' => 'Base de données à migrer',
+	'titre_bilan' => 'Dernière opération',
 	'titre_chantier' => 'Opération en cours',
 	'titre_configurer'   => 'Dashboard : configuration',
 	'tables_manquantes'  => 'Tables manquantes :',

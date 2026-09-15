@@ -601,6 +601,22 @@ verifier('opération inconnue : aucune étape', dashboard_chantier_etapes('rm_rf
 verifier('opération inconnue : refusée', dashboard_chantier_operation_connue('rm_rf') === false);
 verifier('opération connue : acceptée', dashboard_chantier_operation_connue('core_maj') === true);
 
+echo "\n== Fraîcheur d’un compte rendu ==\n";
+
+/* L'encadré d'avancement disparaît avec le statut « en cours », et il ne restait
+   alors que la notification de départ, figée sur son étape : une opération
+   achevée se lisait comme un blocage. Le bilan prend le relais, puis s'efface. */
+verifier('une date de l’instant est récente', dashboard_recent(date('Y-m-d H:i:s')));
+verifier('une date d’il y a dix minutes est récente',
+	dashboard_recent(date('Y-m-d H:i:s', time() - 600)));
+verifier('une date d’il y a deux heures ne l’est plus',
+	!dashboard_recent(date('Y-m-d H:i:s', time() - 7200)));
+verifier('le délai est réglable',
+	dashboard_recent(date('Y-m-d H:i:s', time() - 600), 1200)
+		&& !dashboard_recent(date('Y-m-d H:i:s', time() - 600), 60));
+verifier('une date vide n’est jamais récente', !dashboard_recent(''));
+verifier('une date nulle de SQL n’est jamais récente', !dashboard_recent('0000-00-00 00:00:00'));
+
 echo "\n== État d’un chantier ==\n";
 
 $fabriquer = function ($champs = []) {

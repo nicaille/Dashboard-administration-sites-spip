@@ -472,6 +472,28 @@ function dashboard_depots_perimes($infos) {
 }
 
 /**
+ * Cette date remonte-t-elle à moins de N secondes ?
+ *
+ * Sert à ne montrer le compte rendu d'un chantier que tant qu'il répond à un
+ * geste qu'on vient de faire. Passé ce délai, c'est le journal qui en garde la
+ * trace, et l'encadré n'encombre plus la page.
+ *
+ * @filtre
+ * @param string $date Date SQL
+ * @param int $secondes
+ * @return bool
+ */
+function dashboard_recent($date, $secondes = 3600) {
+	$date = trim((string) $date);
+	if ($date === '' || strncmp($date, '0000', 4) === 0) {
+		return false;
+	}
+	$t = strtotime($date);
+
+	return $t !== false && (time() - $t) < max(1, (int) $secondes);
+}
+
+/**
  * Ce que le chantier est en train de faire, en clair.
  *
  * L'encadré ne portait jusqu'ici que le message de l'étape **précédente** :
