@@ -2,9 +2,15 @@
 /**
  * Sauvegarde de la base de données du site géré.
  *
- * Deux stratégies, dans cet ordre : `mysqldump` s'il est réellement exécutable,
- * sinon un export PHP pur streamé en gzip. La seconde ne suppose rien de
- * l'hébergement, ce qui est la situation normale en mutualisé.
+ * Un export PHP pur, streamé en gzip par `sql_select()` et lu par lots : rien
+ * n'est supposé de l'hébergement — ni `exec()`, ni `mysqldump`, ni accès au
+ * système de fichiers hors du site —, et la mémoire ne croît pas avec la taille
+ * de la base. C'est la situation normale en mutualisé.
+ *
+ * Ce n'est pas la sauvegarde du core : `ecrire/inc/dump.php` rend un fichier que
+ * seul SPIP sait relire, et la restauration attendue ici est celle d'un
+ * administrateur devant un incident, avec les outils de son hébergeur. D'où un
+ * dump SQL ordinaire.
  *
  * @package SPIP\Dashagent\Inc
  */

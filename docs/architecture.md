@@ -36,6 +36,7 @@ travail réel est réparti :
 | `inc/dashagent_base.php` | migration du schéma de base du core, par tranches reprenables |
 | `inc/dashagent_serveur.php` | consultation en lecture seule : phpinfo, tables, fichiers de réglage, avec masquage |
 | `inc/dashagent_fs.php` | mesure, copie, suppression, téléchargement, dézippage sûr |
+| `action/dashagent_sauvegarde_supprimer.php` | suppression d'une sauvegarde depuis l'espace privé du site lui-même |
 
 Deux tables seulement : `spip_dashagent_journal` (piste d'audit) et
 `spip_dashagent_nonces` (anti-rejeu). L'agent ne stocke rien d'autre.

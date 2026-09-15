@@ -179,7 +179,14 @@
 	[(#NB_PLUGINS_MAJ|>{0}|oui)
 			[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
 			<p class="boutons">
-				[(#BOUTON_ACTION{<:dashboard:action_maj_tous:> (#NB_PLUGINS_MAJ),#URL_ACTION_AUTEUR{dashboard_operation,plugin_maj_tous/#ID_DASHBOARD_SITE,#GET{retour_plugins}},btn})]
+				[(#REM)
+				Le libellé porte le décompte, donc il se calcule à part : une
+				balise entre parenthèses glissée dans l'argument d'une autre
+				désorganise l'analyse, et tout l'appel ressortait en clair sur
+				la page. La chaîne de langue prend le nombre en paramètre.
+			]
+			#SET{libelle_maj_tous,#VAL{dashboard:action_maj_tous}|_T{#ARRAY{nb,#NB_PLUGINS_MAJ}}}
+			[(#BOUTON_ACTION{#GET{libelle_maj_tous},#URL_ACTION_AUTEUR{dashboard_operation,plugin_maj_tous/#ID_DASHBOARD_SITE,#GET{retour_plugins}},btn})]
 			</p>
 			]
 		]
@@ -189,19 +196,36 @@
 		de lui-même, et tout. La distinction compte — on ne met pas à jour un
 		plugin livré avec le core, il suit le core.
 	]
-	#SET{filtre_plugins,#ENV{distribue}}
-	#SET{url_plugins_installes,#SELF|parametre_url{distribue,non}|ancre_url{plugins}}
-	#SET{url_plugins_distribues,#SELF|parametre_url{distribue,oui}|ancre_url{plugins}}
-	#SET{url_plugins_tous,#SELF|parametre_url{distribue,''}|ancre_url{plugins}}
+	[(#REM)
+		La vue est nommée dans l'URL plutôt que d'y porter directement la valeur
+		filtrée : « installés » est la vue par défaut, et un `distribue` vide ne
+		saurait pas distinguer « pas de préférence » de « tous ». D'où trois
+		noms, et la valeur filtrée calculée ici.
+	]
+	#SET{vue_plugins,#ENV{vue,installes}}
+	[(#REM)
+		Le critère dit ce qu'on écarte, pas ce qu'on garde : `distribue != ''`
+		ne retient rien, donc laisse tout passer, et « tous » se dit sans
+		énumérer. Les deux autres formulations se heurtaient à la syntaxe :
+		`{distribue = #GET{x} ?}` ne rend rien facultatif — le `?` y est pris
+		pour un caractère de la valeur, et la boucle cherchait `'non?'` ; et
+		une liste `#SET{x,non,oui}` est coupée sur sa virgule, `x` valant `non`.
+	]
+	#SET{exclure_plugins,''}
+	[(#GET{vue_plugins}|=={installes}|oui)#SET{exclure_plugins,oui}]
+	[(#GET{vue_plugins}|=={distribues}|oui)#SET{exclure_plugins,non}]
+	#SET{url_plugins_installes,#SELF|parametre_url{vue,installes}|ancre_url{plugins}}
+	#SET{url_plugins_distribues,#SELF|parametre_url{vue,distribues}|ancre_url{plugins}}
+	#SET{url_plugins_tous,#SELF|parametre_url{vue,tous}|ancre_url{plugins}}
 	[(#REM)
 		Les conditions d'exposition sont calculées à part : un filtre à accolades
 		écrit dans l'argument d'un autre filtre (`|=={non}`) est relu comme la
 		suite de la chaîne de filtres, et SPIP cherche alors un filtre nommé
 		« non,btn btn_secondaire ».
 	]
-	#SET{plugins_sur_installes,#GET{filtre_plugins}|=={non}}
-	#SET{plugins_sur_distribues,#GET{filtre_plugins}|=={oui}}
-	#SET{plugins_sur_tous,#GET{filtre_plugins}|non}
+	#SET{plugins_sur_installes,#GET{vue_plugins}|=={installes}}
+	#SET{plugins_sur_distribues,#GET{vue_plugins}|=={distribues}}
+	#SET{plugins_sur_tous,#GET{vue_plugins}|=={tous}}
 	<ul class="dashboard-filtres liste-items">
 		<li>[(#GET{url_plugins_installes}|lien_ou_expose{<:dashboard:plugins_installes:>,#GET{plugins_sur_installes},btn btn_secondaire})]</li>
 		<li>[(#GET{url_plugins_distribues}|lien_ou_expose{<:dashboard:plugins_distribues:>,#GET{plugins_sur_distribues},btn btn_secondaire})]</li>
@@ -218,7 +242,7 @@
 				<th scope="col"><:dashboard:col_actions:></th>
 			</tr></thead>
 			<tbody>
-			<BOUCLE_plugins(DASHBOARD_PLUGINS){id_dashboard_site}{distribue ?}{par prefixe}{pagination 30}>
+			<BOUCLE_plugins(DASHBOARD_PLUGINS){id_dashboard_site}{distribue != #GET{exclure_plugins}}{par prefixe}{pagination 30}>
 				<tr class="[(#MAJ_DISPONIBLE|=={oui}|?{dashboard-ligne-maj,})]">
 					<th scope="row">[(#NOM|dashboard_nom_lisible|sinon{#PREFIXE})] <small><code>[(#PREFIXE|entites_html)]</code></small></th>
 					<td><code>[(#VERSION|entites_html)]</code></td>
@@ -240,7 +264,7 @@
 			</BOUCLE_plugins>
 			</tbody>
 		</table>
-		[<nav class="pagination" role="navigation">(#PAGINATION{precedent_suivant})</nav>]
+		[<nav class="pagination" role="navigation">(#PAGINATION{page_precedent_suivant})</nav>]
 		</B_plugins>
 			<p class="petition"><:dashboard:plugins_vide:></p>
 			<//B_plugins>
@@ -327,7 +351,7 @@
 		</BOUCLE_sauvegardes>
 		</tbody>
 	</table>
-	[<nav class="pagination" role="navigation">(#PAGINATION{precedent_suivant})</nav>]
+	[<nav class="pagination" role="navigation">(#PAGINATION{page_precedent_suivant})</nav>]
 	</B_sauvegardes>
 	<p class="petition"><:dashboard:sauvegardes_vide:></p>
 	<//B_sauvegardes>
@@ -376,7 +400,7 @@
 		</BOUCLE_journal>
 		</tbody>
 	</table>
-	[<nav class="pagination" role="navigation">(#PAGINATION{precedent_suivant})</nav>]
+	[<nav class="pagination" role="navigation">(#PAGINATION{page_precedent_suivant})</nav>]
 	</B_journal>
 	<p class="petition"><:dashboard:journal_vide:></p>
 	<//B_journal>
@@ -752,31 +776,62 @@
 		pagination.appendChild(compte);
 
 		var items = document.createElement('ul');
-		items.className = 'pagination-items pagination_precedent_suivant';
-		[['prev', '‹ précédent', Math.max(0, r.debut - r.lot), r.debut > 0],
-		 ['next', 'suivant ›', r.debut + r.lot,
-			r.total === null ? r.lignes.length === r.lot : fin < r.total]]
-			.forEach(function (p) {
-				var li = document.createElement('li');
-				li.className = 'pagination-item ' + p[0] + (p[3] ? '' : ' disabled');
-				var lien;
-				if (p[3]) {
-					lien = document.createElement('a');
-					lien.href = '#';
-					lien.className = 'pagination-item-label lien_pagination';
-					lien.addEventListener('click', function (e) {
-						e.preventDefault();
-						etatTable.debut = p[2];
-						recharger();
-					});
-				} else {
-					lien = document.createElement('span');
-					lien.className = 'pagination-item-label';
-				}
-				lien.textContent = p[1];
-				li.appendChild(lien);
-				items.appendChild(li);
-			});
+		items.className = 'pagination-items pagination_page_precedent_suivant';
+
+		/* Un élément de pagination : un lien quand il mène quelque part, un span
+		   inerte sinon — c'est ainsi que le privé distingue l'actif du figé. */
+		function item(classe, libelle, debutCible, actif) {
+			var li = document.createElement('li');
+			li.className = 'pagination-item' + (classe ? ' ' + classe : '');
+			var lien;
+			if (actif) {
+				lien = document.createElement('a');
+				lien.href = '#';
+				lien.className = 'pagination-item-label lien_pagination';
+				lien.addEventListener('click', function (e) {
+					e.preventDefault();
+					etatTable.debut = debutCible;
+					recharger();
+				});
+			} else {
+				lien = document.createElement('span');
+				lien.className = 'pagination-item-label';
+			}
+			lien.textContent = libelle;
+			li.appendChild(lien);
+			items.appendChild(li);
+			return li;
+		}
+
+		var suivantPossible = (r.total === null) ? (r.lignes.length === r.lot) : (fin < r.total);
+		item('prev' + (r.debut > 0 ? '' : ' disabled'), '\u2039 pr\u00e9c\u00e9dent',
+			Math.max(0, r.debut - r.lot), r.debut > 0);
+
+		/* Les numéros de page supposent qu'on sache combien il y en a : certains
+		   moteurs ne rendent pas de total sur une table volumineuse, et l'on s'en
+		   tient alors à précédent/suivant. */
+		if (r.total !== null && r.lot > 0) {
+			var pages = Math.max(1, Math.ceil(r.total / r.lot));
+			var courante = Math.floor(r.debut / r.lot) + 1;
+			// Même fenêtre que l'espace privé de SPIP : cinq liens autour.
+			var premiere = Math.max(1, Math.min(courante - 2, pages - 4));
+			var derniere = Math.min(pages, premiere + 4);
+			if (premiere > 1) {
+				item('', '1', 0, true);
+				if (premiere > 2) { item('tbc disabled', '\u2026', 0, false); }
+			}
+			for (var n = premiere; n <= derniere; n++) {
+				item(n === courante ? 'on active' : '', String(n), (n - 1) * r.lot, n !== courante);
+			}
+			if (derniere < pages) {
+				if (derniere < pages - 1) { item('tbc disabled', '\u2026', 0, false); }
+				item('', String(pages), (pages - 1) * r.lot, true);
+			}
+		}
+
+		item('next' + (suivantPossible ? '' : ' disabled'), 'suivant \u203a',
+			r.debut + r.lot, suivantPossible);
+
 		pagination.appendChild(items);
 		cible.appendChild(pagination);
 	}

@@ -69,20 +69,38 @@ invisibles sur les boutons de pagination.
   formulaire POST. Une action qui change l'état d'un site ne se déclenche pas en
   suivant un lien. Les vrais liens de navigation restent des `<a class="btn …">`.
 - **Pagination** : `{pagination N}` sur la boucle, puis
-  `[<nav class="pagination" role="navigation">(#PAGINATION{precedent_suivant})</nav>]`.
-  Le modèle s'appelle `pagination_precedent_suivant.html` : `#PAGINATION{X}`
-  cherche `modeles/pagination_X.html` et retombe en silence sur le modèle par
-  défaut s'il ne le trouve pas.
+  `[<nav class="pagination" role="navigation">(#PAGINATION{page_precedent_suivant})</nav>]`
+  — page précédente, les numéros de page, page suivante.
+  L'argument de `#PAGINATION{X}` est **d'abord un type**, accessoirement un nom
+  de modèle : `filtre_pagination_dist()` pose `type_pagination = X`, puis prend
+  `modeles/pagination_X.html` s'il existe et le modèle par défaut sinon. Or
+  `pagination.html` teste lui-même `type_pagination == page_precedent_suivant`
+  pour ajouter précédent et suivant à ses numéros. SPIP 4.4 ne livre que trois
+  modèles — `pagination`, `pagination_precedent_suivant`, `pagination_prive` —
+  et `page_precedent_suivant` n'en est pas un : c'est voulu.
 - **Listes paginées côté JavaScript** (le contenu des tables d'un site géré ne
   vient d'aucune boucle) : reprendre le balisage à l'identique —
-  `nav.pagination` > `ul.pagination-items.pagination_precedent_suivant` >
-  `li.pagination-item.prev|next[.disabled]` > `a.pagination-item-label`.
+  `nav.pagination` > `ul.pagination-items.pagination_page_precedent_suivant` >
+  `li.pagination-item.prev|next[.disabled]`, `li.pagination-item[.on.active]`
+  pour les numéros, `li.pagination-item.tbc.disabled` pour les points de
+  suspension > `a.pagination-item-label` (ou un `span` quand l'item est figé).
+  Sans total connu, s'en tenir à précédent/suivant : on ne peut pas numéroter
+  ce qu'on n'a pas compté.
 - **Champs de formulaire hors formulaire** : les envelopper dans
   `div.formulaire_spip > div.editer > label + champ`, sinon un `select` reste
   celui du navigateur.
 - **Retour à l'encadré** : chaque bloc porte une ancre (`id="plugins"`), et
   l'URL de retour des actions la désigne — sinon la page recharge en haut et le
   compte rendu reste hors de vue.
+- **Critère facultatif** : seul `{champ ?}` l'est, et il lit le contexte. Écrire
+  `{champ = #GET{x} ?}` ne rend rien facultatif — le `?` est pris pour un
+  caractère de la valeur, et la boucle cherche `champ = 'non?'`. Pour filtrer
+  depuis une variable, dire ce qu'on **écarte** : `{champ != #GET{x}}`, où un
+  `x` vide ne retient rien et laisse donc tout passer. Une liste n'est pas une
+  échappatoire : `#SET{x,non,oui}` est coupé sur sa virgule et `x` vaut `non`.
+- **Un libellé qui porte un décompte** se calcule avec `#SET` avant l'appel, et
+  par `#VAL{clef}|_T{#ARRAY{nb,#BALISE}}` — une chaîne de langue à arguments
+  écrite directement dans un `#SET` rend une chaîne vide.
 
 ## Ce qui vient d'un site géré est inerte, toujours
 

@@ -115,6 +115,8 @@ function url_de_base() {
 
 require_once chemin_plugin('dashboard') . '/inc/dashboard_client.php';
 require_once chemin_plugin('dashboard') . '/inc/dashboard_operations.php';
+/* La synchronisation touche à la base, mais ses règles de décompte sont pures. */
+require_once chemin_plugin('dashboard') . '/inc/dashboard_sync.php';
 /* Le moteur de chantiers ne touche à la base que dans ses fonctions d'accès :
    la logique d'enchaînement des étapes, elle, est vérifiable telle quelle. */
 require_once chemin_plugin('dashboard') . '/inc/dashboard_chantiers.php';

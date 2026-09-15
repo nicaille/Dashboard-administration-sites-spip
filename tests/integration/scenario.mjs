@@ -177,6 +177,49 @@ dit('sauvegarde créée et rapatriée', /rapatri/i.test(apresSauvegarde), (apres
 const sauvegardes = JSON.parse(sql('SELECT fichier, octets, statut FROM spip_dashboard_sauvegardes'));
 dit('sauvegarde enregistrée localement', sauvegardes.some((s) => s.statut === 'locale' && Number(s.octets) > 0), JSON.stringify(sauvegardes));
 
+// Le site géré doit voir ce qui a été pris chez lui. Ces fichiers vivent sous
+// tmp/, hors espace web : sans ce tableau, son webmestre pouvait refuser qu'on
+// en produise, mais pas constater leur existence ni s'en défaire.
+const dossierSauvegardes = site + '/tmp/dashagent/sauvegardes';
+const surDisque = () => readdirSync(dossierSauvegardes).filter((n) => /\.sql\.gz$/.test(n));
+
+await page.goto(base + '/ecrire/?exec=configurer_dashagent', { waitUntil: 'domcontentloaded' });
+const tableauSauvegardes = page.locator('#sauvegardes');
+dit('le site géré liste ses sauvegardes',
+	(await tableauSauvegardes.locator('tbody tr').count()) === surDisque().length
+		&& surDisque().length > 0,
+	(await tableauSauvegardes.locator('tbody tr').count()) + ' ligne(s) pour ' + surDisque().length + ' fichier(s)');
+dit('la légende donne le poids total',
+	/[0-9].*(o|io)\b/.test(await tableauSauvegardes.locator('caption').innerText()),
+	(await tableauSauvegardes.locator('caption').innerText()).replace(/\s+/g, ' ').trim());
+dit('aucune balise ne ressort en clair sur la page de l’agent',
+	!/#[A-Z_]{3,}|URL_ACTION_AUTEUR/.test(await page.locator('body').innerText()));
+
+// La suppression : une action POST signée, pas un lien.
+const supprimer = tableauSauvegardes.locator('form.bouton_action_post button').first();
+dit('la suppression est un bouton d’action du thème',
+	/\bbtn\b/.test((await supprimer.getAttribute('class')) || '')
+		&& /\bbtn_danger\b/.test((await supprimer.getAttribute('class')) || ''),
+	(await supprimer.getAttribute('class')) || '');
+const avantSuppression = surDisque().length;
+// `once` et non `on` : un gestionnaire permanent happerait la confirmation de
+// la mise à jour du core, plus loin, qui a déjà le sien — et Playwright refuse
+// qu'un même dialogue soit accepté deux fois.
+page.once('dialog', (d) => d.accept());
+await supprimer.click();
+await page.waitForLoadState('domcontentloaded').catch(() => {});
+await page.waitForTimeout(1200);
+dit('le fichier est réellement supprimé du site',
+	surDisque().length === avantSuppression - 1,
+	avantSuppression + ' → ' + surDisque().length);
+dit('la suppression rend la main sous son encadré',
+	page.url().includes('#sauvegardes'), page.url());
+dit('la suppression est annoncée',
+	/supprim/i.test(await page.locator('.reponse_formulaire').last().innerText()),
+	(await page.locator('.reponse_formulaire').last().innerText()).trim());
+dit('la suppression est inscrite au journal du site',
+	/sauvegarde_supprimer/.test(await page.locator('body').innerText()));
+
 console.log('\n### Mise à jour d’un plugin');
 await page.goto(base + '/ecrire/?exec=configurer_dashagent', { waitUntil: 'domcontentloaded' });
 await page.check('[name="op_plugin_maj"]').catch(() => {});
@@ -256,6 +299,18 @@ dit('la pastille des mises à jour s’explique au survol',
 	/mettre à jour/.test((await enRetard.getAttribute('title')) || ''),
 	(await enRetard.getAttribute('title')) || '');
 
+// La pastille compte ce qu'on peut faire, pas ce qui existe : un plugin livré
+// avec SPIP suit le core, il n'a pas de bouton et « Tout mettre à jour » ne le
+// prend pas. L'y compter laisserait la pastille allumée après une mise à jour
+// réussie, sans rien pour l'éteindre.
+const realisables = JSON.parse(sql(
+	"SELECT COUNT(*) AS n FROM spip_dashboard_plugins WHERE maj_disponible = 'oui' AND distribue = 'non'"))[0].n;
+const enregistre = JSON.parse(sql(
+	'SELECT nb_plugins_maj AS n FROM spip_dashboard_sites WHERE id_dashboard_site = 1'))[0].n;
+dit('le décompte enregistré est celui des mises à jour réalisables',
+	String(enregistre) === String(realisables),
+	enregistre + ' enregistré(s) pour ' + realisables + ' réalisable(s)');
+
 // La couleur est le message : vérifier la classe ne prouverait rien, le thème
 // du privé ayant déjà donné du blanc sur blanc à des boutons bien classés.
 const teinte = await enRetard.evaluate((n) => {
@@ -265,6 +320,15 @@ const teinte = await enRetard.evaluate((n) => {
 dit('la pastille est jaune et son texte rouge',
 	teinte.fond === 'rgb(255, 233, 176)' && teinte.texte === 'rgb(164, 0, 28)',
 	'fond ' + teinte.fond + ', texte ' + teinte.texte);
+
+// Le bouton d'ensemble annonce combien de plugins il va reprendre. Ce décompte
+// dans le libellé est ce qui avait cassé l'appel : une balise entre parenthèses
+// dans l'argument d'une autre, et tout ressortait en clair sur la page.
+const toutMaj = page.locator('#panneau-plugins form.bouton_action_post button', { hasText: 'Tout mettre à jour' });
+dit('le bouton d’ensemble porte son décompte',
+	(await toutMaj.count()) === 1
+		&& (await toutMaj.innerText()).trim() === 'Tout mettre à jour (' + surlignees + ')',
+	(await toutMaj.count()) ? (await toutMaj.innerText()).trim() : 'bouton absent');
 const boutonMaj = ligneMaj.locator('form.bouton_action_post button').first();
 if (await boutonMaj.count()) {
 	await boutonMaj.click();
@@ -372,6 +436,20 @@ dit('chaque bouton d’action porte la classe du thème',
 dit('aucun bouton maison ne subsiste',
 	(await page.locator('.dashboard-bouton').count()) === 0);
 
+// Un libellé qui porte un décompte se calcule à part : une balise entre
+// parenthèses glissée dans l'argument d'une autre désorganise l'analyse, et
+// c'est alors tout l'appel qui ressort en clair au milieu de la page.
+const corpsFiche = await page.locator('#panneau-plugins').innerText();
+dit('aucun appel de balise ne ressort en clair',
+	!/URL_ACTION_AUTEUR|BOUTON_ACTION|#[A-Z_]{3,}/.test(corpsFiche),
+	(corpsFiche.match(/(URL_ACTION_AUTEUR|BOUTON_ACTION|#[A-Z_]{3,})/) || [''])[0]);
+
+// L'encadré de la colonne de gauche : le titre vit dans le corps de la boîte.
+const encadre = await page.locator('.box.nav-dashboard').innerHTML();
+dit('le titre de l’encadré est dans le corps de la boîte',
+	/<div class="box__body clearfix">\s*<h2 class="box__title">/.test(encadre),
+	encadre.replace(/\s+/g, ' ').slice(0, 90));
+
 // Chaque action rend la main sous l'encadré qui l'a déclenchée, sans quoi la
 // page revient en haut et le compte rendu reste hors de vue.
 const ancres = await page.locator('form.bouton_action_post').evaluateAll(
@@ -388,11 +466,21 @@ const compte = async (url) => {
 	await page.goto(base + url, { waitUntil: 'domcontentloaded' });
 	return page.locator('#panneau-plugins tbody tr').count();
 };
-const tous = await compte('/ecrire/?exec=dashboard_site&id_dashboard_site=1');
-const installes = await compte('/ecrire/?exec=dashboard_site&id_dashboard_site=1&distribue=non');
-const livres = await compte('/ecrire/?exec=dashboard_site&id_dashboard_site=1&distribue=oui');
+const tous = await compte('/ecrire/?exec=dashboard_site&id_dashboard_site=1&vue=tous');
+const installes = await compte('/ecrire/?exec=dashboard_site&id_dashboard_site=1&vue=installes');
+const livres = await compte('/ecrire/?exec=dashboard_site&id_dashboard_site=1&vue=distribues');
 dit('la vue « installés » écarte les plugins livrés avec SPIP',
 	installes > 0 && installes < tous, installes + ' sur ' + tous);
+
+// Sans rien demander, on arrive sur ce que l'hébergeur du site a installé :
+// c'est la seule vue où un bouton de mise à jour a un sens.
+const defaut = await compte('/ecrire/?exec=dashboard_site&id_dashboard_site=1');
+dit('« installés » est la vue par défaut', defaut === installes && defaut < tous,
+	defaut + ' lignes, contre ' + installes + ' pour « installés » et ' + tous + ' pour « tous »');
+dit('la vue par défaut est celle qui est exposée',
+	(await page.locator('.dashboard-filtres li').first().innerText()).trim()
+		=== (await page.locator('.dashboard-filtres li span, .dashboard-filtres li strong').first().innerText()).trim(),
+	(await page.locator('.dashboard-filtres li span, .dashboard-filtres li strong').allInnerTexts()).join(' | '));
 dit('la vue « livrés avec SPIP » écarte les autres',
 	livres > 0 && livres < tous, livres + ' sur ' + tous);
 dit('les deux vues se partagent la liste', installes + livres === tous,
@@ -541,8 +629,15 @@ const total = Number(((await pagination.innerText()).match(/sur (\d+)/) || [0, 0
 dit('le contenu d’une table s’affiche', (await bloc.locator('tbody tr').count()) > 0,
 	(await bloc.locator('tbody tr').count()) + ' lignes sur ' + total);
 dit('la pagination reprend le balisage de SPIP',
-	(await pagination.locator('ul.pagination-items li.pagination-item').count()) === 2,
+	(await pagination.locator('ul.pagination-items li.pagination-item').count()) >= 2,
 	(await pagination.locator('li.pagination-item').count()) + ' éléments');
+// Le même type que les boucles paginées de la page : précédent, les numéros de
+// page, suivant. Cette liste-ci ne vient d'aucune boucle, elle est bâtie en
+// JavaScript — raison de plus pour qu'elle en reprenne le balisage exactement.
+dit('la pagination du parcours de table porte des numéros de page',
+	(await pagination.locator('ul.pagination_page_precedent_suivant').count()) === 1
+		&& (await pagination.locator('li.pagination-item.on.active').innerText()).trim() === '1',
+	(await pagination.locator('ul.pagination-items').innerText()).replace(/\s+/g, ' ').trim());
 
 await bloc.locator('thead th button').first().click();
 await page.waitForTimeout(1200);
