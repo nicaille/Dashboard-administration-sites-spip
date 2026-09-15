@@ -265,6 +265,15 @@ const teinte = await enRetard.evaluate((n) => {
 dit('la pastille est jaune et son texte rouge',
 	teinte.fond === 'rgb(255, 233, 176)' && teinte.texte === 'rgb(164, 0, 28)',
 	'fond ' + teinte.fond + ', texte ' + teinte.texte);
+
+// Le bouton d'ensemble annonce combien de plugins il va reprendre. Ce décompte
+// dans le libellé est ce qui avait cassé l'appel : une balise entre parenthèses
+// dans l'argument d'une autre, et tout ressortait en clair sur la page.
+const toutMaj = page.locator('#panneau-plugins form.bouton_action_post button', { hasText: 'Tout mettre à jour' });
+dit('le bouton d’ensemble porte son décompte',
+	(await toutMaj.count()) === 1
+		&& (await toutMaj.innerText()).trim() === 'Tout mettre à jour (' + surlignees + ')',
+	(await toutMaj.count()) ? (await toutMaj.innerText()).trim() : 'bouton absent');
 const boutonMaj = ligneMaj.locator('form.bouton_action_post button').first();
 if (await boutonMaj.count()) {
 	await boutonMaj.click();
@@ -372,6 +381,20 @@ dit('chaque bouton d’action porte la classe du thème',
 dit('aucun bouton maison ne subsiste',
 	(await page.locator('.dashboard-bouton').count()) === 0);
 
+// Un libellé qui porte un décompte se calcule à part : une balise entre
+// parenthèses glissée dans l'argument d'une autre désorganise l'analyse, et
+// c'est alors tout l'appel qui ressort en clair au milieu de la page.
+const corpsFiche = await page.locator('#panneau-plugins').innerText();
+dit('aucun appel de balise ne ressort en clair',
+	!/URL_ACTION_AUTEUR|BOUTON_ACTION|#[A-Z_]{3,}/.test(corpsFiche),
+	(corpsFiche.match(/(URL_ACTION_AUTEUR|BOUTON_ACTION|#[A-Z_]{3,})/) || [''])[0]);
+
+// L'encadré de la colonne de gauche : le titre vit dans le corps de la boîte.
+const encadre = await page.locator('.box.nav-dashboard').innerHTML();
+dit('le titre de l’encadré est dans le corps de la boîte',
+	/<div class="box__body clearfix">\s*<h2 class="box__title">/.test(encadre),
+	encadre.replace(/\s+/g, ' ').slice(0, 90));
+
 // Chaque action rend la main sous l'encadré qui l'a déclenchée, sans quoi la
 // page revient en haut et le compte rendu reste hors de vue.
 const ancres = await page.locator('form.bouton_action_post').evaluateAll(
@@ -388,11 +411,21 @@ const compte = async (url) => {
 	await page.goto(base + url, { waitUntil: 'domcontentloaded' });
 	return page.locator('#panneau-plugins tbody tr').count();
 };
-const tous = await compte('/ecrire/?exec=dashboard_site&id_dashboard_site=1');
-const installes = await compte('/ecrire/?exec=dashboard_site&id_dashboard_site=1&distribue=non');
-const livres = await compte('/ecrire/?exec=dashboard_site&id_dashboard_site=1&distribue=oui');
+const tous = await compte('/ecrire/?exec=dashboard_site&id_dashboard_site=1&vue=tous');
+const installes = await compte('/ecrire/?exec=dashboard_site&id_dashboard_site=1&vue=installes');
+const livres = await compte('/ecrire/?exec=dashboard_site&id_dashboard_site=1&vue=distribues');
 dit('la vue « installés » écarte les plugins livrés avec SPIP',
 	installes > 0 && installes < tous, installes + ' sur ' + tous);
+
+// Sans rien demander, on arrive sur ce que l'hébergeur du site a installé :
+// c'est la seule vue où un bouton de mise à jour a un sens.
+const defaut = await compte('/ecrire/?exec=dashboard_site&id_dashboard_site=1');
+dit('« installés » est la vue par défaut', defaut === installes && defaut < tous,
+	defaut + ' lignes, contre ' + installes + ' pour « installés » et ' + tous + ' pour « tous »');
+dit('la vue par défaut est celle qui est exposée',
+	(await page.locator('.dashboard-filtres li').first().innerText()).trim()
+		=== (await page.locator('.dashboard-filtres li span, .dashboard-filtres li strong').first().innerText()).trim(),
+	(await page.locator('.dashboard-filtres li span, .dashboard-filtres li strong').allInnerTexts()).join(' | '));
 dit('la vue « livrés avec SPIP » écarte les autres',
 	livres > 0 && livres < tous, livres + ' sur ' + tous);
 dit('les deux vues se partagent la liste', installes + livres === tous,
@@ -541,8 +574,15 @@ const total = Number(((await pagination.innerText()).match(/sur (\d+)/) || [0, 0
 dit('le contenu d’une table s’affiche', (await bloc.locator('tbody tr').count()) > 0,
 	(await bloc.locator('tbody tr').count()) + ' lignes sur ' + total);
 dit('la pagination reprend le balisage de SPIP',
-	(await pagination.locator('ul.pagination-items li.pagination-item').count()) === 2,
+	(await pagination.locator('ul.pagination-items li.pagination-item').count()) >= 2,
 	(await pagination.locator('li.pagination-item').count()) + ' éléments');
+// Le même type que les boucles paginées de la page : précédent, les numéros de
+// page, suivant. Cette liste-ci ne vient d'aucune boucle, elle est bâtie en
+// JavaScript — raison de plus pour qu'elle en reprenne le balisage exactement.
+dit('la pagination du parcours de table porte des numéros de page',
+	(await pagination.locator('ul.pagination_page_precedent_suivant').count()) === 1
+		&& (await pagination.locator('li.pagination-item.on.active').innerText()).trim() === '1',
+	(await pagination.locator('ul.pagination-items').innerText()).replace(/\s+/g, ' ').trim());
 
 await bloc.locator('thead th button').first().click();
 await page.waitForTimeout(1200);
