@@ -56,10 +56,15 @@ function action_dashboard_operation_dist() {
 		// Première étape jouée tout de suite : l'utilisateur voit l'opération
 		// démarrer plutôt qu'un chantier immobile en attente du prochain cron.
 		$chantier = dashboard_chantier_avancer($ouverture['id']);
+
+		// Aucune notification de départ : elle se figerait dans l'URL sur
+		// l'étape du moment, et survivrait à la fin du chantier — « étape 2/5 »
+		// affiché sur une opération achevée se lit comme un blocage. C'est
+		// l'encadré d'avancement qui rend compte pendant, et le bilan après.
 		dashboard_operation_retour(
 			$id_site,
 			!dashboard_chantier_fini($chantier) || (string) $chantier['statut'] === 'ok',
-			dashboard_chantier_message_depart($chantier)
+			dashboard_chantier_fini($chantier) ? (string) $chantier['message'] : ''
 		);
 	}
 
@@ -89,23 +94,6 @@ function action_dashboard_operation_dist() {
 }
 
 /**
- * Ce qu'on annonce au retour de la première étape d'un chantier.
- *
- * @param array|null $chantier
- * @return string
- */
-function dashboard_chantier_message_depart($chantier) {
-	if (!$chantier) {
-		return 'Opération non enregistrée';
-	}
-	if (dashboard_chantier_fini($chantier)) {
-		return (string) $chantier['message'];
-	}
-
-	return dashboard_chantier_resume($chantier) . ' : ' . (string) $chantier['message'];
-}
-
-/**
  * Renvoie l'utilisateur sur la fiche du site avec un message.
  *
  * @param int $id_site
@@ -124,8 +112,16 @@ function dashboard_operation_retour($id_site, $ok, $message) {
 			: generer_url_ecrire('dashboard');
 	}
 
-	$redirect = parametre_url($redirect, 'dashboard_message', substr($message, 0, 500), '&');
-	$redirect = parametre_url($redirect, 'dashboard_statut', $ok ? 'ok' : 'erreur', '&');
+	// Un message vide retire le paramètre au lieu de l'écrire : une opération
+	// menée en chantier rend compte par son encadré, pas par l'URL.
+	//
+	// L'appel a lieu dans tous les cas, y compris pour ne rien poser : il
+	// normalise l'adresse au passage. L'URL de retour vient d'un squelette, où
+	// les séparateurs sont écrits `&amp;` ; la sauter laissait cette écriture
+	// telle quelle dans l'en-tête Location, et `id_dashboard_site` n'était plus
+	// lu — la fiche revenait vide, sans son encadré de chantier.
+	$redirect = parametre_url($redirect, 'dashboard_message', $message === '' ? '' : substr($message, 0, 500), '&');
+	$redirect = parametre_url($redirect, 'dashboard_statut', $message === '' ? '' : ($ok ? 'ok' : 'erreur'), '&');
 
 	redirige_par_entete($redirect);
 }

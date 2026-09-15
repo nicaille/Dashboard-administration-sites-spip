@@ -763,10 +763,12 @@ await page.waitForTimeout(1500);
 
 dit('lancement sans erreur', (await erreurs(page)).length === 0, (await erreurs(page)).join(' ; '));
 
-const retour = decodeURIComponent((page.url().match(/dashboard_message=([^&]*)/) || ['', ''])[1]).replace(/\+/g, ' ');
-const statut = (page.url().match(/dashboard_statut=(\w+)/) || ['', ''])[1];
-dit('l’opération démarre sans refus', statut === 'ok', statut + ' : ' + retour);
-dit('la première étape est une sauvegarde', /[Ss]auvegarde/.test(retour), retour);
+// Aucune notification de départ dans l'URL : elle s'y figerait sur l'étape du
+// moment et survivrait à la fin du chantier — « étape 2/5 » sur une opération
+// achevée se lit comme un blocage. C'est l'encadré qui rend compte pendant, et
+// le bilan après.
+dit('aucune notification de départ ne se fige dans l’URL',
+	!/dashboard_message=/.test(page.url()), page.url());
 dit('un encadré de chantier est affiché', encadreVu);
 
 // Le pilote de la page mène l'opération à son terme, étape par étape.
@@ -778,6 +780,18 @@ const chantier = JSON.parse(sql(
 	"SELECT statut, etape, tentatives, message FROM spip_dashboard_chantiers WHERE operation = 'core_maj' ORDER BY id_dashboard_chantier DESC LIMIT 1"
 ))[0] || {};
 dit('le chantier est enregistré comme réussi', chantier.statut === 'ok', JSON.stringify(chantier));
+
+// Le bilan prend le relais de l'encadré : sans lui, la page ne montrerait plus
+// rien une fois l'opération finie, et c'est pourtant là que se dit l'essentiel —
+// par exemple qu'une base attend encore sa migration.
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+const bilan = page.locator('#bilan');
+dit('le compte rendu du chantier terminé est affiché', (await bilan.count()) === 1);
+dit('le bilan dit ce que le chantier a conclu',
+	(await bilan.innerText()).includes(String(chantier.message).slice(0, 40)),
+	(await bilan.innerText()).replace(/\s+/g, ' ').trim().slice(0, 120));
+dit('aucun encadré d’avancement ne subsiste',
+	(await page.locator('[data-dashboard-chantier]').count()) === 0);
 // Le journal porte deux lignes pour l'opération : le remplacement lui-même, qui
 // nomme la transition, et la conclusion du chantier.
 const lignesCore = JSON.parse(sql(

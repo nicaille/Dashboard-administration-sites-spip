@@ -41,6 +41,28 @@
 	</p>
 ]
 
+[(#REM)
+	Le compte rendu d'un chantier qui vient de finir. Sans lui, la page ne
+	montrait plus rien une fois l'opération terminée : l'encadré d'avancement
+	disparaît avec le statut « en cours », et il ne restait que la notification
+	de départ, figée sur l'étape 2 — ce qui donnait à lire un échec ou un
+	blocage là où le travail était fait. Or c'est ce bilan-là qui dit l'essentiel,
+	par exemple qu'une base attend encore sa migration.
+]
+<BOUCLE_bilan(DASHBOARD_CHANTIERS){id_dashboard_site}{statut IN ok,erreur}{par date_fin}{inverse}{0,1}>
+[(#DATE_FIN|dashboard_recent|oui)
+	<div class="dashboard-fiche dashboard-bilan" id="bilan">
+		<h2><:dashboard:titre_bilan:></h2>
+		<p class="[(#STATUT|=={ok}|?{reponse_formulaire_ok,reponse_formulaire_erreur})] reponse_formulaire">
+			[(#MESSAGE|textebrut)]
+		</p>
+		<p class="explication">
+			[(#DATE_FIN|affdate_heure)] &mdash; <:dashboard:bilan_explication:>
+		</p>
+	</div>
+]
+</BOUCLE_bilan>
+
 [(#ETAT|=={erreur}|oui)
 	<p class="reponse_formulaire reponse_formulaire_erreur">
 		<:dashboard:derniere_erreur:> [(#ERREUR|textebrut)]

@@ -33,6 +33,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'base_maj_confirmation' => 'Start migrating this site’s database? A backup is taken first.',
 	'base_maj_disponible' => 'This site’s database awaits migration: its private area is blocked.',
 	'base_maj_texte' => 'This site’s files expect a database migration. Until it is applied, SPIP keeps the managed site’s private area behind its upgrade page.',
+	'bilan_explication' => 'This report clears itself after an hour; the journal below keeps the record.',
 	'col_actions'    => 'Actions',
 	'col_cache'      => 'Cache',
 	'col_composant'  => 'Component',
@@ -212,6 +213,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 
 	// T
 	'titre_base_maj' => 'Database awaiting migration',
+	'titre_bilan' => 'Last operation',
 	'titre_chantier' => 'Operation in progress',
 	'titre_configurer'   => 'Dashboard: settings',
 	'tables_manquantes'  => 'Missing tables:',
