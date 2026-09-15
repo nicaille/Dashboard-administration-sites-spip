@@ -177,6 +177,49 @@ dit('sauvegarde créée et rapatriée', /rapatri/i.test(apresSauvegarde), (apres
 const sauvegardes = JSON.parse(sql('SELECT fichier, octets, statut FROM spip_dashboard_sauvegardes'));
 dit('sauvegarde enregistrée localement', sauvegardes.some((s) => s.statut === 'locale' && Number(s.octets) > 0), JSON.stringify(sauvegardes));
 
+// Le site géré doit voir ce qui a été pris chez lui. Ces fichiers vivent sous
+// tmp/, hors espace web : sans ce tableau, son webmestre pouvait refuser qu'on
+// en produise, mais pas constater leur existence ni s'en défaire.
+const dossierSauvegardes = site + '/tmp/dashagent/sauvegardes';
+const surDisque = () => readdirSync(dossierSauvegardes).filter((n) => /\.sql\.gz$/.test(n));
+
+await page.goto(base + '/ecrire/?exec=configurer_dashagent', { waitUntil: 'domcontentloaded' });
+const tableauSauvegardes = page.locator('#sauvegardes');
+dit('le site géré liste ses sauvegardes',
+	(await tableauSauvegardes.locator('tbody tr').count()) === surDisque().length
+		&& surDisque().length > 0,
+	(await tableauSauvegardes.locator('tbody tr').count()) + ' ligne(s) pour ' + surDisque().length + ' fichier(s)');
+dit('la légende donne le poids total',
+	/[0-9].*(o|io)\b/.test(await tableauSauvegardes.locator('caption').innerText()),
+	(await tableauSauvegardes.locator('caption').innerText()).replace(/\s+/g, ' ').trim());
+dit('aucune balise ne ressort en clair sur la page de l’agent',
+	!/#[A-Z_]{3,}|URL_ACTION_AUTEUR/.test(await page.locator('body').innerText()));
+
+// La suppression : une action POST signée, pas un lien.
+const supprimer = tableauSauvegardes.locator('form.bouton_action_post button').first();
+dit('la suppression est un bouton d’action du thème',
+	/\bbtn\b/.test((await supprimer.getAttribute('class')) || '')
+		&& /\bbtn_danger\b/.test((await supprimer.getAttribute('class')) || ''),
+	(await supprimer.getAttribute('class')) || '');
+const avantSuppression = surDisque().length;
+// `once` et non `on` : un gestionnaire permanent happerait la confirmation de
+// la mise à jour du core, plus loin, qui a déjà le sien — et Playwright refuse
+// qu'un même dialogue soit accepté deux fois.
+page.once('dialog', (d) => d.accept());
+await supprimer.click();
+await page.waitForLoadState('domcontentloaded').catch(() => {});
+await page.waitForTimeout(1200);
+dit('le fichier est réellement supprimé du site',
+	surDisque().length === avantSuppression - 1,
+	avantSuppression + ' → ' + surDisque().length);
+dit('la suppression rend la main sous son encadré',
+	page.url().includes('#sauvegardes'), page.url());
+dit('la suppression est annoncée',
+	/supprim/i.test(await page.locator('.reponse_formulaire').last().innerText()),
+	(await page.locator('.reponse_formulaire').last().innerText()).trim());
+dit('la suppression est inscrite au journal du site',
+	/sauvegarde_supprimer/.test(await page.locator('body').innerText()));
+
 console.log('\n### Mise à jour d’un plugin');
 await page.goto(base + '/ecrire/?exec=configurer_dashagent', { waitUntil: 'domcontentloaded' });
 await page.check('[name="op_plugin_maj"]').catch(() => {});

@@ -32,6 +32,43 @@ function dashagent_tables_presentes($rien = '') {
 }
 
 /**
+ * Les sauvegardes présentes sur ce site, la plus récente d'abord.
+ *
+ * Elles vivent dans `tmp/dashagent/sauvegardes/`, hors espace web : rien ne les
+ * montrait au webmestre du site, qui pouvait donc refuser qu'on en produise
+ * mais pas constater ce qui avait été pris chez lui. Sur un site hébergé pour
+ * un tiers, cette asymétrie n'est pas tenable.
+ *
+ * @filtre
+ * @param string $rien
+ * @return array
+ */
+function dashagent_sauvegardes($rien = '') {
+	include_spip('inc/dashagent_sauvegarde');
+
+	return dashagent_sauvegarde_lister();
+}
+
+/**
+ * Poids total des sauvegardes présentes, en octets.
+ *
+ * C'est le chiffre qui compte sur un hébergement au quota : le nombre de
+ * fichiers ne dit rien, leur somme si.
+ *
+ * @filtre
+ * @param string $rien
+ * @return int
+ */
+function dashagent_sauvegardes_octets($rien = '') {
+	$total = 0;
+	foreach (dashagent_sauvegardes() as $sauvegarde) {
+		$total += (int) ($sauvegarde['octets'] ?? 0);
+	}
+
+	return $total;
+}
+
+/**
  * Ce serveur sait-il valider un certificat https ?
  *
  * Toutes les mises à jour passent par un téléchargement https. Sans magasin
