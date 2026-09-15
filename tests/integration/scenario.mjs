@@ -25,6 +25,11 @@ const sql = (requete) => execFileSync('php', ['-r',
 	`$db=new SQLite3(getenv("BDD"));$r=$db->query(getenv("REQ"));$o=[];while($x=$r->fetchArray(SQLITE3_ASSOC))$o[]=$x;echo json_encode($o);`,
 ], { env: { ...process.env, BDD: bdd, REQ: requete } }).toString();
 
+/** Écrire dans la base du site, pour poser un état que le parcours ne produit pas. */
+const sqlEcrire = (requete) => execFileSync('php', ['-r',
+	`$db=new SQLite3(getenv("BDD"));$db->exec(getenv("REQ"));`,
+], { env: { ...process.env, BDD: bdd, REQ: requete } }).toString();
+
 /** Une page SPIP en échec affiche une trace PHP ou un bloc d'erreur de squelette. */
 async function erreurs(page) {
 	const t = await page.locator('body').innerText();
@@ -180,6 +185,57 @@ await page.waitForTimeout(700);
 
 await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
 await bouton(page, 'Synchroniser');
+
+console.log('\n### Vue d’ensemble : relire les dépôts du parc');
+
+// Pour voir un catalogue périmé il faut en avoir un : on coupe le
+// rafraîchissement automatique, on vieillit le dépôt de trois jours, puis on
+// relève l'inventaire — qui n'y touchera donc pas. Couper le rafraîchissement
+// ne fait pas taire l'avertissement : c'est le cas où plus rien ne rajeunit le
+// catalogue, et l'âge s'apprécie alors sur la validité par défaut d'un jour.
+await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
+await page.fill('[name="fraicheur_depots"]', '0');
+await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').last().click()]);
+await page.waitForTimeout(500);
+sqlEcrire("UPDATE spip_depots SET maj = datetime('now', '-3 days')");
+await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+await bouton(page, 'Synchroniser');
+
+const fraicheur = page.locator('#depots');
+dit('la fraîcheur des catalogues est affichée sur le parc',
+	/3 jour/.test(await fraicheur.innerText()), (await fraicheur.innerText()).replace(/\s+/g, ' ').trim());
+dit('un catalogue périmé est signalé',
+	(await page.locator('#depots.dashboard-depots-perimes').count()) === 1);
+dit('le compte du parc est celui des sites',
+	(await page.locator('.dashboard-synthese li').last().innerText()).trim().startsWith(
+		String(JSON.parse(sql('SELECT SUM(nb_plugins_maj) AS n FROM spip_dashboard_sites'))[0].n)),
+	(await page.locator('.dashboard-synthese li').last().innerText()).replace(/\s+/g, ' ').trim());
+
+// Le tour du parc, un site à la fois : c'est ce qui rend le compte réel.
+const relire = page.locator('[data-dashboard-depots-parc]');
+dit('un bouton relit les dépôts de tout le parc', (await relire.count()) === 1);
+await relire.click();
+await page.waitForFunction(() => !document.querySelector('[data-dashboard-depots-parc]')
+	|| !document.querySelector('.dashboard-depots-perimes'), null, { timeout: 60000 }).catch(() => {});
+await page.waitForTimeout(2500);
+
+const relu = JSON.parse(sql("SELECT maj FROM spip_depots ORDER BY maj DESC LIMIT 1"))[0].maj;
+dit('le catalogue a bien été relu', (Date.now() - Date.parse(relu.replace(' ', 'T'))) < 10 * 60 * 1000, relu);
+await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+dit('plus de catalogue périmé après le tour du parc',
+	(await page.locator('#depots.dashboard-depots-perimes').count()) === 0,
+	(await page.locator('#depots').innerText()).replace(/\s+/g, ' ').trim());
+dit('le compte du parc reste celui des sites',
+	(await page.locator('.dashboard-synthese li').last().innerText()).trim().startsWith(
+		String(JSON.parse(sql('SELECT SUM(nb_plugins_maj) AS n FROM spip_dashboard_sites'))[0].n)),
+	(await page.locator('.dashboard-synthese li').last().innerText()).replace(/\s+/g, ' ').trim());
+
+// Rendre au parc son rafraîchissement automatique pour la suite du parcours.
+await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
+await page.fill('[name="fraicheur_depots"]', '86400');
+await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').last().click()]);
+await page.waitForTimeout(500);
+
 await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
 
 const ligneMaj = page.locator('tr', { hasText: 'ZZZTEST' });

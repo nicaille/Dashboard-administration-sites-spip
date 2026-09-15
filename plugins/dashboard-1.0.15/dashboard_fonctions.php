@@ -415,6 +415,30 @@ function dashboard_depots_age($infos) {
 }
 
 /**
+ * Durée de validité par défaut d'un catalogue de dépôts, en secondes.
+ */
+if (!defined('_DASHBOARD_DEPOTS_VALIDITE')) {
+	define('_DASHBOARD_DEPOTS_VALIDITE', 86400);
+}
+
+/**
+ * Au-delà de quel âge un catalogue de dépôts n'est plus digne de foi.
+ *
+ * `fraicheur_depots` à zéro coupe le rafraîchissement automatique, pas
+ * l'avertissement : c'est même le cas où il sert le plus, puisque plus rien ne
+ * rajeunit alors le catalogue de lui-même. On retombe sur la validité par
+ * défaut, un jour — sans quoi le parc annoncerait « tout est à jour » sans la
+ * moindre réserve, en ayant justement renoncé à regarder.
+ *
+ * @return int
+ */
+function dashboard_depots_validite() {
+	$seuil = (int) dashboard_config('fraicheur_depots', _DASHBOARD_DEPOTS_VALIDITE);
+
+	return $seuil > 0 ? $seuil : _DASHBOARD_DEPOTS_VALIDITE;
+}
+
+/**
  * Le catalogue des dépôts est-il trop ancien pour qu'on s'y fie ?
  *
  * @filtre
@@ -427,10 +451,7 @@ function dashboard_depots_perimes($infos) {
 		return false;
 	}
 
-	$seuil = (int) dashboard_config('fraicheur_depots', 86400);
-	if ($seuil <= 0) {
-		return false;
-	}
+	$seuil = dashboard_depots_validite();
 
 	foreach ($depots as $depot) {
 		if (!isset($depot['age']) || $depot['age'] === null || (int) $depot['age'] > $seuil) {
@@ -497,6 +518,103 @@ function dashboard_synthese($rien = '') {
 	$synthese['plugins_maj'] = (int) ($total['total'] ?? 0);
 
 	return $synthese;
+}
+
+/**
+ * Fraîcheur des catalogues de dépôts sur l'ensemble du parc.
+ *
+ * Le nombre de mises à jour annoncé par la vue d'ensemble est la somme de ce que
+ * chaque site a relevé, et chaque site ne relève que ce que son propre catalogue
+ * lui dit. Donner ce nombre sans dire de quand datent les catalogues, c'est
+ * affirmer « tout va bien » sans avoir regardé.
+ *
+ * On retient le plus ancien : c'est lui qui borne la confiance qu'on peut
+ * accorder à l'ensemble.
+ *
+ * @return array{sites: int, sans_depot: int, perimes: int, age: int|null}
+ */
+function dashboard_depots_parc() {
+	static $parc = null;
+	if ($parc !== null) {
+		return $parc;
+	}
+
+	$parc = ['sites' => 0, 'sans_depot' => 0, 'perimes' => 0, 'age' => null];
+	if (!dashboard_tables_presentes()) {
+		return $parc;
+	}
+
+	$seuil = dashboard_depots_validite();
+	$lignes = sql_allfetsel('infos', 'spip_dashboard_sites', 'statut = ' . sql_quote('publie'));
+
+	foreach ($lignes as $ligne) {
+		$parc['sites']++;
+		$depots = dashboard_info((string) $ligne['infos'], 'depots');
+		if (!is_array($depots) || !$depots) {
+			// Pas de SVP, ou inventaire d'une version antérieure de l'agent :
+			// il n'y a pas de catalogue à dater.
+			$parc['sans_depot']++;
+			continue;
+		}
+
+		$vieux = null;
+		foreach ($depots as $depot) {
+			$age = (isset($depot['age']) && $depot['age'] !== null) ? (int) $depot['age'] : null;
+			// Jamais relu : l'âge est inconnu, donc infini.
+			if ($age === null) {
+				$vieux = null;
+				$parc['perimes']++;
+				break;
+			}
+			$vieux = max((int) $vieux, $age);
+		}
+
+		if ($vieux === null) {
+			continue;
+		}
+		if ($vieux > $seuil) {
+			$parc['perimes']++;
+		}
+		$parc['age'] = ($parc['age'] === null) ? $vieux : max($parc['age'], $vieux);
+	}
+
+	return $parc;
+}
+
+/**
+ * Âge du plus ancien catalogue du parc, en clair.
+ *
+ * @filtre
+ * @param string $rien
+ * @return string Chaîne vide si aucun site n'a de dépôt
+ */
+function dashboard_depots_parc_age($rien = '') {
+	$parc = dashboard_depots_parc();
+	if ($parc['sites'] === $parc['sans_depot']) {
+		return '';
+	}
+	if ($parc['age'] === null) {
+		return _T('dashboard:depots_jamais');
+	}
+	if ($parc['age'] < 3600) {
+		return _T('dashboard:depots_minutes', ['n' => max(1, (int) round($parc['age'] / 60))]);
+	}
+	if ($parc['age'] < 172800) {
+		return _T('dashboard:depots_heures', ['n' => (int) round($parc['age'] / 3600)]);
+	}
+
+	return _T('dashboard:depots_jours', ['n' => (int) round($parc['age'] / 86400)]);
+}
+
+/**
+ * Combien de sites du parc lisent un catalogue périmé.
+ *
+ * @filtre
+ * @param string $rien
+ * @return int
+ */
+function dashboard_depots_parc_perimes($rien = '') {
+	return dashboard_depots_parc()['perimes'];
 }
 
 /**

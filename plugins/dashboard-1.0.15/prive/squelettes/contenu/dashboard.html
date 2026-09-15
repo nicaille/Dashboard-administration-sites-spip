@@ -20,6 +20,43 @@
 	<li class="dashboard-attention"><strong>[(#GET{synthese}|table_valeur{plugins_maj})]</strong> <:dashboard:synthese_plugins_maj:></li>
 </ul>
 
+[(#VAL|dashboard_depots_parc_age|oui)
+	[(#REM)
+		Ce nombre est la somme de ce que chaque site a relevé, et chaque site ne
+		relève que ce que son propre catalogue lui dit. Le donner sans le dater,
+		c'est affirmer « tout va bien » sans avoir regardé.
+	]
+	#SET{depots_perimes,#VAL|dashboard_depots_parc_perimes}
+	<p class="dashboard-depots[(#GET{depots_perimes}|>{0}|oui) dashboard-depots-perimes]"
+	   id="depots">
+		<span>
+			<:dashboard:depots_parc_relus:> [(#VAL|dashboard_depots_parc_age)][(#GET{depots_perimes}|>{0}|oui)
+			&mdash; <:dashboard:depots_parc_perimes{nb=#GET{depots_perimes}}:>]
+		</span>
+		[(#AUTORISER{operer,dashboard_site})
+		<button type="button" class="btn btn_secondaire" data-dashboard-depots-parc>
+			<:dashboard:action_depots_parc:>
+		</button>
+		<span class="dashboard-depots-avancement" role="status" aria-live="polite"></span>
+		]
+	</p>
+
+	[(#AUTORISER{operer,dashboard_site})
+	[(#REM)
+		La file des sites à relire, en clair dans la page : le pilote la lit et
+		l'enchaîne. Chaque adresse est signée pour son site, comme n'importe
+		quelle action — aucune n'est fabriquée en JavaScript.
+	]
+	<ul class="dashboard-parc-file" hidden>
+		<BOUCLE_file(DASHBOARD_SITES){statut = publie}{par titre}>
+			[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+			<li><a href="[(#URL_ACTION_AUTEUR{dashboard_parc,#ID_DASHBOARD_SITE})]">#TITRE</a></li>
+			]
+		</BOUCLE_file>
+	</ul>
+	]
+]
+
 <B_sites>
 <table class="spip liste dashboard-parc">
 	<caption><:dashboard:parc_caption:></caption>
@@ -87,6 +124,59 @@
 	<a class="btn" href="[(#URL_ECRIRE{dashboard_site,new=oui})]"><:dashboard:icone_creer_site:></a>
 </p>
 ]
+
+<script type="text/javascript">
+/* Relecture des catalogues de tout le parc, un site à la fois.
+   Sans JavaScript, le bouton ne fait rien et rien n'est perdu : la
+   synchronisation de fond relit les catalogues trop anciens d'elle-même. */
+(function () {
+	var bouton = document.querySelector('[data-dashboard-depots-parc]');
+	var file = document.querySelector('.dashboard-parc-file');
+	if (!bouton || !file) { return; }
+
+	var etapes = Array.prototype.map.call(file.querySelectorAll('a'), function (a) {
+		return { url: a.getAttribute('href'), titre: a.textContent.trim() };
+	});
+	var avancement = document.querySelector('.dashboard-depots-avancement');
+	if (!etapes.length) { bouton.disabled = true; return; }
+
+	function dire(texte) {
+		if (avancement) { avancement.textContent = texte; }
+	}
+
+	function relire(rang) {
+		if (rang >= etapes.length) {
+			dire('Terminé, actualisation…');
+			window.location.reload();
+			return;
+		}
+		dire('(' + (rang + 1) + '/' + etapes.length + ') ' + etapes[rang].titre + '…');
+		fetch(etapes[rang].url, {
+			credentials: 'same-origin',
+			headers: { 'X-Requested-With': 'XMLHttpRequest' }
+		})
+			.then(function (r) {
+				if (!r.ok) { throw new Error('HTTP ' + r.status); }
+				return r.json();
+			})
+			.then(function (etat) {
+				if (etat.message) { dire('(' + (rang + 1) + '/' + etapes.length + ') ' + etat.message); }
+				// Un site qui reste sur le même rang a encore des dépôts à relire.
+				relire(etat.termine ? rang + 1 : rang);
+			})
+			.catch(function () {
+				// Un site injoignable n'arrête pas le tour : on passe au suivant.
+				dire('(' + (rang + 1) + '/' + etapes.length + ') ' + etapes[rang].titre + ' : sans réponse');
+				window.setTimeout(function () { relire(rang + 1); }, 800);
+			});
+	}
+
+	bouton.addEventListener('click', function () {
+		bouton.disabled = true;
+		relire(0);
+	});
+})();
+</script>
 
 </BOUCLE_installe>
 <div class="dashboard-fiche dashboard-fiche-alerte">
