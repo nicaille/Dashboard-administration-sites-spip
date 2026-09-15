@@ -141,6 +141,14 @@
 	font-weight: normal;
 	text-align: center;
 }
+/* Le nombre de plugins en retard, à côté du total : c'est la seule information
+   de cet onglet qui appelle un geste, elle se distingue donc du décompte neutre
+   par les couleurs de l'alerte. */
+.dashboard-compteur-maj {
+	background: #ffe9b0;
+	color: #a4001c;
+	font-weight: bold;
+}
 
 /* Opération en cours : un encadré qui se met à jour tout seul pendant que le
    chantier avance, plutôt qu'une page figée le temps d'une longue requête. */

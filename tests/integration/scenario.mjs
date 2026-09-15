@@ -184,6 +184,31 @@ await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { wai
 
 const ligneMaj = page.locator('tr', { hasText: 'ZZZTEST' });
 dit('mise à jour proposée pour ZZZTEST', await ligneMaj.count() > 0);
+
+// L'onglet porte deux décomptes tant qu'un plugin est en retard : le total, et
+// le nombre à mettre à jour — la seule information de cet onglet qui appelle un
+// geste, d'où les couleurs de l'alerte.
+const compteurs = page.locator('#onglet-plugins .dashboard-compteur');
+dit('l’onglet « Plugins » porte deux décomptes', (await compteurs.count()) === 2,
+	(await compteurs.allInnerTexts()).map((t) => t.trim()).join(' | '));
+const enRetard = page.locator('#onglet-plugins .dashboard-compteur-maj');
+const surlignees = await page.locator('#panneau-plugins tr.dashboard-ligne-maj').count();
+dit('le décompte des mises à jour est celui de la liste',
+	(await enRetard.innerText()).trim() === String(surlignees),
+	(await enRetard.innerText()).trim() + ' en pastille, ' + surlignees + ' lignes surlignées');
+dit('la pastille des mises à jour s’explique au survol',
+	/mettre à jour/.test((await enRetard.getAttribute('title')) || ''),
+	(await enRetard.getAttribute('title')) || '');
+
+// La couleur est le message : vérifier la classe ne prouverait rien, le thème
+// du privé ayant déjà donné du blanc sur blanc à des boutons bien classés.
+const teinte = await enRetard.evaluate((n) => {
+	const s = getComputedStyle(n);
+	return { fond: s.backgroundColor, texte: s.color };
+});
+dit('la pastille est jaune et son texte rouge',
+	teinte.fond === 'rgb(255, 233, 176)' && teinte.texte === 'rgb(164, 0, 28)',
+	'fond ' + teinte.fond + ', texte ' + teinte.texte);
 const boutonMaj = ligneMaj.locator('form.bouton_action_post button').first();
 if (await boutonMaj.count()) {
 	await boutonMaj.click();
@@ -324,6 +349,13 @@ const panneauPhp = page.locator('#panneau-php');
 dit('trois onglets présents', (await page.locator('[data-dashboard-onglets] [role="tab"]').count()) === 3,
 	(await page.locator('[data-dashboard-onglets] [role="tab"]').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim()).join(' | '));
 dit('« Plugins » ouvert par défaut', (await panneauPlugins.isVisible()) && !(await panneauPhp.isVisible()));
+
+// Le parc est à jour à ce stade : la pastille d'alerte a disparu. Une pastille
+// à zéro serait du bruit, et l'œil finirait par ne plus la voir du tout.
+dit('un parc à jour n’affiche pas de pastille d’alerte',
+	(await page.locator('#onglet-plugins .dashboard-compteur-maj').count()) === 0
+		&& (await page.locator('#onglet-plugins .dashboard-compteur').count()) === 1,
+	(await page.locator('#onglet-plugins').innerText()).replace(/\s+/g, ' ').trim());
 
 await page.locator('#onglet-php').click();
 await page.waitForTimeout(200);

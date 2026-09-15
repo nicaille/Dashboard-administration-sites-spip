@@ -140,7 +140,10 @@
 		<ul class="dashboard-onglets-liste" role="tablist">
 			<li>
 				<button type="button" role="tab" id="onglet-plugins" aria-controls="panneau-plugins" aria-selected="true">
-					<:dashboard:titre_plugins:> <span class="dashboard-compteur">#NB_PLUGINS</span>
+					<:dashboard:titre_plugins:> <span class="dashboard-compteur">#NB_PLUGINS</span>[(#NB_PLUGINS_MAJ|>{0}|oui)
+					<span class="dashboard-compteur dashboard-compteur-maj"
+					      title="<:dashboard:plugins_maj_disponibles{nb=#NB_PLUGINS_MAJ}:>">#NB_PLUGINS_MAJ</span>
+					]
 				</button>
 			</li>
 			<li>

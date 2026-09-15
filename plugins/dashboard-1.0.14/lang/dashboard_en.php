@@ -177,6 +177,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'php_vide'          => 'No PHP extension inventoried: synchronise the site.',
 	'plugins_distribues' => 'Shipped with SPIP',
 	'plugins_installes' => 'Installed on the site',
+	'plugins_maj_disponibles' => '@nb@ plugin(s) to upgrade',
 	'plugins_tous' => 'All',
 	'plugins_vide'      => 'No plugin inventoried: synchronise the site.',
 	'purge_css_js'      => 'Minified CSS and JS',
