@@ -163,6 +163,19 @@ function dashagent_svp_depots_actualiser($args = []) {
 		];
 	}
 
+	// SVP n'actualise la date du dépôt que par effet de bord : quand le
+	// catalogue n'a pas changé, il réécrit le même `sha_paquets` en comptant
+	// sur `ON UPDATE CURRENT_TIMESTAMP` pour rafraîchir `maj` — c'est même
+	// écrit dans son commentaire. Or MySQL ne déclenche pas cette clause
+	// lorsqu'un UPDATE n'altère aucune valeur : la date reste en arrière, le
+	// dépôt figure encore parmi ceux « à relire », et l'appelant le redemande
+	// indéfiniment. SQLite, lui, la bouge — d'où un défaut qui ne se voit que
+	// sur les sites en MySQL, c'est-à-dire presque tous.
+	//
+	// On l'écrit donc nous-mêmes : le catalogue vient réellement d'être relu,
+	// la date doit le dire.
+	sql_updateq('spip_depots', ['maj' => date('Y-m-d H:i:s')], 'id_depot = ' . (int) $depot['id']);
+
 	$reste = count(dashagent_svp_depots_a_rafraichir($age_max));
 
 	return dashagent_svp_depots_conclure(!$reste, $depot['titre'], $reste)

@@ -144,12 +144,28 @@
 		if (avancement) { avancement.textContent = texte; }
 	}
 
+	// Un site ne peut pas retenir le tour indéfiniment. Le compte des dépôts à
+	// relire vient du site géré ; si l'un d'eux reste annoncé « à relire » après
+	// l'avoir été — une date que la base n'a pas bougée, un catalogue illisible —
+	// la boucle tournerait sans fin sur le même site, et le parc ne serait jamais
+	// parcouru. Passé ce nombre de tours, on le laisse et on continue.
+	var TOURS_MAX = 20;
+	var tours = 0;
+
 	function relire(rang) {
 		if (rang >= etapes.length) {
 			dire('Terminé, actualisation…');
 			window.location.reload();
 			return;
 		}
+		if (tours > TOURS_MAX) {
+			dire('(' + (rang + 1) + '/' + etapes.length + ') ' + etapes[rang].titre
+				+ ' : trop de dépôts à relire, on passe au site suivant');
+			tours = 0;
+			window.setTimeout(function () { relire(rang + 1); }, 800);
+			return;
+		}
+		tours++;
 		dire('(' + (rang + 1) + '/' + etapes.length + ') ' + etapes[rang].titre + '…');
 		fetch(etapes[rang].url, {
 			credentials: 'same-origin',
@@ -162,11 +178,13 @@
 			.then(function (etat) {
 				if (etat.message) { dire('(' + (rang + 1) + '/' + etapes.length + ') ' + etat.message); }
 				// Un site qui reste sur le même rang a encore des dépôts à relire.
+				if (etat.termine) { tours = 0; }
 				relire(etat.termine ? rang + 1 : rang);
 			})
 			.catch(function () {
 				// Un site injoignable n'arrête pas le tour : on passe au suivant.
 				dire('(' + (rang + 1) + '/' + etapes.length + ') ' + etapes[rang].titre + ' : sans réponse');
+				tours = 0;
 				window.setTimeout(function () { relire(rang + 1); }, 800);
 			});
 	}
