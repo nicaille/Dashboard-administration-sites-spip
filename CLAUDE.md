@@ -2,8 +2,8 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/dashboard-1.0.16`,
-`plugins/dashboard_agent-1.0.12`.
+`plugins/<prefixe>-<version>` : `plugins/dashboard-1.0.17`,
+`plugins/dashboard_agent-1.0.13`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
 dans le même commit que le changement de `version=` dans son `paquet.xml`. Un

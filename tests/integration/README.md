@@ -82,3 +82,32 @@ Ce chemin reste couvert par les tests unitaires : la décision de se rabattre
 (`dashboard_chantier_svp_repli()`), le nommage du dossier versionné
 (`dashagent_dossier_versionne()`) et l'installation à côté sans écraser
 (`dashagent_installer_a_cote()`, sur une arborescence temporaire réelle).
+
+## Reproduire une vraie montée de version, d'une release à l'autre
+
+Le parcours fabrique son archive cible à partir de celle qu'on lui donne : la
+version de branche et la version de schéma y sont retouchées, et un palier de
+migration y est ajouté. C'est ce qui rend le test autonome — une seule archive
+suffit — mais cela ne rejoue pas la vraie succession de paliers d'une release à
+l'autre.
+
+Pour reproduire un cas réel (celui qui a servi ici : 4.4.13 → 4.4.23), il faut
+deux archives officielles et une installation montée à la main :
+
+1. installer le site depuis l'**ancienne** archive, y déposer les deux plugins,
+   puis les activer (le script d'activation est dans `executer.sh`, section
+   « Activation et installation des plugins ») ;
+2. déposer la **nouvelle** archive, telle quelle, dans un répertoire servi par
+   le site — `core-archives/` — accompagnée d'un `index.html` qui la nomme. Le
+   tableau de bord relève le nom exact dans cet index ; sans index, il se
+   rabat sur les noms d'usage, ce qui ne teste plus rien ;
+3. pointer *Configuration → Dashboard* sur ce répertoire, appairer l'agent avec
+   `op_core_maj` accordée, synchroniser, puis lancer la mise à jour.
+
+Ce que cette manipulation a montré, et que le parcours autonome ne montrait pas :
+la migration du schéma se déroule correctement (`Base migrée en version
+2026080300`), mais **le chantier ne va à son terme que s'il continue d'être
+poussé**. Quand le tableau de bord héberge lui-même l'agent, le remplacement du
+core bloque son propre espace privé entre le swap des fichiers et la migration :
+plus personne ne pilote, et le chantier reste en plan. La tâche de fond le
+reprend — encore faut-il que le site reçoive du trafic.
