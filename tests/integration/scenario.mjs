@@ -7,7 +7,7 @@
  */
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
 
 const base = process.env.BASE_URL || 'http://127.0.0.1:8321';
 const site = process.env.SITE_DIR;
@@ -515,7 +515,11 @@ console.log('\n### Onglets « Plugins » et « PHP »');
 await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
 const panneauPlugins = page.locator('#panneau-plugins');
 const panneauPhp = page.locator('#panneau-php');
-dit('trois onglets présents', (await page.locator('[data-dashboard-onglets] [role="tab"]').count()) === 3,
+// Trois onglets, quatre quand le site géré a le plugin SPIP WAF : celui-là
+// n'apparaît que là où il a un sens.
+const ongletsAttendus = 3 + (await page.locator('#onglet-waf').count());
+dit('les onglets attendus sont présents',
+	(await page.locator('[data-dashboard-onglets] [role="tab"]').count()) === ongletsAttendus,
 	(await page.locator('[data-dashboard-onglets] [role="tab"]').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim()).join(' | '));
 dit('« Plugins » ouvert par défaut', (await panneauPlugins.isVisible()) && !(await panneauPhp.isVisible()));
 
@@ -552,7 +556,15 @@ await page.locator('#onglet-php').press('ArrowRight');
 await page.waitForTimeout(200);
 dit('flèche droite : jusqu’à « Serveur »',
 	(await page.locator('#panneau-serveur').isVisible()) && !(await panneauPhp.isVisible()));
-await page.locator('#onglet-serveur').press('ArrowRight');
+// Le dernier onglet dépend du site : « Serveur », ou « SPIP WAF » s'il l'a.
+let dernier = '#onglet-serveur';
+if (await page.locator('#onglet-waf').count()) {
+	await page.locator('#onglet-serveur').press('ArrowRight');
+	await page.waitForTimeout(200);
+	dernier = '#onglet-waf';
+	dit('flèche droite : jusqu’à « SPIP WAF »', await page.locator('#panneau-waf').isVisible());
+}
+await page.locator(dernier).press('ArrowRight');
 await page.waitForTimeout(200);
 dit('la navigation au clavier boucle', await panneauPlugins.isVisible());
 dit('aucune extension PHP dans l’onglet « Plugins »',
@@ -632,9 +644,9 @@ await page.locator('#onglet-serveur').click();
 await page.waitForTimeout(3000);
 
 const resume = await page.locator('[data-serveur-bloc="resume"]').innerText();
-dit('résumé : version de PHP', /PHP\s+\d+\.\d+/.test(resume), resume.split('\n')[0]);
+dit('résumé : version de PHP', /PHP\s*\d+\.\d+/.test(resume), resume.split('\n')[0]);
 dit('résumé : base de données', /sqlite|mysql|maria/i.test(resume));
-dit('résumé : poids de la base', /Poids de la base\s+[\d.]+\s*(o|Ko|Mo|Go)/.test(resume),
+dit('résumé : poids de la base', /Poids de la base\s*[\d.]+\s*(o|Ko|Mo|Go)/.test(resume),
 	(resume.match(/Poids de la base[^\n]*/) || [''])[0]);
 dit('résumé : extensions PHP listées', /\d+ extensions PHP chargées/.test(resume),
 	(resume.match(/\d+ extensions PHP chargées/) || [''])[0]);
@@ -936,6 +948,145 @@ await bouton(page, 'Synchroniser');
 const apresSync = JSON.parse(sql('SELECT version_spip, infos FROM spip_dashboard_sites WHERE id_dashboard_site=1'))[0];
 dit('la synchronisation a rétabli un inventaire propre',
 	!/[<>]/.test(apresSync.version_spip) && !/<svg/.test(apresSync.infos), apresSync.version_spip);
+
+console.log('\n### Onglet SPIP WAF');
+
+// Le plugin n'est pas livré avec ce dépôt : la section ne tourne que si le banc
+// l'a installé (WAF_ZIP=… tests/integration/executer.sh …).
+const wafInstalle = JSON.parse(sql(
+	"SELECT name FROM sqlite_master WHERE type='table' AND name='spip_waf_events'")).length > 0;
+
+if (!wafInstalle) {
+	console.log('  (sauté) plugin SPIP WAF absent du banc — relancer avec WAF_ZIP=/chemin/waf-vX.Y.Z.zip');
+} else {
+	// De quoi faire parler le tableau : des blocages, une adresse bannie.
+	for (const [heure, ip, type, motif] of [
+		[1, '203.0.113.5', 'BLOCKED', 'SQLI'], [2, '203.0.113.5', 'BLOCKED', 'XSS'],
+		[3, '198.51.100.9', 'BLOCKED', 'BLOCKLISTED_IP'], [4, '203.0.113.5', 'BAN', 'BANNED_IP'],
+		[5, '192.0.2.7', 'BLOCKED', 'LOGIN_FAIL'],
+	]) {
+		sqlEcrire(`INSERT INTO spip_waf_events (date_event, ip, type, reason, trigger_info, method, uri, ua, extra)`
+			+ ` VALUES (datetime('now','-${heure} hours'), '${ip}', '${type}', '${motif}', '', 'GET',`
+			+ ` '/spip.php?page=x&q=${'A'.repeat(40)}', 'curl/8.5', '')`);
+	}
+
+	await page.goto(base + '/ecrire/?exec=configurer_dashagent', { waitUntil: 'domcontentloaded' });
+	await page.check('[name="op_waf"]').catch(() => {});
+	await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').last().click()]);
+	await page.waitForTimeout(600);
+
+	// L'inventaire doit d'abord apprendre que le site a ce plugin : c'est lui qui
+	// décide de l'apparition de l'onglet.
+	await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+	await bouton(page, 'Synchroniser');
+	await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+
+	dit('l’onglet SPIP WAF apparaît sur un site qui a le plugin',
+		(await page.locator('#onglet-waf').count()) === 1);
+	dit('rien n’est demandé au site avant d’ouvrir l’onglet',
+		/Le site sera interrogé|attente|Interrogation/i.test(await page.locator('#panneau-waf').innerText())
+			|| (await page.locator('#panneau-waf table').count()) === 0);
+
+	await page.locator('#onglet-waf').click();
+	await page.waitForTimeout(4000);
+	const waf = page.locator('#panneau-waf');
+	const texteWaf = await waf.innerText();
+	dit('les chiffres du pare-feu sont affichés', /Requêtes bloquées/.test(texteWaf),
+		texteWaf.replace(/\s+/g, ' ').slice(0, 90));
+	dit('les motifs de blocage sont listés', /SQLI|LOGIN_FAIL/.test(texteWaf));
+	dit('les bannissements sont listés', /BANNED_IP/.test(texteWaf));
+	dit('le journal est paginé comme le reste du privé',
+		(await waf.locator('ul.pagination_page_precedent_suivant').count()) === 1);
+
+	// La règle du dépôt : ce qui vient d'un site géré n'est jamais du balisage.
+	// Une URI d'attaque contient volontiers du HTML — elle doit rester du texte.
+	sqlEcrire("INSERT INTO spip_waf_events (date_event, ip, type, reason, trigger_info, method, uri, ua, extra)"
+		+ " VALUES (datetime('now'), '203.0.113.99', 'BLOCKED', 'XSS', '', 'GET',"
+		+ " '/spip.php?q=<svg onload=\"window.__xss=1\">', '<svg onload=\"window.__xss=1\">', '')");
+	await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+	await page.locator('#onglet-waf').click();
+	await page.waitForTimeout(4000);
+	dit('une charge utile enregistrée par le pare-feu reste inerte',
+		(await page.evaluate(() => window.__xss || 0)) === 0
+			&& !(await waf.innerHTML()).includes('<svg onload='),
+		(await waf.innerText()).includes('svg onload') ? 'rendue en texte' : 'absente');
+}
+
+console.log('\n### Script d’installation (spip_loader.php)');
+
+// Le fichier est servi en .txt : le serveur de test exécuterait un .php au lieu
+// d'en rendre la source, et l'agent recevrait « SPIP loader » au lieu du script.
+// Le contrôle de contenu s'en aperçoit — c'est d'ailleurs lui qui l'a montré.
+const loaderSource = site + '/core-archives/spip_loader.txt';
+writeFileSync(loaderSource,
+	"<?php\n// spip_loader.php — script d'installation de SPIP (copie de test)\n"
+	+ "$spip_loader_version = '3.1.2';\necho 'SPIP';\n");
+
+await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
+await page.fill('[name="url_spip_loader"]', base + '/core-archives/spip_loader.txt');
+await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').first().click()]);
+await page.waitForTimeout(600);
+
+// L'opération est refusée tant que le site géré ne l'a pas accordée.
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+dit('l’encadré du spip_loader est présent', (await page.locator('#loader').count()) === 1);
+page.once('dialog', (d) => d.accept());
+await page.locator('#loader form.bouton_action_post button').first().click();
+await page.waitForLoadState('domcontentloaded').catch(() => {});
+await page.waitForTimeout(1500);
+dit('le dépôt est refusé tant que le site ne l’autorise pas',
+	/désactivée|autoris/i.test(await page.locator('body').innerText())
+		&& !existsSync(site + '/spip_loader.php'),
+	existsSync(site + '/spip_loader.php') ? 'fichier déposé malgré le refus' : 'refus');
+
+// Accordée, l'opération dépose le fichier à la racine.
+await page.goto(base + '/ecrire/?exec=configurer_dashagent', { waitUntil: 'domcontentloaded' });
+await page.check('[name="op_loader"]').catch(() => {});
+await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').last().click()]);
+await page.waitForTimeout(600);
+
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await page.locator('[data-dashboard-loader-etat]').click();
+await page.waitForTimeout(2000);
+dit('l’état du spip_loader distant est lisible',
+	/Présent/.test(await page.locator('#loader [data-loader-bloc="etat"]').innerText()),
+	(await page.locator('#loader [data-loader-bloc="etat"]').innerText()).replace(/\s+/g, ' ').trim());
+
+page.once('dialog', (d) => d.accept());
+await page.locator('#loader form.bouton_action_post button').first().click();
+await page.waitForLoadState('domcontentloaded').catch(() => {});
+await page.waitForTimeout(2500);
+dit('spip_loader.php est déposé à la racine du site', existsSync(site + '/spip_loader.php'));
+dit('la version déposée est annoncée',
+	/3\.1\.2/.test(await page.locator('body').innerText()),
+	(await page.locator('.reponse_formulaire').first().innerText().catch(() => '—')).trim());
+dit('le dépôt revient sous son encadré', page.url().includes('#loader'), page.url());
+
+// Un second dépôt met l'ancien de côté plutôt que de l'effacer.
+page.once('dialog', (d) => d.accept());
+await page.locator('#loader form.bouton_action_post button').first().click();
+await page.waitForLoadState('domcontentloaded').catch(() => {});
+await page.waitForTimeout(2500);
+dit('l’ancien spip_loader est conservé',
+	readdirSync(site).some((n) => /^\.spip_loader\.php\.dashagent-\d{14}$/.test(n)),
+	readdirSync(site).filter((n) => /spip_loader/.test(n)).join(', '));
+
+// Et ce qui n'est pas un spip_loader ne s'installe pas.
+writeFileSync(site + '/core-archives/faux.txt', "<?php\nunlink(__FILE__);\n");
+await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
+await page.fill('[name="url_spip_loader"]', base + '/core-archives/faux.txt');
+await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').first().click()]);
+await page.waitForTimeout(600);
+const avantFaux = readFileSync(site + '/spip_loader.php', 'utf8');
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+page.once('dialog', (d) => d.accept());
+await page.locator('#loader form.bouton_action_post button').first().click();
+await page.waitForLoadState('domcontentloaded').catch(() => {});
+await page.waitForTimeout(2000);
+dit('un fichier qui n’est pas un spip_loader est refusé',
+	readFileSync(site + '/spip_loader.php', 'utf8') === avantFaux
+		&& /ressemble|PHP/i.test(await page.locator('body').innerText()),
+	(await page.locator('.reponse_formulaire').first().innerText().catch(() => '—')).trim());
 
 console.log('\n### Restauration du dump');
 try {

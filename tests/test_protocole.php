@@ -75,6 +75,29 @@ $GLOBALS['dashagent_config_test']['ips_autorisees'] = '198.51.100.0/25';
 verifier('masque non aligné sur un octet : intérieur', dashagent_ip_autorisee('198.51.100.127'));
 verifier('masque non aligné sur un octet : extérieur', !dashagent_ip_autorisee('198.51.100.128'));
 
+echo "\n== Ce qu’on accepte de déposer comme spip_loader ==\n";
+
+/* Le fichier atterrit à la racine web, là où n'importe qui peut l'appeler, et
+   il sait installer SPIP. Une erreur d'adresse ou un miroir détourné ne doit pas
+   pouvoir y déposer un PHP quelconque. */
+$loader = "<?php\n// spip_loader.php\n\$spip_loader_version = '3.1.2';\necho 'SPIP';\n";
+verifier('un spip_loader ordinaire est accepté', dashagent_loader_conforme($loader)['ok']);
+verifier('sa version est relevée', dashagent_loader_version($loader) === '3.1.2',
+	dashagent_loader_version($loader));
+verifier('un fichier vide est refusé', !dashagent_loader_conforme('')['ok']);
+verifier('du HTML est refusé', !dashagent_loader_conforme('<html><body>404</body></html>')['ok']);
+verifier('du PHP qui ne parle pas de SPIP est refusé',
+	!dashagent_loader_conforme("<?php\nunlink(__FILE__);\n")['ok'],
+	dashagent_loader_conforme("<?php\nunlink(__FILE__);\n")['erreur']);
+verifier('un PHP démesuré est refusé',
+	!dashagent_loader_conforme("<?php // spip_loader SPIP\n" . str_repeat('x', 2 * 1024 * 1024))['ok']);
+/* Le script officiel n'annonce pas toujours sa version ; cela ne le disqualifie
+   pas, l'absence se dit simplement à l'écran. */
+verifier('un spip_loader sans version reste acceptable',
+	dashagent_loader_conforme("<?php\n// spip_loader pour SPIP\n")['ok']);
+verifier('une version absente rend une chaîne vide',
+	dashagent_loader_version("<?php\n// spip_loader pour SPIP\n") === '');
+
 echo "\n== Adresse de l'appelant ==\n";
 
 /* Cette valeur est enregistrée au journal d'une requête *refusée*, donc non
@@ -459,6 +482,31 @@ foreach (['_DASHAGENT_ARCHIVES_HTTP', 'smtp.exemple.org', "'delai' => '30'", '_D
 verifier('les noms des constantes restent visibles',
 	strpos($masque, '_SMTP_PASSWORD') !== false && strpos($masque, 'STRIPE_SECRET') !== false);
 verifier('l’hôte du miroir reste lisible', strpos($masque, 'archives.test') !== false, $masque);
+
+echo "\n== Autorisations des nouvelles opérations ==\n";
+
+/* Lire le pare-feu, c'est lire qui a été bloqué : une donnée de sécurité qui
+   nomme des visiteurs. Remplacer le spip_loader, c'est déposer à la racine web
+   un script qui installe ce qu'on lui dit. Ni l'une ni l'autre ne se déduit
+   d'une autorisation déjà accordée. */
+$GLOBALS['dashagent_config_test'] = [];
+verifier('waf_resume refusé par défaut', !dashagent_operation_autorisee('waf_resume'));
+verifier('loader_etat refusé par défaut', !dashagent_operation_autorisee('loader_etat'));
+verifier('loader_maj refusé par défaut', !dashagent_operation_autorisee('loader_maj'));
+
+$GLOBALS['dashagent_config_test'] = ['op_serveur' => 'on', 'op_core_maj' => 'on', 'op_plugin_maj' => 'on'];
+verifier('consulter le serveur n’ouvre pas le pare-feu', !dashagent_operation_autorisee('waf_resume'));
+verifier('mettre à jour le core n’ouvre pas le spip_loader', !dashagent_operation_autorisee('loader_maj'));
+
+$GLOBALS['dashagent_config_test'] = ['op_waf' => 'on'];
+verifier('waf_resume s’accorde à part', dashagent_operation_autorisee('waf_resume'));
+verifier('et n’ouvre rien d’autre', !dashagent_operation_autorisee('loader_maj')
+	&& !dashagent_operation_autorisee('serveur_table'));
+
+$GLOBALS['dashagent_config_test'] = ['op_loader' => 'on'];
+verifier('les deux opérations du loader vont ensemble',
+	dashagent_operation_autorisee('loader_etat') && dashagent_operation_autorisee('loader_maj'));
+$GLOBALS['dashagent_config_test'] = [];
 
 echo "\n== Fichiers consultables ==\n";
 

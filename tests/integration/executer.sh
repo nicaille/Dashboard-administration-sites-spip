@@ -256,6 +256,45 @@ for garde in config IMG local squelettes plugins; do
 	echo "temoin-$garde" > "$SITE/$garde/temoin-dashboard.txt"
 done
 
+# Le plugin SPIP WAF n'est pas livré ici — c'est une contribution tierce, et le
+# dépôt n'a pas à en porter une copie. Quand on lui en donne une, le parcours
+# vérifie aussi l'onglet qui lit son tableau de bord ; sinon il le saute et le
+# dit. Usage : WAF_ZIP=/chemin/waf-vX.Y.Z.zip tests/integration/executer.sh …
+if [ -n "${WAF_ZIP:-}" ] && [ -f "$WAF_ZIP" ]; then
+	echo "== Installation du plugin SPIP WAF"
+	unzip -qo "$WAF_ZIP" -d "$SITE/plugins"
+	dossier_waf="$(find "$SITE/plugins" -maxdepth 1 -name 'waf*' -type d | head -1)"
+	cat > "$SITE/zz-waf.php" <<'PHPEOF'
+<?php
+use function SpipLeague\Component\Kernel\param;
+require_once __DIR__ . '/vendor/autoload.php';
+include_once param('spip.dirs.core') . 'inc_version.php';
+include_spip('inc/plugin');
+include_spip('inc/meta');
+include_spip('base/create');
+include_spip('base/abstract_sql');
+header('Content-Type: text/plain; charset=utf-8');
+$dossiers = [];
+foreach ((array) glob(_DIR_PLUGINS . 'waf*', GLOB_ONLYDIR) as $chemin) {
+	$dossiers[] = basename($chemin) . '/';
+}
+ecrire_plugin_actifs($dossiers, false, 'ajoute');
+lire_metas();
+plugin_installes_meta();
+lire_metas();
+// La table n'est créée qu'une fois le registre des tables peuplé : le premier
+// passage active le plugin, le second seulement peut la créer.
+maj_tables(['spip_waf_events']);
+$tables = (array) sql_alltable('%');
+echo in_array('spip_waf_events', $tables, true) ? "WAF_PRET\n" : "WAF_INCOMPLET\n";
+PHPEOF
+	for _ in 1 2 3; do
+		curl -s --noproxy '*' "$BASE/zz-waf.php" | grep -q WAF_PRET && break
+	done
+	rm -f "$SITE/zz-waf.php"
+	echo "   plugin WAF : ${dossier_waf:-?}"
+fi
+
 echo "== Parcours fonctionnel"
 BASE_URL="$BASE" SITE_DIR="$SITE" TRAVAIL_DIR="$TRAVAIL" CORE_CIBLE="$CORE_CIBLE" BASE_CIBLE="$BASE_CIBLE" node "$TRAVAIL/scenario.mjs"
 CODE=$?

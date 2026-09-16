@@ -83,6 +83,22 @@ l'index du dépôt**, casse comprise, et à défaut d'index les noms d'usage son
 essayés auprès du serveur avant qu'une mise à jour ne s'engage. Voir
 [docs/exploitation.md](docs/exploitation.md#doù-vient-ladresse-de-larchive).
 
+## Deux lectures de plus, chacune sous son autorisation
+
+**L'onglet SPIP WAF** apparaît sur la fiche d'un site qui a le plugin, et
+seulement là : requêtes bloquées, motifs, bannissements, journal paginé. Ce
+n'est pas la page du plugin recopiée — ses sections se chargent en AJAX, et
+accueillir ici le balisage d'un site qui peut être compromis n'était pas
+envisageable. L'agent rend les données, le tableau de bord les redessine.
+
+**Le spip_loader.php** vit à la racine web, hors de l'arborescence que remplace
+une mise à jour du core : il vieillit sans que rien ne le signale. Un encadré en
+donne l'état et le renouvelle depuis `get.spip.net`. Le contenu téléchargé est
+contrôlé avant d'être écrit, et l'ancien fichier conservé.
+
+Les deux sont refusées par défaut, sous des autorisations distinctes qu'aucune
+autre n'ouvre.
+
 ## Consulter l'état d'un serveur
 
 Un onglet *Serveur* donne, pour un site géré : le résumé de PHP et de la base,
@@ -100,7 +116,7 @@ Ce qui reste exposé malgré tout est décrit dans [docs/securite.md](docs/secur
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/dashboard-1.0.17`, `plugins/dashboard_agent-1.0.13`. Ce n'est pas
+`plugins/dashboard-1.0.18`, `plugins/dashboard_agent-1.0.14`. Ce n'est pas
 décoratif : en déposant la nouvelle version **à côté** de l'ancienne plutôt que
 par-dessus, on évite le travers classique de la mise en ligne par FTP, où les
 fichiers supprimés entre deux versions survivent dans le dossier écrasé et
