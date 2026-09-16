@@ -268,6 +268,31 @@ await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded
 dit('plus de catalogue périmé après le tour du parc',
 	(await page.locator('#depots.dashboard-depots-perimes').count()) === 0,
 	(await page.locator('#depots').innerText()).replace(/\s+/g, ' ').trim());
+// Un second tour, sur un catalogue qui n'a pas changé depuis le premier. C'est
+// le cas qui figeait le parc : SVP réécrit alors le même `sha_paquets` en
+// comptant sur ON UPDATE CURRENT_TIMESTAMP pour dater le dépôt, ce que MySQL ne
+// fait pas quand l'UPDATE n'altère rien. Le dépôt restait « à relire », et le
+// navigateur redemandait le même site sans fin.
+//
+// Le dépôt est vieilli d'abord : sans cela il a moins d'une minute et le
+// plancher de fraîcheur le déclare à jour, si bien que rien ne serait relu.
+// Ce banc tourne sur SQLite, où SPIP date la ligne de lui-même : le test
+// n'oppose donc pas les deux moteurs, il vérifie l'invariant qui compte —
+// après un tour, le dépôt est daté, et le tour s'achève.
+sqlEcrire("UPDATE spip_depots SET maj = datetime('now', '-2 days')");
+await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+const avantSecondTour = JSON.parse(sql('SELECT maj FROM spip_depots ORDER BY id_depot LIMIT 1'))[0].maj;
+await page.locator('[data-dashboard-depots-parc]').click();
+await page.waitForFunction(() => /Termin|suivant/.test(
+	(document.querySelector('.dashboard-depots-avancement') || {}).textContent || ''), null, { timeout: 60000 }).catch(() => {});
+await page.waitForTimeout(2500);
+const apresSecondTour = JSON.parse(sql('SELECT maj FROM spip_depots ORDER BY id_depot LIMIT 1'))[0].maj;
+dit('un catalogue inchangé est daté quand même',
+	apresSecondTour !== avantSecondTour, avantSecondTour + ' → ' + apresSecondTour);
+dit('le dépôt n’est plus annoncé à relire',
+	(await page.locator('#depots.dashboard-depots-perimes').count()) === 0,
+	(await page.locator('#depots').innerText()).replace(/\s+/g, ' ').trim());
+
 dit('le compte du parc reste celui des sites',
 	(await page.locator('.dashboard-synthese li').last().innerText()).trim().startsWith(
 		String(JSON.parse(sql('SELECT SUM(nb_plugins_maj) AS n FROM spip_dashboard_sites'))[0].n)),
