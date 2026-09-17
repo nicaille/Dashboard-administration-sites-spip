@@ -1,0 +1,80 @@
+# Publie le dépôt SVP des plugins sur GitHub Pages.
+#
+# La publication ne suit pas les commits : elle suit un geste. Pousser sur `main`
+# ne change rien pour le parc ; poser un tag, ou lancer ce workflow à la main
+# depuis l'onglet Actions, publie l'état de `plugins/` à ce commit.
+#
+# Le nom du tag n'est qu'une étiquette : le dépôt publie toujours tous les
+# plugins présents, chacun à la version que porte son dossier. Tagger
+# `dashboard-1.0.19` ne publie donc pas que `dashboard`.
+#
+# Avant de publier, les trois suites de tests doivent passer : un dépôt est lu
+# par tout le parc, et une erreur y est bien plus coûteuse qu'ailleurs.
+name: Publier le dépôt de plugins
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - 'dashboard-*'
+      - 'dashagent-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Deux publications simultanées se marcheraient dessus. On ne coupe pas celle
+# qui est en cours : elle est peut-être déjà en train de déployer.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publier:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploiement.outputs.page_url }}
+    steps:
+      - name: Récupérer le dépôt git
+        uses: actions/checkout@v4
+        with:
+          # Les archives sont horodatées sur la date du dernier commit touchant
+          # chaque plugin : sans l'historique, `git log` ne rend rien.
+          fetch-depth: 0
+
+      - name: Installer PHP
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq php-cli php-zip
+
+      - name: Tests du protocole
+        run: php tests/test_protocole.php
+
+      - name: Tests de structure
+        run: php tests/test_structure.php
+
+      - name: Tests du dépôt
+        run: php tests/test_depot.php
+
+      # Donne l'URL publique du site Pages, dont le catalogue a besoin : elle y
+      # figure en toutes lettres, puisque SVP télécharge les archives en
+      # concaténant `url_archives` et le nom du fichier.
+      - name: Préparer GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Fabriquer le dépôt
+        run: php outils/generer-depot.php --url=${{ steps.pages.outputs.base_url }} --vers=_depot
+
+      - name: Téléverser le dépôt
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _depot
+
+      - name: Déployer
+        id: deploiement
+        uses: actions/deploy-pages@v4
+
+      - name: Rappeler l’adresse à déclarer dans SVP
+        run: echo 'Dépôt publié — à coller dans SVP ci-dessous' && echo "${{ steps.deploiement.outputs.page_url }}plugins.xml"

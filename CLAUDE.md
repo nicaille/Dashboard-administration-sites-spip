@@ -56,6 +56,38 @@ fichiers :
 Le code des plugins, lui, ne doit jamais mentionner son propre nom de dossier.
 SPIP fournit `_DIR_PLUGIN_<PREFIXE>` pour cela.
 
+## Le dépôt SVP se fabrique, il ne s'écrit pas à la main
+
+`outils/generer-depot.php` produit le catalogue et les archives que publie
+`.github/workflows/depot.yml` sur GitHub Pages. Trois règles que SVP impose et
+qu'aucun message d'erreur n'explique — `tests/test_depot.php` les vérifie :
+
+- **Le catalogue n'a pas de racine unique** : `<depot>` et `<archives>` sont deux
+  blocs frères. SVP le lit à l'expression régulière (`svp_phraser_depot()`),
+  jamais avec un analyseur XML. Passer par `DOMDocument` produirait une racine
+  englobante et un dépôt inajoutable.
+- **`<type>http</type>` désigne le téléporteur**, et lui seul fait télécharger
+  l'archive à `url_archives` + `/` + `<file>` — d'où une `url_archives` **sans**
+  barre oblique finale.
+- **Le zip a une racine unique, du nom du préfixe** : le téléporteur la retire au
+  déballage et range le reste dans `plugins/auto/<prefixe>/v<version>`.
+
+Et un piège qui ne se voit qu'à l'usage : avant de demander le catalogue, SVP
+sonde `plugins.thin.spip-<branche>.xml` puis `plugins.thin.xml`
+(`svp_depoter_distant_copie_xml_paquets()`). **Un hébergement qui répond 200 à un
+fichier absent** — le serveur intégré de PHP sert `index.html` — fait lire cette
+page en guise de catalogue, pour un laconique « le fichier XML n'est pas
+conforme ». GitHub Pages répond bien 404 ; on publie tout de même
+`plugins.thin.xml`.
+
+La règle du dossier versionné se vérifie là où elle compte : le générateur
+**refuse de publier** un dossier dont le nom ne s'accorde pas avec la version de
+son `paquet.xml`.
+
+La publication suit un geste, jamais un commit : un tag, ou le workflow lancé à
+la main. Le nom du tag n'est qu'une étiquette — le dépôt publie tous les plugins
+présents, chacun à la version de son dossier.
+
 ## L'habillage est celui du privé, pas le nôtre
 
 Le thème de l'espace privé habille déjà tout ce dont ces squelettes ont besoin.
@@ -155,6 +187,7 @@ valeur d'attribut qui s'ouvre sur une parenthèse littérale.
 ```bash
 php tests/test_protocole.php    # protocole, masquage, chantiers
 php tests/test_structure.php    # manifestes, tables, contrat d'API, squelettes
+php tests/test_depot.php        # catalogue SVP et archives publiées
 ```
 
 Le parcours sur SPIP réel (`tests/integration/executer.sh`) est à relancer dès

@@ -146,6 +146,25 @@ version s'installe à côté, dans un dossier qui porte son numéro —
 `saisies-6.3.6`. Le nom du dossier retenu est repris au journal. Voir
 [docs/exploitation.md](docs/exploitation.md#mettre-à-jour-les-plugins).
 
+## Diffuser les plugins par un dépôt SVP
+
+Copier les deux dossiers à la main sur chaque site fonctionne, et devient une
+corvée passé quelques sites. Un **dépôt SVP** — un catalogue XML et des archives,
+servis en statique sur GitHub Pages — permet à chaque site géré de déclarer une
+adresse une fois pour toutes, puis de recevoir les nouvelles versions comme
+celles de n'importe quel plugin de `plugins.spip.net`.
+
+La publication ne suit pas les commits, elle suit un geste : poser un tag, ou
+lancer le workflow *Publier le dépôt de plugins* depuis l'onglet Actions. Pousser
+sur `main` ne change rien pour le parc.
+
+```bash
+php outils/generer-depot.php --url=https://exemple.org/depot --vers=_depot
+```
+
+Le détail — format du catalogue, pièges de SVP, adresse à déclarer sur un site
+géré — est dans [docs/depot.md](docs/depot.md).
+
 ## Installation rapide
 
 1. Copier `plugins/dashboard-<version>` dans le `plugins/` du site tour de contrôle, l'activer.
@@ -167,17 +186,19 @@ Le détail est dans [docs/installation.md](docs/installation.md).
 - [Protocole d'API](docs/protocole-api.md) — opérations, signature, codes d'erreur
 - [Sécurité](docs/securite.md) — modèle de menace et garde-fous
 - [Exploitation](docs/exploitation.md) — usage quotidien, sauvegardes, restauration, dépannage
+- [Dépôt de plugins](docs/depot.md) — diffuser les deux plugins au parc par SVP
 
 ## Tests
 
 ### Sans installation SPIP
 
 ```bash
-php tests/test_protocole.php   # 166 vérifications : signature partagée, filtrage IP,
+php tests/test_protocole.php   # 280 vérifications : signature partagée, filtrage IP,
                                # validation des archives, masquage des identifiants,
                                # enchaînement des étapes d'un chantier
-php tests/test_structure.php   # 232 vérifications : manifestes, tables, autorisations,
+php tests/test_structure.php   # 277 vérifications : manifestes, tables, autorisations,
                                # API SPIP appelée, pièges de squelette, langue
+php tests/test_depot.php       # 32 vérifications : catalogue SVP, archives publiées
 ```
 
 La seconde attrape la classe d'erreurs qui ne se voit sinon qu'à l'installation
