@@ -2,8 +2,8 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/dashboard-1.0.18`,
-`plugins/dashboard_agent-1.0.14`.
+`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.19`,
+`plugins/tourdecontrole_agent-1.0.15`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
 dans le même commit que le changement de `version=` dans son `paquet.xml`. Un
@@ -49,12 +49,84 @@ chemin complet — autrement chaque montée de version casserait une dizaine de
 fichiers :
 
 - `tests/bootstrap.php` et `tests/test_structure.php` : fonction
-  `chemin_plugin('dashboard')`, qui prend la version la plus élevée ;
-- `tests/integration/executer.sh` : `plugins/dashboard-*` au glob ;
-- `README.md` et `docs/` : écrire `plugins/dashboard-<version>`.
+  `chemin_plugin('tourdecontrole')`, qui prend la version la plus élevée ;
+- `tests/integration/executer.sh` : `plugins/tourdecontrole-*` au glob ;
+- `README.md` et `docs/` : écrire `plugins/tourdecontrole-<version>`.
 
 Le code des plugins, lui, ne doit jamais mentionner son propre nom de dossier.
 SPIP fournit `_DIR_PLUGIN_<PREFIXE>` pour cela.
+
+## Le préfixe d'un plugin n'est pas le préfixe de ses fonctions
+
+Les deux plugins ont changé de préfixe en 1.0.19 et 1.0.15 — `dashboard` était
+déjà pris par un autre plugin SPIP, et SVP indexe par préfixe **tous dépôts
+confondus** : il aurait fini par proposer l'un pour l'autre.
+
+Ce que SPIP dérive du préfixe, et qu'il faut donc renommer avec lui :
+
+- les fichiers `<prefixe>_fonctions.php`, `<prefixe>_options.php`,
+  `<prefixe>_administrations.php`, que SPIP charge tout seul pour les plugins
+  actifs ;
+- les fonctions `<prefixe>_upgrade()` et `<prefixe>_vider_tables()` ;
+- **les fonctions de pipeline** : `<prefixe>_autoriser()`,
+  `<prefixe>_declarer_tables_*()`, `<prefixe>_taches_generales_cron()`. Le
+  `inclure=` du `paquet.xml` dit dans quel fichier chercher, jamais comment la
+  fonction s'appelle ;
+- la meta de version de schéma `<prefixe>_base_version` — d'où
+  `dashboard_reprendre_schema()`, sans quoi SPIP croit le plugin neuf et rejoue
+  toutes ses migrations sur une base déjà à jour ;
+- le module de langue du manifeste `lang/paquet-<prefixe>_XX.php`, et ses clefs
+  `<prefixe>_nom`, `<prefixe>_slogan`, `<prefixe>_description`.
+
+Ce que SPIP ne dérive de rien, et qui a donc gardé son nom : **les fonctions
+internes et les filtres de squelette** (`dashboard_*`, `dashagent_*`), **les noms
+de tables** (`spip_dashboard_sites`), **les chemins de configuration**
+(`lire_config('dashboard/…')`) et **les modules de langue ordinaires**
+(`<:dashboard:clef:>`, qui tiennent au nom du fichier). Les renommer aurait
+touché deux cents fonctions et les tables — donc les données des sites déjà
+installés — pour un gain nul.
+
+`tests/test_structure.php` porte cette distinction dans son tableau
+`$familles` : préfixe du plugin d'un côté, famille de fonctions de l'autre. Sans
+lui, il cherchait `|tourdecontrole_…` dans les squelettes, n'en trouvait aucun,
+et **passait au vert en ayant cessé de vérifier trente-six filtres**. Un test qui
+perd son sujet ne le dit pas : quand un renommage fait tomber le nombre de
+vérifications, c'est là qu'il faut regarder.
+
+Un underscore dans un préfixe ne pose aucun problème — `porte_plume`, livré avec
+SPIP, en porte un.
+
+## Le dépôt SVP se fabrique, il ne s'écrit pas à la main
+
+`outils/generer-depot.php` produit le catalogue et les archives que publie
+`.github/workflows/depot.yml` sur GitHub Pages. Trois règles que SVP impose et
+qu'aucun message d'erreur n'explique — `tests/test_depot.php` les vérifie :
+
+- **Le catalogue n'a pas de racine unique** : `<depot>` et `<archives>` sont deux
+  blocs frères. SVP le lit à l'expression régulière (`svp_phraser_depot()`),
+  jamais avec un analyseur XML. Passer par `DOMDocument` produirait une racine
+  englobante et un dépôt inajoutable.
+- **`<type>http</type>` désigne le téléporteur**, et lui seul fait télécharger
+  l'archive à `url_archives` + `/` + `<file>` — d'où une `url_archives` **sans**
+  barre oblique finale.
+- **Le zip a une racine unique, du nom du préfixe** : le téléporteur la retire au
+  déballage et range le reste dans `plugins/auto/<prefixe>/v<version>`.
+
+Et un piège qui ne se voit qu'à l'usage : avant de demander le catalogue, SVP
+sonde `plugins.thin.spip-<branche>.xml` puis `plugins.thin.xml`
+(`svp_depoter_distant_copie_xml_paquets()`). **Un hébergement qui répond 200 à un
+fichier absent** — le serveur intégré de PHP sert `index.html` — fait lire cette
+page en guise de catalogue, pour un laconique « le fichier XML n'est pas
+conforme ». GitHub Pages répond bien 404 ; on publie tout de même
+`plugins.thin.xml`.
+
+La règle du dossier versionné se vérifie là où elle compte : le générateur
+**refuse de publier** un dossier dont le nom ne s'accorde pas avec la version de
+son `paquet.xml`.
+
+La publication suit un geste, jamais un commit : un tag, ou le workflow lancé à
+la main. Le nom du tag n'est qu'une étiquette — le dépôt publie tous les plugins
+présents, chacun à la version de son dossier.
 
 ## L'habillage est celui du privé, pas le nôtre
 
@@ -155,6 +227,7 @@ valeur d'attribut qui s'ouvre sur une parenthèse littérale.
 ```bash
 php tests/test_protocole.php    # protocole, masquage, chantiers
 php tests/test_structure.php    # manifestes, tables, contrat d'API, squelettes
+php tests/test_depot.php        # catalogue SVP et archives publiées
 ```
 
 Le parcours sur SPIP réel (`tests/integration/executer.sh`) est à relancer dès

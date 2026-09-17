@@ -12,7 +12,7 @@
 $racine = dirname(__DIR__);
 
 /**
- * Les dossiers de plugins portent leur version (`dashboard-1.0.18`), pour qu'une
+ * Les dossiers de plugins portent leur version (`tourdecontrole-1.0.19`), pour qu'une
  * mise en ligne n'écrase pas la version précédente. On les retrouve donc par
  * préfixe, sans quoi ce fichier serait à retoucher à chaque montée de version.
  *
@@ -31,7 +31,32 @@ function chemin_plugin($prefixe) {
 	return end($trouves);
 }
 
-$plugins = [chemin_plugin('dashboard'), chemin_plugin('dashboard_agent')];
+$plugins = [chemin_plugin('tourdecontrole'), chemin_plugin('tourdecontrole_agent')];
+
+/**
+ * Famille de fonctions de chaque plugin, quand elle diffère de son préfixe.
+ *
+ * SPIP ne dérive du préfixe que ce qu'il va chercher lui-même : les fichiers
+ * `<prefixe>_fonctions.php`, `<prefixe>_options.php`,
+ * `<prefixe>_administrations.php`, les fonctions de pipeline
+ * `<prefixe>_autoriser()`, `<prefixe>_declarer_tables_*()`, la meta
+ * `<prefixe>_base_version` et le module de langue `paquet-<prefixe>`.
+ *
+ * Les fonctions internes, les filtres de squelette et les noms de tables ne sont
+ * dérivés de rien : ce sont des noms globaux, que SPIP trouve par leur nom. Les
+ * deux plugins ont donc gardé le leur — `dashboard_` et `dashagent_` — quand
+ * leur préfixe a changé en 1.0.19 et 1.0.15. Les renommer en masse aurait touché
+ * deux cents fonctions et le nom des tables, donc les données des sites
+ * installés, pour un gain nul.
+ *
+ * Ce tableau est ce qui permet au test de continuer à voir les filtres. Sans
+ * lui, il cherchait `|tourdecontrole_…` dans les squelettes, n'en trouvait
+ * aucun, et passait au vert en ayant cessé de vérifier trente-six filtres.
+ */
+$familles = [
+	'tourdecontrole'       => 'dashboard',
+	'tourdecontrole_agent' => 'dashagent',
+];
 
 $echecs = 0;
 $total  = 0;
@@ -250,9 +275,19 @@ foreach ($plugins as $plugin) {
 		"$nom_court : l’installation appelle {$prefixe}_creer_tables",
 		strpos($install, "{$prefixe}_creer_tables") !== false
 	);
+	/* Le préfixe a changé en 1.0.19 / 1.0.15, et SPIP nomme la meta de version de
+	   schéma d'après lui : sans reprise de l'ancienne, il croit le plugin neuf et
+	   rejoue toutes les migrations sur une base déjà à jour. */
+	verifier(
+		"$nom_court : l’installation reprend la version de schéma de l’ancien préfixe",
+		strpos($install, '_reprendre_schema($nom_meta_base_version)') !== false
+	);
+
+	// `tables_manquantes()` n'est pas dérivée du préfixe : c'est un utilitaire
+	// interne, donc il porte le nom de la famille de fonctions du plugin.
 	verifier(
 		"$nom_court : la création contrôle son résultat",
-		strpos($install, "{$prefixe}_tables_manquantes(") !== false
+		strpos($install, ($familles[$prefixe] ?? $prefixe) . '_tables_manquantes(') !== false
 	);
 
 	foreach ($declarees as $table) {
@@ -565,6 +600,7 @@ echo "\n== Filtres appelés par les squelettes ==\n";
 
 foreach ($plugins as $plugin) {
 	$prefixe = (string) simplexml_load_file($plugin . '/paquet.xml')['prefix'];
+	$famille = $familles[$prefixe] ?? $prefixe;
 	$fonctions = $plugin . '/' . $prefixe . '_fonctions.php';
 	$disponibles = '';
 	foreach (array_merge(glob($plugin . '/*_fonctions.php'), glob($plugin . '/inc/*.php')) as $fichier) {
@@ -572,7 +608,7 @@ foreach ($plugins as $plugin) {
 	}
 	foreach (fichiers($plugin, ['html']) as $squelette) {
 		$affiche = str_replace($plugin . '/', '', $squelette);
-		preg_match_all('/\|(' . $prefixe . '_[a-z0-9_]+)/', file_get_contents($squelette), $trouves);
+		preg_match_all('/\|(' . $famille . '_[a-z0-9_]+)/', file_get_contents($squelette), $trouves);
 		foreach (array_unique($trouves[1]) as $filtre) {
 			verifier("$affiche : filtre |$filtre défini", strpos($disponibles, "function $filtre(") !== false);
 		}
@@ -699,7 +735,7 @@ foreach ($inconnues as $nom => $ou) {
 }
 
 // Le diagnostic affiché à l’utilisateur doit couvrir la même surface.
-$fonctions = file_get_contents(chemin_plugin('dashboard') . '/dashboard_fonctions.php');
+$fonctions = file_get_contents(chemin_plugin('tourdecontrole') . '/tourdecontrole_fonctions.php');
 if (preg_match('/function dashboard_api_requise\(.*?\n}/s', $fonctions, $bloc)) {
 	preg_match_all("/'([a-z_][a-z0-9_]*)'/", $bloc[0], $t);
 	$declarees = array_diff($t[1], ['inc', 'action', 'base']);

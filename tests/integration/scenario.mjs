@@ -430,7 +430,7 @@ const dossierActif = execFileSync('php', ['-r',
 dit('SPIP a suivi le plugin dans son nouveau dossier', dossierActif === 'auto/zzztest/v1.0.1', dossierActif);
 
 const actifs = execFileSync('php', ['-r',
-	`$db=new SQLite3(getenv('BDD'));$k=array_keys(unserialize($db->querySingle('SELECT valeur FROM spip_meta WHERE nom="plugin"')));echo implode(',',array_intersect(['DASHBOARD','DASHAGENT','ZZZTEST'],$k));`,
+	`$db=new SQLite3(getenv('BDD'));$k=array_keys(unserialize($db->querySingle('SELECT valeur FROM spip_meta WHERE nom="plugin"')));echo implode(',',array_intersect(['TOURDECONTROLE','TOURDECONTROLE_AGENT','ZZZTEST'],$k));`,
 ], { env: { ...process.env, BDD: bdd } }).toString();
 dit('aucun plugin désactivé par la mise à jour', actifs.split(',').filter(Boolean).length === 3, actifs);
 
