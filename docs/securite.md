@@ -23,6 +23,8 @@ Ce qui est pris au sérieux :
 | Secret lisible dans la base | Chiffré avec le chiffrement du core SPIP quand il est disponible |
 | Site géré qui injecterait du code dans la tour de contrôle | Tout ce qui vient d'un agent est rendu inerte à l'enregistrement, et échappé à l'affichage |
 | Journal de l'agent empoisonné par un inconnu | L'adresse de l'appelant doit être une adresse IP, en-tête de proxy compris |
+| Fichier PHP quelconque déposé à la racine d'un site | Autorisation dédiée, refusée par défaut ; le contenu téléchargé doit être un spip_loader ; l'ancien est conservé |
+| Charge utile d'attaque relue depuis le pare-feu | Les données du WAF sont rendues par `textContent`, jamais comme du balisage |
 
 Ce qui n'est **pas** couvert :
 
@@ -110,6 +112,28 @@ Deux barrières, donc :
 Le `phpinfo()` d'un site, lui, est du HTML par nature : il est rendu dans une
 `<iframe sandbox>` d'origine opaque, où aucun script ne s'exécute. Tout le reste
 de l'onglet *Serveur* est construit par `textContent`, jamais par `innerHTML`.
+
+## Le spip_loader, et pourquoi il a son autorisation
+
+`spip_loader.php` installe ce qu'on lui dit d'installer. Déposé à la racine web,
+il est appelable par n'importe qui. C'est donc à la fois le fichier le plus utile
+à tenir à jour et le plus dangereux à remplacer à distance.
+
+Trois barrières, indépendantes :
+
+- **`op_loader`**, refusée par défaut et qu'aucune autre autorisation n'ouvre.
+  Un site peut accorder la mise à jour de son core sans accorder celle-ci ;
+- **le contrôle du contenu**, avant écriture : du PHP, moins d'un mégaoctet, et
+  les marques d'un spip_loader. Cela n'empêche pas un miroir hostile de servir un
+  spip_loader modifié — rien ne le pourrait sans signature —, mais cela exclut
+  qu'une erreur d'adresse ou une page d'erreur HTML se retrouve exécutable à la
+  racine d'un site ;
+- **https obligatoire**, des deux côtés : le tableau de bord refuse d'enregistrer
+  une adresse en clair, et l'agent refuse de la suivre.
+
+L'ancien fichier est renommé en `.spip_loader.php.dashagent-<horodatage>`. Le
+point initial le soustrait au balayage de SPIP et le rend non appelable sous son
+ancien nom.
 
 ## L'adresse de l'appelant, côté agent
 

@@ -307,6 +307,47 @@ Ces cinq opérations relèvent de l'autorisation `op_serveur`, refusée par déf
 Voir `docs/securite.md` pour ce qu'elles exposent et ce qui reste malgré tout
 visible.
 
+### `waf_resume`
+
+Autorisation : `op_waf`. Lit le tableau de bord du plugin SPIP WAF du site géré.
+
+Arguments : `debut`, `lot` (page du journal, 100 au plus), `type`, `ip`
+(filtres), `jours` (profondeur du résumé des motifs, 7 par défaut), `bans`
+(nombre de bannissements rendus).
+
+Retourne `present`, `version`, `vue_ensemble` (requêtes et adresses bloquées,
+part des règles et des listes noires), `bans`, `attaques` (motifs de la période
+avec requêtes et adresses distinctes), `journal` (`debut`, `lot`, `total`,
+`evenements`) et `reglages`.
+
+Aucune de ces valeurs n'est du HTML : les URI et les en-têtes d'agent enregistrés
+par le pare-feu contiennent volontiers du balisage, ils sont abrégés et rendus
+tels quels, à charge pour le client de les afficher comme du texte. Un site sans
+le plugin répond `ok: false` avec `raison: waf_absent`.
+
+L'opération commence par vider la file d'événements que le plugin tient en
+fichiers — sa propre page le fait aussi —, dans la limite de cinq secondes.
+
+### `loader_etat`
+
+Autorisation : `op_loader`. Décrit le `spip_loader.php` présent à la racine du
+site : `present`, `octets`, `modifie`, `version` (celle qu'il annonce, si tant
+est qu'il l'annonce), `racine_ecrit` et `fichier_ecrit`.
+
+### `loader_maj`
+
+Autorisation : `op_loader`. Télécharge un `spip_loader.php` et le dépose à la
+racine.
+
+Argument : `url` — https obligatoire, `https://get.spip.net/spip_loader.php` à
+défaut. Le contenu est contrôlé avant écriture : du PHP, moins d'un mégaoctet,
+portant les marques d'un spip_loader ; sinon l'opération échoue sans rien
+toucher. Le fichier en place est renommé `.spip_loader.php.dashagent-<date>`
+avant d'être remplacé, et remis si l'écriture échoue.
+
+Retourne `octets`, `sha256`, `version_avant`, `version_apres`, `sauvegarde` et
+l'`etat` d'après.
+
 ## Écrire un autre client
 
 Rien n'oblige à passer par le plugin dashboard. Un script suffit :

@@ -12,7 +12,7 @@
 $racine = dirname(__DIR__);
 
 /**
- * Les dossiers de plugins portent leur version (`dashboard-1.0.17`), pour qu'une
+ * Les dossiers de plugins portent leur version (`dashboard-1.0.18`), pour qu'une
  * mise en ligne n'écrase pas la version précédente. On les retrouve donc par
  * préfixe, sans quoi ce fichier serait à retoucher à chaque montée de version.
  *
@@ -607,6 +607,10 @@ $api_spip = [
 	// plugin proprement, dépendances comprises. Les classes Decideur et
 	// Actionneur ne passent pas par ici — seules les fonctions sont analysées.
 	'svp_actualiser_paquets_locaux', 'svp_actualiser_maj_version', 'svp_actualiser_depot',
+	// SPIP WAF, quand le site géré l'a installé. Son appel est gardé par un
+	// function_exists() : l'agent lit ses tables, et n'emprunte à son code que
+	// le vidage de la file d'événements, qu'on ne sait pas refaire soi-même.
+	'waf_flush_events',
 ];
 
 $definies = [];
