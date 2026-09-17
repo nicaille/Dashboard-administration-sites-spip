@@ -16,8 +16,10 @@ on:
   push:
     tags:
       - 'v*'
-      - 'dashboard-*'
-      - 'dashagent-*'
+      # Les deux préfixes en toutes lettres : « tourdecontrole-* » ne couvre pas
+      # « tourdecontrole_agent-1.0.15 », l'underscore n'étant pas un tiret.
+      - 'tourdecontrole-*'
+      - 'tourdecontrole_agent-*'
   workflow_dispatch:
 
 permissions:

@@ -198,7 +198,7 @@ php tests/test_protocole.php   # 295 vérifications : signature partagée, filtr
                                # enchaînement des étapes d'un chantier
 php tests/test_structure.php   # 279 vérifications : manifestes, tables, autorisations,
                                # API SPIP appelée, pièges de squelette, langue
-php tests/test_depot.php       # 32 vérifications : catalogue SVP, archives publiées
+php tests/test_depot.php       # 36 vérifications : catalogue SVP, archives publiées
 ```
 
 La seconde attrape la classe d'erreurs qui ne se voit sinon qu'à l'installation

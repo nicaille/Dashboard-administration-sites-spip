@@ -200,6 +200,41 @@ verifier('la page d’accueil existe', $accueil !== '');
 verifier("la page d’accueil donne l’adresse à coller dans SVP", strpos($accueil, $url . '/plugins.xml') !== false);
 
 /* --------------------------------------------------------------------------
+   Le workflow doit pouvoir se déclencher sur nos tags.
+   -------------------------------------------------------------------------- */
+
+/* Un motif de tag périmé ne casse rien : il ne se déclenche simplement jamais.
+   On pose le tag, le workflow ne part pas, et le parc attend une version qui
+   n'a jamais été publiée sans qu'aucune erreur ne s'affiche nulle part. C'est
+   arrivé au changement de préfixe, où les motifs nommaient encore
+   « dashboard-* » et « dashagent-* ». */
+$workflow = (string) @file_get_contents($racine . '/.github/workflows/depot.yml');
+verifier('le workflow de publication existe', $workflow !== '');
+
+if ($workflow !== '') {
+	$motifs = [];
+	if (preg_match('/^\s*tags:\s*$(.*?)^\s*\w+:/ms', $workflow, $bloc)) {
+		preg_match_all("/^\s*-\s*'([^']+)'/m", $bloc[1], $trouves);
+		$motifs = $trouves[1];
+	}
+	verifier('le workflow déclare des motifs de tag', (bool) $motifs, implode(', ', $motifs));
+
+	foreach ($prefixes as $prefixe) {
+		// Un tag plausible pour ce plugin : s'il n'est couvert par aucun motif,
+		// le poser ne publierait rien.
+		$tag = $prefixe . '-1.0.0';
+		$couvert = false;
+		foreach ($motifs as $motif) {
+			if (fnmatch($motif, $tag)) {
+				$couvert = true;
+				break;
+			}
+		}
+		verifier("un tag « $tag » déclencherait la publication", $couvert, implode(', ', $motifs));
+	}
+}
+
+/* --------------------------------------------------------------------------
    Le garde-fou : un dossier dont le nom ment sur sa version.
    -------------------------------------------------------------------------- */
 
