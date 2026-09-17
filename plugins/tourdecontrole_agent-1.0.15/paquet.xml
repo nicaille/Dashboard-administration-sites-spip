@@ -10,7 +10,7 @@
 	developpement="https://github.com/nicaille/Dashboard-administration-sites-spip"
 >
 
-	<nom>Dashboard : agent</nom>
+	<nom>Tour de contrôle : agent</nom>
 	<!-- Expose ce site à un tableau de bord d'administration de parc SPIP -->
 
 	<auteur lien="https://github.com/nicaille">Nicolas Villeroy</auteur>

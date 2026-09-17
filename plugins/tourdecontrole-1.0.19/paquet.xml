@@ -10,7 +10,7 @@
 	developpement="https://github.com/nicaille/Dashboard-administration-sites-spip"
 >
 
-	<nom>Dashboard d'administration de sites SPIP</nom>
+	<nom>Tour de contrôle d'un parc de sites SPIP</nom>
 	<!-- Superviser et maintenir un parc de sites SPIP depuis un seul site -->
 
 	<auteur lien="https://github.com/nicaille">Nicolas Villeroy</auteur>

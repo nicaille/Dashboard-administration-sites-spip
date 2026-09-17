@@ -109,7 +109,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'explication_tables_absentes' => 'This plugin’s tables do not exist in the database: its installation did not complete. The button below creates them directly.',
 	'explication_maintenance'  => 'Recreates missing tables, resets what SPIP remembers of the schema and clears compiled templates. No effect if everything is already in order.',
 	'explication_php'          => 'PHP extensions, libraries and other capabilities declared by this site. The dashboard inventories them without upgrading them: they come from the hosting, from SPIP itself or from the plugin providing them.',
-	'explication_url_agent'    => 'Entry point of the "Dashboard: agent" plugin on the managed site, shown on its settings page.',
+	'explication_url_agent'    => 'Entry point of the "Control tower: agent" plugin on the managed site, shown on its settings page.',
 	'explication_url_spip_loader' => 'The official script lives on <code>get.spip.net</code>. An internal mirror works too, provided it answers over https: this is a PHP file deployed at a site’s web root.',
 	'explication_versions_manuelles' => 'One line per branch, formatted <code>4.2 = 4.2.16</code>. These values take precedence over the official archive index.',
 
@@ -224,7 +224,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'titre_base_maj' => 'Database awaiting migration',
 	'titre_bilan' => 'Last operation',
 	'titre_chantier' => 'Operation in progress',
-	'titre_configurer'   => 'Dashboard: settings',
+	'titre_configurer'   => 'Control tower: settings',
 	'tables_manquantes'  => 'Missing tables:',
 	'titre_loader' => 'Installer script (spip_loader.php)',
 	'titre_serveur' => 'Server',

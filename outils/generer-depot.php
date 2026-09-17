@@ -251,8 +251,8 @@ if (!$archives) {
    — une racine englobante le ferait échouer. */
 $catalogue = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
 	. "<depot>\n"
-	. "\t<titre>Dashboard — administration de sites SPIP</titre>\n"
-	. "\t<descriptif>Les plugins du tableau de bord et de son agent.</descriptif>\n"
+	. "\t<titre>Tour de contrôle — administration d’un parc de sites SPIP</titre>\n"
+	. "\t<descriptif>Les plugins de la tour de contrôle et de son agent.</descriptif>\n"
 	// `http` désigne le téléporteur : SVP télécharge alors `url_archives` suivi
 	// du nom de l'archive. Les autres valeurs (`git`, `svn`) attendent un dépôt
 	// de sources, pas des zips.
@@ -291,7 +291,7 @@ file_put_contents($vers . '/index.html', <<<HTML
 <head>
 	<meta charset="utf-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1" />
-	<title>Dépôt de plugins — Dashboard SPIP</title>
+	<title>Dépôt de plugins — Tour de contrôle SPIP</title>
 	<style>
 		body { max-width: 42rem; margin: 3rem auto; padding: 0 1rem; line-height: 1.6;
 			font-family: system-ui, sans-serif; }

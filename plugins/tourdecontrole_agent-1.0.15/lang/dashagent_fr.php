@@ -1,5 +1,5 @@
 <?php
-// Fichier de langue du plugin « Dashboard : agent » — français
+// Fichier de langue du plugin « Tour de contrôle : agent » — français
 
 if (!defined('_ECRIRE_INC_VERSION')) {
 	return;
@@ -75,7 +75,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'secret_configure'       => 'Un secret partagé est configuré : l’agent est appairé.',
 
 	// T
-	'titre_configurer'  => 'Dashboard : agent',
+	'titre_configurer'  => 'Tour de contrôle : agent',
 	'titre_journal'     => 'Journal des requêtes',
 	'titre_sauvegardes' => 'Sauvegardes présentes sur ce site',
 ];

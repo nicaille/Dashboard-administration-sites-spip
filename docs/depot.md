@@ -35,7 +35,7 @@ racine englobante et un dépôt que personne ne pourrait ajouter.
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
 <depot>
-	<titre>Dashboard — administration de sites SPIP</titre>
+	<titre>Tour de contrôle — administration d’un parc de sites SPIP</titre>
 	<type>http</type>
 	<url_archives>https://…/archives</url_archives>
 </depot>

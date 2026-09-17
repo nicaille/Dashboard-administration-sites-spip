@@ -1,5 +1,5 @@
 <?php
-// Fichier de langue du plugin « Dashboard d'administration de sites SPIP » — français
+// Fichier de langue du plugin « Tour de contrôle d'un parc de sites SPIP » — français
 
 if (!defined('_ECRIRE_INC_VERSION')) {
 	return;
@@ -109,7 +109,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'explication_tables_absentes' => 'Les tables de ce plugin n’existent pas en base : son installation ne s’est pas terminée. Le bouton ci-dessous les crée directement.',
 	'explication_maintenance'  => 'Recrée les tables manquantes, réinitialise ce que SPIP a mémorisé du schéma et vide les squelettes compilés. Sans effet si tout est déjà en ordre.',
 	'explication_php'          => 'Extensions PHP, bibliothèques et autres capacités déclarées par ce site. Le tableau de bord les inventorie sans les mettre à jour : elles relèvent de l’hébergement, de SPIP lui-même ou du plugin qui les fournit.',
-	'explication_url_agent'    => 'Point d’entrée du plugin « Dashboard : agent » sur le site géré, affiché sur sa page de configuration.',
+	'explication_url_agent'    => 'Point d’entrée du plugin « Tour de contrôle : agent » sur le site géré, affiché sur sa page de configuration.',
 	'explication_url_spip_loader' => 'Le script officiel vit sur <code>get.spip.net</code>. Un miroir interne convient aussi, pourvu qu’il réponde en https : c’est un fichier PHP qu’on dépose à la racine web d’un site.',
 	'explication_versions_manuelles' => 'Une ligne par branche, au format <code>4.2 = 4.2.16</code>. Ces valeurs priment sur l’index des archives officielles.',
 
@@ -224,7 +224,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'titre_base_maj' => 'Base de données à migrer',
 	'titre_bilan' => 'Dernière opération',
 	'titre_chantier' => 'Opération en cours',
-	'titre_configurer'   => 'Dashboard : configuration',
+	'titre_configurer'   => 'Tour de contrôle : configuration',
 	'tables_manquantes'  => 'Tables manquantes :',
 	'titre_loader' => 'Script d’installation (spip_loader.php)',
 	'titre_serveur' => 'Serveur',

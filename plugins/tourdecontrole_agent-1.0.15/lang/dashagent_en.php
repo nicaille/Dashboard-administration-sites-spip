@@ -1,5 +1,5 @@
 <?php
-// Language file for the "Dashboard: agent" plugin — English
+// Language file for the "Control tower: agent" plugin — English
 
 if (!defined('_ECRIRE_INC_VERSION')) {
 	return;
@@ -75,7 +75,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'secret_configure'       => 'A shared secret is configured: the agent is paired.',
 
 	// T
-	'titre_configurer'  => 'Dashboard: agent',
+	'titre_configurer'  => 'Control tower: agent',
 	'titre_journal'     => 'Request log',
 	'titre_sauvegardes' => 'Backups held on this site',
 ];
