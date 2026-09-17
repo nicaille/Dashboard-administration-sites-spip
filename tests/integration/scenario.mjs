@@ -949,6 +949,17 @@ const apresSync = JSON.parse(sql('SELECT version_spip, infos FROM spip_dashboard
 dit('la synchronisation a rétabli un inventaire propre',
 	!/[<>]/.test(apresSync.version_spip) && !/<svg/.test(apresSync.infos), apresSync.version_spip);
 
+// Le lien public d'un site, dans le tableau du parc : ses parenthèses sortaient
+// telles quelles, et le navigateur relisait « (https://…) » comme une adresse
+// relative — le lien ramenait sur l'espace privé du parc.
+await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+const lienPublic = page.locator('a.dashboard-lien-public').first();
+if (await lienPublic.count()) {
+	const href = (await lienPublic.getAttribute('href')) || '';
+	dit('le lien public du parc est une vraie adresse',
+		/^https?:\/\//.test(href) && !/[()]/.test(href), href || 'vide');
+}
+
 console.log('\n### Onglet SPIP WAF');
 
 // Le plugin n'est pas livré avec ce dépôt : la section ne tourne que si le banc
@@ -1036,6 +1047,13 @@ await page.waitForTimeout(600);
 // L'opération est refusée tant que le site géré ne l'a pas accordée.
 await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
 dit('l’encadré du spip_loader est présent', (await page.locator('#loader').count()) === 1);
+// Un lien de navigation vers le script du site, pas une action : un `a`, qui
+// s'ouvre à côté. Son adresse se construit sur l'URL publique du site géré.
+const lienLoader = page.locator('#loader a.btn[target="_blank"]');
+dit('un lien mène au spip_loader du site',
+	(await lienLoader.count()) === 1
+		&& /\/spip_loader\.php$/.test((await lienLoader.getAttribute('href')) || ''),
+	(await lienLoader.getAttribute('href')) || 'absent');
 page.once('dialog', (d) => d.accept());
 await page.locator('#loader form.bouton_action_post button').first().click();
 await page.waitForLoadState('domcontentloaded').catch(() => {});

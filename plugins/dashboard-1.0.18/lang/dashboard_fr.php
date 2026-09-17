@@ -15,6 +15,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'action_depots_parc' => 'Relire les dépôts de tout le parc',
 	'action_loader_etat' => 'Voir l’état sur le site',
 	'action_loader_maj' => 'Déposer un spip_loader.php neuf',
+	'action_loader_ouvrir' => 'Ouvrir le spip_loader du site',
 	'action_maj'               => 'Mettre à jour',
 	'action_maj_tous'          => 'Tout mettre à jour (@nb@)',
 	'action_purger'            => 'Vider',

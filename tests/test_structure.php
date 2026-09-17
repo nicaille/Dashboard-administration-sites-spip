@@ -543,6 +543,21 @@ foreach ($plugins as $plugin) {
 				premiere_occurrence($balise, $commentaire)
 			);
 		}
+
+		// Une valeur d'attribut qui commence par « (# » : les parenthèses y sont
+		// du texte, et sortent telles quelles. C'est ce qui donnait
+		// href="(https://exemple.org/)", que le navigateur relit comme une
+		// adresse relative — le lien menait sur l'espace privé du parc.
+		//
+		// La cause est en amont : deux balises dans un même bloc optionnel. La
+		// dernière en est le sujet, la première n'est plus interprétée. Chaque
+		// balise a besoin de ses propres crochets, ou d'un #SET calculé à part.
+		$attribut = '/(?:href|src|action|data-[a-z-]+)\s*=\s*"\(#/';
+		verifier(
+			"$affiche : aucune valeur d’attribut ne s’ouvre sur une parenthèse littérale",
+			!preg_match($attribut, $source),
+			premiere_occurrence($attribut, $source)
+		);
 	}
 }
 

@@ -76,7 +76,16 @@
 			<th scope="row">
 				<a href="[(#URL_ECRIRE{dashboard_site,id_dashboard_site=#ID_DASHBOARD_SITE})]">#TITRE</a>
 				[<br /><span class="dashboard-groupe">(#GROUPE)</span>]
-				[<br /><a class="dashboard-lien-public" href="(#URL_SITE)" rel="noreferrer">(#URL_SITE|couper{48})</a>]
+				[(#REM)
+					Deux balises dans un même bloc optionnel : la dernière en est le
+					sujet, la première ressort telle quelle avec ses parenthèses —
+					d'où un href valant « (https://…/) », que le navigateur relit
+					comme une adresse relative. Chacune a désormais ses crochets.
+				]
+				#SET{url_publique,#URL_SITE}
+				[(#GET{url_publique}|oui)
+				<br /><a class="dashboard-lien-public" href="[(#GET{url_publique}|attribut_url)]" rel="noreferrer">[(#GET{url_publique}|couper{48})]</a>
+				]
 			</th>
 			<td class="dashboard-etat">
 				[(#ETAT|=={ok}|oui)<span class="dashboard-pastille dashboard-pastille-ok"></span>]

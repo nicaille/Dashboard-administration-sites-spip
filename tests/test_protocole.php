@@ -75,6 +75,26 @@ $GLOBALS['dashagent_config_test']['ips_autorisees'] = '198.51.100.0/25';
 verifier('masque non aligné sur un octet : intérieur', dashagent_ip_autorisee('198.51.100.127'));
 verifier('masque non aligné sur un octet : extérieur', !dashagent_ip_autorisee('198.51.100.128'));
 
+echo "\n== Adresse du spip_loader d’un site ==\n";
+
+/* Le script est à la racine web, là où pointe l'URL publique. Reste à joindre
+   les deux morceaux sans supposer qu'elle finit par une barre. */
+verifier('une adresse sans barre finale',
+	dashboard_url_loader('https://exemple.org') === 'https://exemple.org/spip_loader.php',
+	dashboard_url_loader('https://exemple.org'));
+verifier('une adresse avec barre finale',
+	dashboard_url_loader('https://exemple.org/') === 'https://exemple.org/spip_loader.php');
+verifier('un site dans un sous-répertoire',
+	dashboard_url_loader('https://exemple.org/dev/') === 'https://exemple.org/dev/spip_loader.php');
+verifier('la requête et l’ancre sont écartées',
+	dashboard_url_loader('https://exemple.org/dev/?page=x#ancre') === 'https://exemple.org/dev/spip_loader.php',
+	dashboard_url_loader('https://exemple.org/dev/?page=x#ancre'));
+/* Ce lien s'ouvre dans un nouvel onglet : il n'a pas à emmener ailleurs que sur
+   le site, ni à porter un pseudo-protocole. */
+verifier('une adresse vide ne donne pas de lien', dashboard_url_loader('') === '');
+verifier('javascript: est refusé', dashboard_url_loader('javascript:alert(1)') === '');
+verifier('un chemin relatif est refusé', dashboard_url_loader('/afcf/dev/') === '');
+
 echo "\n== Ce qu’on accepte de déposer comme spip_loader ==\n";
 
 /* Le fichier atterrit à la racine web, là où n'importe qui peut l'appeler, et

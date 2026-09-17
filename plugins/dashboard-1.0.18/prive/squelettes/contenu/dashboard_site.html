@@ -101,7 +101,7 @@
 	<h2><:dashboard:titre_etat:></h2>
 	<table class="spip">
 		<tbody>
-			<tr><th scope="row"><:dashboard:label_url_site:></th><td>[<a href="(#URL_SITE)" rel="noreferrer">(#URL_SITE)</a>]</td></tr>
+			<tr><th scope="row"><:dashboard:label_url_site:></th><td>[(#URL_SITE|oui)<a href="[(#URL_SITE|attribut_url)]" rel="noreferrer">[(#URL_SITE|entites_html)]</a>]</td></tr>
 			<tr><th scope="row"><:dashboard:label_url_agent:></th><td><code>[(#URL_AGENT|couper{90})]</code></td></tr>
 			<tr><th scope="row"><:dashboard:col_spip:></th><td>
 				[<code>(#VERSION_SPIP|entites_html)</code>]
@@ -407,8 +407,17 @@
 		de plus vers le site géré, pour une information qu'on ne consulte qu'au
 		moment d'agir. Même principe que l'onglet Serveur.
 	]
+	[(#REM)
+		Deux gestes distincts : relever l'état, qui interroge le site par le
+		protocole signé, et ouvrir le script chez lui, qui n'est qu'un lien de
+		navigation — donc un `a`, pas un formulaire d'action.
+	]
+	#SET{url_loader,#URL_SITE|dashboard_url_loader}
 	<p class="boutons">
 		<button type="button" class="btn btn_secondaire" data-dashboard-loader-etat><:dashboard:action_loader_etat:></button>
+		[(#GET{url_loader}|oui)
+		<a class="btn btn_secondaire" href="[(#GET{url_loader}|attribut_url)]" target="_blank" rel="noreferrer noopener"><:dashboard:action_loader_ouvrir:></a>
+		]
 	</p>
 	<div data-loader-bloc="etat"></div>
 	<p class="boutons">
