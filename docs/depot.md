@@ -97,15 +97,18 @@ La publication ne suit pas les commits, elle suit **un geste**. Pousser sur
 2. Poser un tag et le pousser :
 
    ```bash
-   git tag dashboard-1.0.19
-   git push origin dashboard-1.0.19
+   git tag tourdecontrole-1.0.19
+   git push origin tourdecontrole-1.0.19
    ```
+
+   Sur le web, c'est la page **Releases** du dépôt qui pose un tag : *Draft a
+   new release*, puis *Choose a tag* et saisir le nom pour le créer.
 
    ou, sans tag, lancer *Publier le dépôt de plugins* depuis l'onglet **Actions**
    de GitHub.
 
 Le nom du tag n'est qu'une étiquette : le dépôt publie **tous** les plugins
-présents, chacun à la version que porte son dossier. Tagger `dashboard-1.0.19`
+présents, chacun à la version que porte son dossier. Tagger `tourdecontrole-1.0.19`
 publie donc aussi l'agent, à sa version du moment.
 
 Le workflow passe les trois suites de tests avant de publier : un dépôt est lu
