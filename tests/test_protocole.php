@@ -401,7 +401,7 @@ verifier('http accepté une fois autorisé explicitement', dashboard_url_accepta
 echo "\n== URL des archives SPIP ==\n";
 
 $GLOBALS['dashboard_config_test'] = ['url_archives_spip' => 'https://files.spip.net/spip/archives/'];
-require_once chemin_plugin('dashboard') . '/inc/dashboard_versions.php';
+require_once chemin_plugin('tourdecontrole') . '/inc/dashboard_versions.php';
 
 /* L'index tel que le publie files.spip.net : le nom est en minuscules. Le
    déduire d'une convention supposée valait un « HTTP 404 » après la sauvegarde,
@@ -692,6 +692,48 @@ verifier('relire les dépôts ne sauvegarde pas pour rien',
 verifier('opération inconnue : aucune étape', dashboard_chantier_etapes('rm_rf') === []);
 verifier('opération inconnue : refusée', dashboard_chantier_operation_connue('rm_rf') === false);
 verifier('opération connue : acceptée', dashboard_chantier_operation_connue('core_maj') === true);
+
+echo "\n== Un silence n’est pas un verdict ==\n";
+
+/* Mettre à jour un plugin, c'est déplacer du code pendant qu'il s'exécute. Quand
+   ce plugin est l'agent lui-même, celui qui déplace est celui qui doit répondre :
+   la réponse peut ne jamais revenir alors que la mise à jour a réussi. Compter ce
+   silence pour un échec annoncerait perdue une opération aboutie. */
+verifier('une connexion qui n’aboutit pas est un silence',
+	dashboard_chantier_silence('transport'));
+verifier('une réponse qui n’est pas du JSON est un silence',
+	dashboard_chantier_silence('reponse_illisible'),
+	'un site en cours de mue sert sa page d’erreur, pas du JSON');
+
+/* La distinction est tout le sujet : un agent qui répond « verrou posé » a
+   délibéré, et sa réponse se respecte. */
+foreach (['svp_verrou', 'svp_absent', 'paquet_inconnu', 'dependance', 'autorisation', 'inconnue'] as $code) {
+	verifier("« $code » est une réponse, pas un silence", !dashboard_chantier_silence($code));
+}
+verifier('un code vide n’est pas un silence', !dashboard_chantier_silence(''));
+
+/* Le repli sur l'archive, lui, ne se déclenche que sur les deux refus qui disent
+   « je ne sais pas traiter ce plugin » — à ne pas confondre avec un silence. */
+verifier('un silence n’autorise pas le repli sur l’archive',
+	!dashboard_chantier_svp_repli('transport'),
+	'sans quoi on déploierait une archive par-dessus une mise à jour peut-être faite');
+verifier('SVP absent autorise le repli', dashboard_chantier_svp_repli('svp_absent'));
+
+/* L'état de l'étape voyage dans « reste », en clair : il est relu à chaque
+   avancement, et par le cron aussi bien que par le navigateur. */
+$reste = 'verif:3:1.0.14';
+[$essais, $version_avant] = array_pad(explode(':', substr($reste, 6), 2), 2, '');
+verifier('l’état de vérification porte son compte d’essais', (int) $essais === 3);
+verifier('l’état de vérification porte la version de départ', $version_avant === '1.0.14');
+
+/* Une version de départ inconnue ne doit pas décaler la lecture : le repli
+   archive pose « verif:1: » sans version, et le découpage doit tenir. */
+[$essais_vide, $version_vide] = array_pad(explode(':', substr('verif:1:', 6), 2), 2, '');
+verifier('une version de départ vide se relit sans décalage',
+	(int) $essais_vide === 1 && $version_vide === '');
+
+verifier('le plafond de silences laisse le temps à SPIP de se reprendre',
+	defined('_DASHBOARD_PLUGIN_SILENCES') && _DASHBOARD_PLUGIN_SILENCES >= 3);
 
 echo "\n== Fraîcheur d’un compte rendu ==\n";
 

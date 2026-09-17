@@ -20,7 +20,7 @@ if (!defined('_ECRIRE_INC_VERSION')) {
  * @param array $taches
  * @return array
  */
-function dashboard_taches_generales_cron($taches) {
+function tourdecontrole_taches_generales_cron($taches) {
 	include_spip('inc/dashboard_client');
 
 	$heures = max(1, (int) dashboard_config('sync_frequence', 6));

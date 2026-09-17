@@ -42,7 +42,7 @@ fi
 mkdir -p "$SITE/plugins" "$SITE/config/bases"
 # Les dossiers portent leur version : on les prend au glob plutôt que de
 # figer un numéro que la prochaine montée de version démentirait.
-cp -a "$RACINE"/plugins/dashboard-* "$RACINE"/plugins/dashboard_agent-* "$SITE/plugins/"
+cp -a "$RACINE"/plugins/tourdecontrole-* "$RACINE"/plugins/tourdecontrole_agent-* "$SITE/plugins/"
 chmod -R 777 "$SITE/tmp" "$SITE/local" "$SITE/config" "$SITE/IMG" "$SITE/plugins" 2>/dev/null
 fi
 
@@ -97,7 +97,7 @@ header('Content-Type: text/plain; charset=utf-8');
 // Les dossiers portent leur version : on les retrouve au glob plutôt que de
 // figer un numéro que la prochaine montée de version démentirait.
 $dossiers = [];
-foreach (['dashboard', 'dashboard_agent'] as $prefixe) {
+foreach (['tourdecontrole', 'tourdecontrole_agent'] as $prefixe) {
 	foreach ((array) glob(_DIR_PLUGINS . $prefixe . '-*', GLOB_ONLYDIR) as $chemin) {
 		$dossiers[] = basename($chemin) . '/';
 	}
@@ -107,7 +107,7 @@ lire_metas();
 plugin_installes_meta();
 lire_metas();
 $actifs = array_keys(unserialize($GLOBALS['meta']['plugin'] ?? '') ?: []);
-echo in_array('DASHBOARD', $actifs, true) && in_array('DASHAGENT', $actifs, true)
+echo in_array('TOURDECONTROLE', $actifs, true) && in_array('TOURDECONTROLE_AGENT', $actifs, true)
 	? "PLUGINS_ACTIFS\n" : "ECHEC : " . implode(',', $actifs) . "\n";
 PHPEOF
 # La toute première requête construit les caches de plugins ; la liste des

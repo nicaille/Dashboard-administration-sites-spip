@@ -70,7 +70,7 @@ function dashboard_schema_sites() {
  * @param array $tables
  * @return array
  */
-function dashboard_declarer_tables_objets_sql($tables) {
+function tourdecontrole_declarer_tables_objets_sql($tables) {
 	$tables['spip_dashboard_sites'] = [
 		'type'          => 'dashboard_site',
 		'principale'    => 'oui',
@@ -116,7 +116,7 @@ function dashboard_declarer_tables_objets_sql($tables) {
  * @param array $tables
  * @return array
  */
-function dashboard_declarer_tables_principales($tables) {
+function tourdecontrole_declarer_tables_principales($tables) {
 	// Déclarée ici en plus de declarer_tables_objets_sql : c'est le registre des
 	// tables principales que consulte maj_tables() au moment de créer la base.
 	$tables['spip_dashboard_sites'] = dashboard_schema_sites();
@@ -228,7 +228,7 @@ function dashboard_declarer_tables_principales($tables) {
  * @param array $interfaces
  * @return array
  */
-function dashboard_declarer_tables_interfaces($interfaces) {
+function tourdecontrole_declarer_tables_interfaces($interfaces) {
 	// L'objet « site géré » devrait se déclarer tout seul, mais le compilateur
 	// ne retrouve pas toujours le nom de boucle d'un type composé : on lui donne
 	// la correspondance explicitement. Redondant sur une installation saine,
@@ -251,9 +251,9 @@ function dashboard_declarer_tables_interfaces($interfaces) {
  *
  * @return array
  */
-function dashboard_descriptions_tables() {
+function tourdecontrole_descriptions_tables() {
 	return array_merge(
-		dashboard_declarer_tables_objets_sql([]),
-		dashboard_declarer_tables_principales([])
+		tourdecontrole_declarer_tables_objets_sql([]),
+		tourdecontrole_declarer_tables_principales([])
 	);
 }

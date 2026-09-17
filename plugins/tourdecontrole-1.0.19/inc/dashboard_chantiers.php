@@ -41,6 +41,23 @@ if (!defined('_DASHBOARD_CHANTIER_ABANDON')) {
 }
 
 /**
+ * Combien de fois redemander des nouvelles à un site devenu muet.
+ *
+ * Mettre à jour un plugin, c'est déplacer du code pendant qu'il s'exécute. Quand
+ * ce plugin est l'agent lui-même, celui qui déplace est celui qui doit répondre :
+ * la réponse peut ne jamais revenir alors même que la mise à jour a réussi.
+ * Compter ce silence pour un échec serait doublement faux — on annoncerait
+ * perdue une opération aboutie, et on pousserait à la refaire.
+ *
+ * Le silence n'est donc pas un verdict : on redemande, jusqu'à ce plafond. Six
+ * passages laissent largement le temps à SPIP de reconstituer sa liste de
+ * plugins, sans immobiliser le chantier si le site est vraiment tombé.
+ */
+if (!defined('_DASHBOARD_PLUGIN_SILENCES')) {
+	define('_DASHBOARD_PLUGIN_SILENCES', 6);
+}
+
+/**
  * Étapes de chaque opération, dans l'ordre.
  *
  * La sauvegarde ouvre toutes les listes sans exception : rien n'est remplacé
@@ -514,6 +531,14 @@ function dashboard_chantier_etape_plugin($chantier) {
 	// passage, puis « svp:<version d'avant> » une fois la file constituée sur le
 	// site géré — la version de départ, parce qu'après coup elle n'est plus
 	// lisible nulle part, et qu'un compte rendu sans elle ne dit rien.
+	// « verif:<essais>:<version d'avant> » : le site s'est taillé au milieu de la
+	// file, on lui redemande des nouvelles avant de juger quoi que ce soit.
+	if (strncmp($reste, 'verif:', 6) === 0) {
+		[$essais, $version_avant] = array_pad(explode(':', substr($reste, 6), 2), 2, '');
+
+		return dashboard_chantier_plugin_verifier($id_site, $prefixe, (string) $version_avant, (int) $essais);
+	}
+
 	if (strncmp($reste, 'svp:', 4) === 0) {
 		return dashboard_chantier_plugin_svp_avancer($id_site, $prefixe, substr($reste, 4));
 	}
@@ -541,7 +566,17 @@ function dashboard_chantier_etape_plugin($chantier) {
 	}
 
 	// SVP n'est pas en mesure de traiter ce plugin : l'archive reste le chemin.
+	// Elle déplace elle aussi du code en cours d'exécution, et se tait de la même
+	// façon quand ce code est celui de l'agent.
 	$reponse = dashboard_operation_plugin_maj($id_site, $prefixe);
+	if (empty($reponse['ok']) && dashboard_chantier_silence((string) ($reponse['code'] ?? ''))) {
+		return [
+			'ok'      => true,
+			'rester'  => true,
+			'reste'   => 'verif:1:',
+			'message' => $prefixe . ' : le site n’a pas répondu — vérification en cours',
+		];
+	}
 
 	return ['ok' => !empty($reponse['ok']), 'message' => (string) $reponse['message']];
 }
@@ -584,6 +619,18 @@ function dashboard_chantier_plugin_svp_avancer($id_site, $prefixe, $version_avan
 	$data    = (array) ($reponse['data'] ?? []);
 
 	if (empty($reponse['ok'])) {
+		// Le site n'a rien répondu — ce qui est exactement ce qu'on attend d'un
+		// agent en train de se remplacer lui-même. On ne conclut pas : on ira
+		// voir.
+		if (dashboard_chantier_silence((string) ($reponse['code'] ?? ''))) {
+			return [
+				'ok'      => true,
+				'rester'  => true,
+				'reste'   => 'verif:1:' . $version_avant,
+				'message' => $prefixe . ' : le site n’a pas répondu — vérification en cours',
+			];
+		}
+
 		dashboard_journaliser($id_site, 'plugin_maj', 'erreur', $prefixe . ' : ' . (string) $reponse['message'], $data);
 
 		return ['ok' => false, 'message' => $prefixe . ' : ' . (string) $reponse['message']];
@@ -610,6 +657,88 @@ function dashboard_chantier_plugin_svp_avancer($id_site, $prefixe, $version_avan
 	dashboard_synchroniser($id_site);
 
 	return ['ok' => true, 'reste' => '', 'message' => $message];
+}
+
+/**
+ * Cette erreur est-elle un silence, plutôt qu'une réponse ?
+ *
+ * La distinction décide de tout ce qui suit. Un agent qui **répond** « verrou
+ * SVP posé » ou « dépendance absente » a délibéré : sa réponse se respecte, et
+ * le chantier s'arrête là. Un agent qui ne répond pas n'a rien dit du tout.
+ *
+ * Deux façons de ne rien dire, et la seconde est la plus trompeuse :
+ *
+ * - `transport` : la connexion n'a pas abouti, ou a été coupée en route ;
+ * - `reponse_illisible` : quelque chose est revenu, mais pas du JSON. C'est la
+ *   signature d'un site en cours de mue — SPIP sert sa page d'erreur parce que
+ *   le dossier du plugin qui devait répondre vient d'être déplacé.
+ *
+ * @param string $code Code d'erreur rendu par le client
+ * @return bool
+ */
+function dashboard_chantier_silence($code) {
+	return in_array((string) $code, ['transport', 'reponse_illisible'], true);
+}
+
+/**
+ * Redemander des nouvelles à un site devenu muet au milieu d'une mise à jour.
+ *
+ * On ne cherche pas ici à décider si la mise à jour a réussi : l'inventaire d'un
+ * site qu'on vient de bousculer est le pire moment pour l'interroger, et la file
+ * SVP n'est peut-être pas épuisée. On cherche seulement à savoir **si le site
+ * parle à nouveau**. S'il parle, on rend la main à la file SVP, qui dira
+ * elle-même où elle en est — et c'est elle, pas nous, qui sait ce qu'il reste à
+ * jouer.
+ *
+ * La synchronisation sert de coup de sonde parce qu'elle fait d'une pierre deux
+ * coups : elle établit que l'agent répond, et elle rafraîchit l'inventaire que
+ * la mise à jour vient de rendre faux. Ses dépôts sont écartés — les relire
+ * prendrait le temps d'une requête entière pour une information dont on n'a pas
+ * besoin ici.
+ *
+ * @param int $id_site
+ * @param string $prefixe
+ * @param string $version_avant Version de départ, à reporter au compte rendu
+ * @param int $essais Nombre de coups de sonde déjà donnés
+ * @return array
+ */
+function dashboard_chantier_plugin_verifier($id_site, $prefixe, $version_avant, $essais) {
+	include_spip('inc/dashboard_journal');
+	include_spip('inc/dashboard_sync');
+
+	$sync = dashboard_synchroniser($id_site, ['sans_depots' => true]);
+
+	if (!empty($sync['ok'])) {
+		// Le site est revenu : la file SVP reprend la main où elle en était.
+		return [
+			'ok'      => true,
+			'rester'  => true,
+			'reste'   => 'svp:' . $version_avant,
+			'message' => $prefixe . ' : le site a répondu de nouveau — reprise de la mise à jour',
+		];
+	}
+
+	if ($essais < _DASHBOARD_PLUGIN_SILENCES) {
+		return [
+			'ok'      => true,
+			'rester'  => true,
+			'reste'   => 'verif:' . ($essais + 1) . ':' . $version_avant,
+			'message' => $prefixe . ' : le site ne répond pas encore — tentative '
+				. ($essais + 1) . ' sur ' . _DASHBOARD_PLUGIN_SILENCES,
+		];
+	}
+
+	/* Le site est muet pour de bon. Ce n'est toujours pas la preuve d'un échec :
+	   la mise à jour a pu aboutir et laisser le site en panne pour une tout autre
+	   raison. Le message le dit, plutôt que d'accuser une opération dont personne
+	   ici ne connaît l'issue. */
+	$message = $prefixe . ' : le site n’a pas répondu après ' . _DASHBOARD_PLUGIN_SILENCES
+		. ' tentatives. La mise à jour a pu aboutir malgré tout : vérifier l’état du site'
+		. ' avant de la relancer.';
+
+	dashboard_journaliser($id_site, 'plugin_maj', 'erreur', $message, ['prefixe' => $prefixe, 'silences' => $essais]);
+
+	return ['ok' => false, 'message' => $message];
 }
 
 /**
@@ -654,7 +783,15 @@ function dashboard_chantier_etape_plugins($chantier) {
 	// passé sous silence : son échec est retenu et figurera au compte rendu.
 	$echecs = dashboard_chantier_echecs($chantier);
 	if (empty($reponse['ok'])) {
-		$echecs[$prefixe] = $message;
+		if (dashboard_chantier_silence((string) ($reponse['code'] ?? ''))) {
+			/* Le site s'est tu. Inutile de le sonder ici : l'étape « sync » qui
+			   clôt cette opération relira l'inventaire de toute façon, et c'est
+			   lui qui dira si la version a bougé. Retenir un échec maintenant
+			   ferait figurer au compte rendu une panne peut-être imaginaire. */
+			$message = $prefixe . ' : le site n’a pas répondu — l’inventaire final tranchera';
+		} else {
+			$echecs[$prefixe] = $message;
+		}
 	}
 	$detail = json_encode(['echecs' => $echecs], JSON_UNESCAPED_UNICODE);
 

@@ -19,7 +19,7 @@ if (!defined('_ECRIRE_INC_VERSION')) {
  * @param array $tables
  * @return array
  */
-function dashagent_declarer_tables_principales($tables) {
+function tourdecontrole_agent_declarer_tables_principales($tables) {
 	$tables['spip_dashagent_journal'] = [
 		'field' => [
 			'id_dashagent_journal' => 'bigint(21) NOT NULL',
@@ -53,7 +53,7 @@ function dashagent_declarer_tables_principales($tables) {
  * @param array $tables
  * @return array
  */
-function dashagent_declarer_tables_auxiliaires($tables) {
+function tourdecontrole_agent_declarer_tables_auxiliaires($tables) {
 	$tables['spip_dashagent_nonces'] = [
 		'field' => [
 			'nonce' => "varchar(64) DEFAULT '' NOT NULL",
@@ -78,7 +78,7 @@ function dashagent_declarer_tables_auxiliaires($tables) {
  * @param array $interfaces
  * @return array
  */
-function dashagent_declarer_tables_interfaces($interfaces) {
+function tourdecontrole_agent_declarer_tables_interfaces($interfaces) {
 	$interfaces['table_des_tables']['dashagent_journal'] = 'dashagent_journal';
 
 	return $interfaces;
@@ -90,9 +90,9 @@ function dashagent_declarer_tables_interfaces($interfaces) {
  * @see dashboard_descriptions_tables()
  * @return array
  */
-function dashagent_descriptions_tables() {
+function tourdecontrole_agent_descriptions_tables() {
 	return array_merge(
-		dashagent_declarer_tables_principales([]),
-		dashagent_declarer_tables_auxiliaires([])
+		tourdecontrole_agent_declarer_tables_principales([]),
+		tourdecontrole_agent_declarer_tables_auxiliaires([])
 	);
 }

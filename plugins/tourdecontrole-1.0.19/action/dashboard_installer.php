@@ -28,9 +28,9 @@ function action_dashboard_installer_dist() {
 		redirige_par_entete(parametre_url($redirect, 'dashboard_message', _T('dashboard:erreur_non_autorise'), '&'));
 	}
 
-	include_spip('dashboard_administrations');
-	$rapport = dashboard_creer_tables();
-	dashboard_initialiser_configuration();
+	include_spip('tourdecontrole_administrations');
+	$rapport = tourdecontrole_creer_tables();
+	tourdecontrole_initialiser_configuration();
 
 	$restantes = $rapport['restantes'];
 	$message = $restantes

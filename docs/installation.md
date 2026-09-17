@@ -14,7 +14,7 @@ Aucun accès SSH, FTP ou base distante n'est nécessaire.
 
 ## 1. Le site tour de contrôle
 
-Copier `plugins/dashboard-<version>` dans le répertoire `plugins/` du site qui pilotera le
+Copier `plugins/tourdecontrole-<version>` dans le répertoire `plugins/` du site qui pilotera le
 parc, puis l'activer dans *Configuration → Gestion des plugins*.
 
 Ce site doit être **au moins aussi protégé que le plus sensible des sites qu'il
@@ -33,7 +33,7 @@ Réglages dans *Configuration → Dashboard : configuration* :
 
 ## 2. Chaque site géré
 
-Copier `plugins/dashboard_agent-<version>` dans son répertoire `plugins/`, puis l'activer.
+Copier `plugins/tourdecontrole_agent-<version>` dans son répertoire `plugins/`, puis l'activer.
 
 Tant qu'aucun secret n'est configuré, **l'agent refuse toutes les requêtes** :
 installer le plugin n'ouvre rien par lui-même.

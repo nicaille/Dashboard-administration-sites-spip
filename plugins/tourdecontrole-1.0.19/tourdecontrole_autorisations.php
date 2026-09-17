@@ -23,7 +23,7 @@ if (!defined('_ECRIRE_INC_VERSION')) {
  * @pipeline autoriser
  * @return void
  */
-function dashboard_autoriser() {
+function tourdecontrole_autoriser() {
 }
 
 /**

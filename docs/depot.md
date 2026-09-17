@@ -18,8 +18,8 @@ Pas un service : **deux fichiers statiques**, servis en HTTP.
 ```
 plugins.xml                    le catalogue
 plugins.thin.xml               une copie (voir plus bas)
-archives/dashboard-1.0.18.zip  une archive par plugin et par version
-archives/dashagent-1.0.14.zip
+archives/tourdecontrole-1.0.19.zip  une archive par plugin et par version
+archives/tourdecontrole_agent-1.0.15.zip
 index.html                     une page lisible par un humain
 ```
 
@@ -42,14 +42,14 @@ racine englobante et un dépôt que personne ne pourrait ajouter.
 <archives>
 	<archive dtd="paquet">
 		<zip>
-			<file>dashboard-1.0.18.zip</file>
+			<file>tourdecontrole-1.0.19.zip</file>
 			<size>93601</size>
 			<date>1789646033</date>
 			<last_commit>2026-09-17 11:53:53</last_commit>
-			<source>https://…/archives/dashboard-1.0.18.zip</source>
+			<source>https://…/archives/tourdecontrole-1.0.19.zip</source>
 		</zip>
 		<!-- le paquet.xml du plugin, recopié tel quel -->
-		<paquet prefix="dashboard" version="1.0.18" …>…</paquet>
+		<paquet prefix="tourdecontrole" version="1.0.19" …>…</paquet>
 	</archive>
 </archives>
 ```

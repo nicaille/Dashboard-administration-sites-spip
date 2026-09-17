@@ -150,14 +150,14 @@ function dashboard_tables_presentes($rien = '') {
  * @return string
  */
 function dashboard_tables_absentes($rien = '') {
-	include_spip('dashboard_administrations');
-	include_spip('base/dashboard_tables');
+	include_spip('tourdecontrole_administrations');
+	include_spip('base/tourdecontrole_tables');
 
-	if (!function_exists('dashboard_tables_manquantes') || !function_exists('dashboard_descriptions_tables')) {
+	if (!function_exists('dashboard_tables_manquantes') || !function_exists('tourdecontrole_descriptions_tables')) {
 		return '';
 	}
 
-	return implode(', ', dashboard_tables_manquantes(array_keys(dashboard_descriptions_tables())));
+	return implode(', ', dashboard_tables_manquantes(array_keys(tourdecontrole_descriptions_tables())));
 }
 
 /**

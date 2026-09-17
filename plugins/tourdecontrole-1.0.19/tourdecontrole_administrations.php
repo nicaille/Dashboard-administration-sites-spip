@@ -10,52 +10,90 @@ if (!defined('_ECRIRE_INC_VERSION')) {
 }
 
 /**
+ * Reprend la version de schéma laissée par l'ancien préfixe.
+ *
+ * Le plugin du tableau de bord s'appelait « dashboard » jusqu'en 1.0.19, et le
+ * préfixe a changé pour éviter une collision : un autre plugin SPIP occupe déjà
+ * « dashboard », et SVP indexe les plugins par préfixe tous dépôts confondus —
+ * il aurait fini par proposer l'un pour l'autre.
+ *
+ * Or SPIP nomme la meta de version de schéma d'après le préfixe. Sous le nouveau
+ * nom, il ne trouve rien, en conclut que le plugin vient d'être installé, et
+ * rejoue toutes les migrations depuis l'origine. Elles sont pour la plupart
+ * inoffensives — `maj_tables()` ne détruit pas ce qui existe — mais les rejouer
+ * sur une base déjà à jour n'a aucun sens, et la moindre migration destructrice
+ * ajoutée un jour rendrait ce détour dangereux.
+ *
+ * L'ancienne meta n'est pas effacée : elle ne gêne personne, et elle laisse la
+ * possibilité de revenir à la version précédente du plugin sans rien perdre.
+ *
+ * @param string $nom_meta_base_version Nom que SPIP donne à la meta aujourd'hui
+ * @return void
+ */
+function dashboard_reprendre_schema($nom_meta_base_version) {
+	include_spip('inc/meta');
+
+	$ancienne = 'dashboard_base_version';
+	if ($nom_meta_base_version === $ancienne) {
+		return;
+	}
+	if (isset($GLOBALS['meta'][$nom_meta_base_version]) || !isset($GLOBALS['meta'][$ancienne])) {
+		return;
+	}
+
+	ecrire_meta($nom_meta_base_version, $GLOBALS['meta'][$ancienne]);
+	lire_metas();
+}
+
+/**
  * Création / mise à jour du schéma.
  *
  * @param string $nom_meta_base_version
  * @param string $version_cible
  * @return void
  */
-function dashboard_upgrade($nom_meta_base_version, $version_cible) {
+function tourdecontrole_upgrade($nom_meta_base_version, $version_cible) {
+	dashboard_reprendre_schema($nom_meta_base_version);
+
 	$maj = [];
 
 	$maj['create'] = [
-		['dashboard_creer_tables'],
-		['dashboard_initialiser_configuration'],
+		['tourdecontrole_creer_tables'],
+		['tourdecontrole_initialiser_configuration'],
 	];
 
 	// L'étape « create » n'est jamais rejouée une fois la version enregistrée en
 	// meta. Cette étape versionnée rattrape les installations où les tables
 	// n'ont pas été créées ; elle est sans effet quand tout est déjà en place.
 	$maj['1.0.2'] = [
-		['dashboard_creer_tables'],
-		['dashboard_initialiser_configuration'],
+		['tourdecontrole_creer_tables'],
+		['tourdecontrole_initialiser_configuration'],
 	];
 
 	// 1.0.2 créait les tables sans prévenir le compilateur : les squelettes
 	// gardaient une vue du schéma antérieure à leur création.
 	$maj['1.0.3'] = [
-		['dashboard_creer_tables'],
+		['tourdecontrole_creer_tables'],
 	];
 
 	// 1.0.3 ne créait pas la table de l'objet « site géré » : elle n'était
 	// déclarée que comme objet éditorial, registre que maj_tables() ne consulte
 	// pas. Elle est désormais aussi déclarée en table principale.
 	$maj['1.0.4'] = [
-		['dashboard_creer_tables'],
+		['tourdecontrole_creer_tables'],
 	];
 
 	// 1.0.4 échouait encore : la colonne « spip_version » était réécrite en nom
 	// de table par la couche SQL de SPIP, rendant le CREATE TABLE invalide.
 	// Elle s'appelle désormais « version_spip ».
 	$maj['1.0.5'] = [
-		['dashboard_creer_tables'],
+		['tourdecontrole_creer_tables'],
 	];
 
 	// 1.0.6 : les mises à jour distantes deviennent des chantiers suivis pas à
 	// pas, et la synchronisation retient si la base du site attend sa migration.
 	$maj['1.0.6'] = [
-		['dashboard_creer_tables'],
+		['tourdecontrole_creer_tables'],
 	];
 
 	include_spip('base/upgrade');
@@ -68,7 +106,7 @@ function dashboard_upgrade($nom_meta_base_version, $version_cible) {
  * @param string $nom_meta_base_version
  * @return void
  */
-function dashboard_vider_tables($nom_meta_base_version) {
+function tourdecontrole_vider_tables($nom_meta_base_version) {
 	include_spip('inc/meta');
 
 	sql_drop_table('spip_dashboard_sites');
@@ -91,11 +129,11 @@ function dashboard_vider_tables($nom_meta_base_version) {
  *
  * @return array {restantes: array, erreurs: array}
  */
-function dashboard_creer_tables() {
+function tourdecontrole_creer_tables() {
 	include_spip('base/create');
-	include_spip('base/dashboard_tables');
+	include_spip('base/tourdecontrole_tables');
 
-	$descriptions = dashboard_descriptions_tables();
+	$descriptions = tourdecontrole_descriptions_tables();
 	$noms = array_keys($descriptions);
 
 	if (function_exists('maj_tables')) {
@@ -229,7 +267,7 @@ function dashboard_tables_manquantes($noms) {
  *
  * @return void
  */
-function dashboard_initialiser_configuration() {
+function tourdecontrole_initialiser_configuration() {
 	include_spip('inc/config');
 
 	$config = lire_config('dashboard', []);

@@ -62,9 +62,9 @@ function action_editer_dashboard_site_dist($arg = null) {
  * @return array
  */
 function dashboard_champs_postes($id_dashboard_site) {
-	include_spip('base/dashboard_tables');
+	include_spip('base/tourdecontrole_tables');
 
-	$descripteur = dashboard_declarer_tables_objets_sql([]);
+	$descripteur = tourdecontrole_declarer_tables_objets_sql([]);
 	$editables = $descripteur['spip_dashboard_sites']['champs_editables'] ?? [];
 
 	$set = [];

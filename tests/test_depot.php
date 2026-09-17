@@ -175,7 +175,11 @@ foreach ($archives[0] as $archive) {
 	verifier("$fichier n’emporte aucune scorie de travail", !$scories, implode(', ', $scories));
 }
 
-verifier('les deux plugins du dépôt sont publiés', in_array('dashboard', $prefixes, true) && in_array('dashagent', $prefixes, true));
+verifier(
+	'les deux plugins du dépôt sont publiés',
+	in_array('tourdecontrole', $prefixes, true) && in_array('tourdecontrole_agent', $prefixes, true),
+	implode(', ', $prefixes)
+);
 
 /* --------------------------------------------------------------------------
    La variante allégée, et la page d'accueil.

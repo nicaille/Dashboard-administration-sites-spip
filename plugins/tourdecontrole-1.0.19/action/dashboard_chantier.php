@@ -50,7 +50,7 @@ function action_dashboard_chantier_dist() {
  * @return array
  */
 function dashboard_chantier_etat_json($chantier) {
-	include_spip('dashboard_fonctions');
+	include_spip('tourdecontrole_fonctions');
 
 	if (!$chantier) {
 		return ['ok' => false, 'fini' => true, 'message' => 'Opération introuvable'];

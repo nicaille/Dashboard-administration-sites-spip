@@ -27,8 +27,8 @@ L'outil est fait de **deux plugins** :
 
 | Plugin | Où on l'installe | Rôle |
 |---|---|---|
-| `plugins/dashboard-<version>` | sur le site tour de contrôle, un seul | interface, inventaire, conduite des chantiers de mise à jour |
-| `plugins/dashboard_agent-<version>` | sur **chaque** site géré | expose un point d'entrée JSON signé, exécute les opérations qu'il a l'autorisation d'exécuter |
+| `plugins/tourdecontrole-<version>` | sur le site tour de contrôle, un seul | interface, inventaire, conduite des chantiers de mise à jour |
+| `plugins/tourdecontrole_agent-<version>` | sur **chaque** site géré | expose un point d'entrée JSON signé, exécute les opérations qu'il a l'autorisation d'exécuter |
 
 Le dashboard n'a besoin ni de SSH, ni de FTP, ni d'accès à la base des sites
 gérés : il dialogue en HTTPS avec l'agent, chaque requête étant signée en
@@ -116,7 +116,7 @@ Ce qui reste exposé malgré tout est décrit dans [docs/securite.md](docs/secur
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/dashboard-1.0.18`, `plugins/dashboard_agent-1.0.14`. Ce n'est pas
+`plugins/tourdecontrole-1.0.19`, `plugins/tourdecontrole_agent-1.0.15`. Ce n'est pas
 décoratif : en déposant la nouvelle version **à côté** de l'ancienne plutôt que
 par-dessus, on évite le travers classique de la mise en ligne par FTP, où les
 fichiers supprimés entre deux versions survivent dans le dossier écrasé et
@@ -167,8 +167,8 @@ géré — est dans [docs/depot.md](docs/depot.md).
 
 ## Installation rapide
 
-1. Copier `plugins/dashboard-<version>` dans le `plugins/` du site tour de contrôle, l'activer.
-2. Copier `plugins/dashboard_agent-<version>` dans le `plugins/` de **chaque** site à gérer, l'activer.
+1. Copier `plugins/tourdecontrole-<version>` dans le `plugins/` du site tour de contrôle, l'activer.
+2. Copier `plugins/tourdecontrole_agent-<version>` dans le `plugins/` de **chaque** site à gérer, l'activer.
 3. Sur un site géré : *Configuration → Dashboard : agent*, générer un secret,
    cocher les opérations autorisées, noter l'URL de l'agent. Deux d'entre elles
    sont refusées par défaut, à dessein : *Mettre à jour le core SPIP et migrer sa
@@ -193,10 +193,10 @@ Le détail est dans [docs/installation.md](docs/installation.md).
 ### Sans installation SPIP
 
 ```bash
-php tests/test_protocole.php   # 280 vérifications : signature partagée, filtrage IP,
+php tests/test_protocole.php   # 295 vérifications : signature partagée, filtrage IP,
                                # validation des archives, masquage des identifiants,
                                # enchaînement des étapes d'un chantier
-php tests/test_structure.php   # 277 vérifications : manifestes, tables, autorisations,
+php tests/test_structure.php   # 279 vérifications : manifestes, tables, autorisations,
                                # API SPIP appelée, pièges de squelette, langue
 php tests/test_depot.php       # 32 vérifications : catalogue SVP, archives publiées
 ```

@@ -16,7 +16,7 @@ if (!defined('_ECRIRE_INC_VERSION')) {
  * @param array $taches
  * @return array
  */
-function dashagent_taches_generales_cron($taches) {
+function tourdecontrole_agent_taches_generales_cron($taches) {
 	$taches['dashagent_entretien'] = 24 * 3600;
 
 	return $taches;

@@ -15,7 +15,7 @@ if (!defined('_ECRIRE_INC_VERSION')) {
  * @pipeline autoriser
  * @return void
  */
-function dashagent_autoriser() {
+function tourdecontrole_agent_autoriser() {
 }
 
 /**

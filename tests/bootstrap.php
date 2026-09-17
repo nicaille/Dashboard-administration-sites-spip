@@ -76,7 +76,7 @@ function spip_version_compare($v1, $v2, $op = null) {
 /**
  * Chemin d'un plugin, retrouvé par son préfixe.
  *
- * Les dossiers de plugins portent leur version (`dashboard-1.0.18`), pour qu'une
+ * Les dossiers de plugins portent leur version (`tourdecontrole-1.0.19`), pour qu'une
  * mise en ligne n'écrase pas la version précédente. Les retrouver par préfixe
  * évite d'avoir à toucher ce fichier à chaque montée de version.
  *
@@ -96,18 +96,18 @@ function chemin_plugin($prefixe) {
 	return end($trouves);
 }
 
-require_once chemin_plugin('dashboard_agent') . '/dashagent_options.php';
-require_once chemin_plugin('dashboard_agent') . '/inc/dashagent_securite.php';
-require_once chemin_plugin('dashboard_agent') . '/inc/dashagent_fs.php';
-require_once chemin_plugin('dashboard_agent') . '/inc/dashagent_infos.php';
-require_once chemin_plugin('dashboard_agent') . '/inc/dashagent_maj.php';
-require_once chemin_plugin('dashboard_agent') . '/inc/dashagent_base.php';
-require_once chemin_plugin('dashboard_agent') . '/inc/dashagent_serveur.php';
+require_once chemin_plugin('tourdecontrole_agent') . '/tourdecontrole_agent_options.php';
+require_once chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_securite.php';
+require_once chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_fs.php';
+require_once chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_infos.php';
+require_once chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_maj.php';
+require_once chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_base.php';
+require_once chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_serveur.php';
 /* Le contrôle du contenu d'un spip_loader est une fonction pure : vérifiable ici. */
-require_once chemin_plugin('dashboard_agent') . '/inc/dashagent_loader.php';
+require_once chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_loader.php';
 /* La délégation à SVP : seules ses fonctions pures sont chargeables hors SPIP,
    les autres ont besoin de SVP lui-même. */
-require_once chemin_plugin('dashboard_agent') . '/inc/dashagent_svp.php';
+require_once chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_svp.php';
 
 /* Le client du dashboard tire quelques fonctions du core SPIP : on les neutralise
    avant de le charger, pour ne garder que la partie protocole. */
@@ -115,11 +115,11 @@ function url_de_base() {
 	return 'https://dashboard.test/';
 }
 
-require_once chemin_plugin('dashboard') . '/inc/dashboard_client.php';
-require_once chemin_plugin('dashboard') . '/inc/dashboard_operations.php';
+require_once chemin_plugin('tourdecontrole') . '/inc/dashboard_client.php';
+require_once chemin_plugin('tourdecontrole') . '/inc/dashboard_operations.php';
 /* La synchronisation touche à la base, mais ses règles de décompte sont pures. */
-require_once chemin_plugin('dashboard') . '/inc/dashboard_sync.php';
+require_once chemin_plugin('tourdecontrole') . '/inc/dashboard_sync.php';
 /* Le moteur de chantiers ne touche à la base que dans ses fonctions d'accès :
    la logique d'enchaînement des étapes, elle, est vérifiable telle quelle. */
-require_once chemin_plugin('dashboard') . '/inc/dashboard_chantiers.php';
-require_once chemin_plugin('dashboard') . '/dashboard_fonctions.php';
+require_once chemin_plugin('tourdecontrole') . '/inc/dashboard_chantiers.php';
+require_once chemin_plugin('tourdecontrole') . '/tourdecontrole_fonctions.php';

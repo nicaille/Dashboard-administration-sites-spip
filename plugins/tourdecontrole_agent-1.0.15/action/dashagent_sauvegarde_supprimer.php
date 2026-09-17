@@ -26,7 +26,7 @@ function action_dashagent_sauvegarde_supprimer_dist() {
 	// SPIP ne le charge que pour les squelettes, pas pour une action. Sans cet
 	// appel, la suppression aboutissait puis mourait sur une fonction inconnue,
 	// laissant une page blanche et aucun compte rendu.
-	include_spip('dashagent_fonctions');
+	include_spip('tourdecontrole_agent_fonctions');
 
 	$securiser_action = charger_fonction('securiser_action', 'inc');
 	$identifiant = (string) $securiser_action();

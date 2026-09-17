@@ -333,7 +333,14 @@ function dashboard_operation_plugin_maj($id_dashboard_site, $prefixe, $options =
 		$message = $prefixe . ' : ' . (string) ($reponse['erreur']['message'] ?? '');
 		dashboard_journaliser($id_dashboard_site, 'plugin_maj', 'erreur', $message, $reponse, $reponse['duree_ms']);
 
-		return ['ok' => false, 'message' => $message, 'data' => $reponse['data']];
+		// Le code accompagne le message : l'appelant doit pouvoir distinguer un
+		// refus argumenté d'un silence, qui ne dit rien de l'issue.
+		return [
+			'ok' => false,
+			'message' => $message,
+			'code' => (string) ($reponse['erreur']['code'] ?? ''),
+			'data' => $reponse['data'],
+		];
 	}
 
 	$message = $prefixe . ' : ' . (string) ($reponse['data']['version_avant'] ?? '?')
