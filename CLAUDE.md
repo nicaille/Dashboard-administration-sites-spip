@@ -2,7 +2,7 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.19`,
+`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.20`,
 `plugins/tourdecontrole_agent-1.0.15`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
@@ -55,6 +55,36 @@ fichiers :
 
 Le code des plugins, lui, ne doit jamais mentionner son propre nom de dossier.
 SPIP fournit `_DIR_PLUGIN_<PREFIXE>` pour cela.
+
+## Un silence n'est pas une réponse
+
+`dashboard_silence()`, dans `inc/dashboard_client.php`, distingue les deux —
+c'est elle qui dit ce qu'on a le droit de conclure d'un échec :
+
+- une **réponse** de l'agent (« verrou SVP posé », « opération non autorisée »)
+  se respecte, et l'opération s'arrête là ;
+- un **silence** — `transport`, ou `reponse_illisible` — ne dit rien de l'issue.
+  L'opération a très bien pu aboutir.
+
+Deux causes de silence, toutes deux hors de portée de l'agent : le plugin qui se
+remplace lui-même pendant qu'il répond, et le **cache ou répartiteur en frontal**
+(Varnish, nginx, Cloudflare) dont la patience est plus courte que la nôtre — son
+`first_byte_timeout` vaut soixante secondes par défaut, là où un export SQL en
+prend davantage, et il rend un 503 en HTML pendant que PHP travaille encore.
+
+Toute opération longue doit donc savoir **aller constater** plutôt que conclure :
+
+- la mise à jour d'un plugin reste sur son étape et redemande des nouvelles
+  (`dashboard_chantier_plugin_verifier()`) ;
+- la sauvegarde interroge l'inventaire du site et adopte celle qu'elle y trouve
+  (`dashboard_sauvegarde_rattraper()`, `dashboard_sauvegarde_retrouvee()`).
+
+La règle d'adoption est stricte, parce qu'annoncer une sauvegarde qu'on n'a pas
+serait pire que l'échec : inconnue de nous, non vide, et récente — avec une
+tolérance d'horloge, la date venant du site géré et non de nous.
+
+Une sauvegarde adoptée n'a pas d'empreinte : l'inventaire n'en publie pas. Le
+rapatriement contrôle alors la taille annoncée, faute de SHA-256.
 
 ## Le préfixe d'un plugin n'est pas le préfixe de ses fonctions
 

@@ -700,17 +700,17 @@ echo "\n== Un silence n’est pas un verdict ==\n";
    la réponse peut ne jamais revenir alors que la mise à jour a réussi. Compter ce
    silence pour un échec annoncerait perdue une opération aboutie. */
 verifier('une connexion qui n’aboutit pas est un silence',
-	dashboard_chantier_silence('transport'));
+	dashboard_silence('transport'));
 verifier('une réponse qui n’est pas du JSON est un silence',
-	dashboard_chantier_silence('reponse_illisible'),
+	dashboard_silence('reponse_illisible'),
 	'un site en cours de mue sert sa page d’erreur, pas du JSON');
 
 /* La distinction est tout le sujet : un agent qui répond « verrou posé » a
    délibéré, et sa réponse se respecte. */
 foreach (['svp_verrou', 'svp_absent', 'paquet_inconnu', 'dependance', 'autorisation', 'inconnue'] as $code) {
-	verifier("« $code » est une réponse, pas un silence", !dashboard_chantier_silence($code));
+	verifier("« $code » est une réponse, pas un silence", !dashboard_silence($code));
 }
-verifier('un code vide n’est pas un silence', !dashboard_chantier_silence(''));
+verifier('un code vide n’est pas un silence', !dashboard_silence(''));
 
 /* Le repli sur l'archive, lui, ne se déclenche que sur les deux refus qui disent
    « je ne sais pas traiter ce plugin » — à ne pas confondre avec un silence. */
@@ -734,6 +734,82 @@ verifier('une version de départ vide se relit sans décalage',
 
 verifier('le plafond de silences laisse le temps à SPIP de se reprendre',
 	defined('_DASHBOARD_PLUGIN_SILENCES') && _DASHBOARD_PLUGIN_SILENCES >= 3);
+
+echo "\n== Retrouver une sauvegarde après une réponse perdue ==\n";
+
+/* Un cache en frontal rend son 503 bien avant que PHP ait fini l'export : la
+   sauvegarde existe le plus souvent malgré tout. Encore faut-il reconnaître la
+   bonne dans l'inventaire du site, et surtout n'en adopter aucune quand il n'y
+   en a pas — annoncer une protection qu'on n'a pas serait pire que l'échec. */
+$maintenant = time();
+$inventaire = [
+	['identifiant' => 'ancienne', 'octets' => 4096, 'date' => date('c', $maintenant - 86400 * 3)],
+	['identifiant' => 'connue',   'octets' => 4096, 'date' => date('c', $maintenant - 60)],
+	['identifiant' => 'fraiche',  'octets' => 8192, 'date' => date('c', $maintenant - 10)],
+];
+
+$trouvee = dashboard_sauvegarde_retrouvee($inventaire, $maintenant - 120, ['connue']);
+verifier('la sauvegarde que la demande vient de produire est retrouvée',
+	($trouvee['identifiant'] ?? '') === 'fraiche', (string) ($trouvee['identifiant'] ?? 'aucune'));
+
+verifier('une sauvegarde déjà inscrite chez nous n’est jamais adoptée',
+	($trouvee['identifiant'] ?? '') !== 'connue');
+
+/* Le garde-fou qui compte : sur un site où rien n'a été produit, il ne faut
+   rien adopter du tout — même s'il traîne de vieilles sauvegardes. */
+$rien = dashboard_sauvegarde_retrouvee(
+	[['identifiant' => 'ancienne', 'octets' => 4096, 'date' => date('c', $maintenant - 86400 * 3)]],
+	$maintenant - 120,
+	[]
+);
+verifier('une orpheline ancienne n’est pas adoptée', $rien === null, (string) ($rien['identifiant'] ?? '—'));
+
+verifier('un inventaire vide n’adopte rien',
+	dashboard_sauvegarde_retrouvee([], $maintenant - 120, []) === null);
+
+/* Une sauvegarde vide serait une protection en trompe-l’œil. */
+verifier('une sauvegarde de zéro octet n’est pas adoptée',
+	dashboard_sauvegarde_retrouvee(
+		[['identifiant' => 'vide', 'octets' => 0, 'date' => date('c', $maintenant)]],
+		$maintenant - 120,
+		[]
+	) === null);
+
+/* La date vient de l’horloge du site géré, pas de la nôtre : un décalage de
+   quelques minutes entre deux hébergements n’a rien d’exceptionnel, et ne doit
+   pas faire manquer une sauvegarde bien réelle. */
+$decalee = dashboard_sauvegarde_retrouvee(
+	[['identifiant' => 'decalee', 'octets' => 4096, 'date' => date('c', $maintenant - 900)]],
+	$maintenant - 120,
+	[]
+);
+verifier('un décalage d’horloge de quinze minutes ne fait pas manquer la sauvegarde',
+	($decalee['identifiant'] ?? '') === 'decalee');
+
+/* Mais la tolérance a une fin, sans quoi elle ne protégerait plus de rien. */
+verifier('au-delà de la tolérance, plus rien n’est adopté',
+	dashboard_sauvegarde_retrouvee(
+		[['identifiant' => 'trop_vieille', 'octets' => 4096, 'date' => date('c', $maintenant - 7200)]],
+		$maintenant - 120,
+		[]
+	) === null);
+
+/* La plus récente l’emporte quand plusieurs sont inconnues. */
+$plusieurs = dashboard_sauvegarde_retrouvee([
+	['identifiant' => 'avant', 'octets' => 4096, 'date' => date('c', $maintenant - 70)],
+	['identifiant' => 'apres', 'octets' => 4096, 'date' => date('c', $maintenant - 5)],
+], $maintenant - 120, []);
+verifier('entre deux inconnues, la plus récente l’emporte',
+	($plusieurs['identifiant'] ?? '') === 'apres');
+
+/* Une entrée malformée venue d’un site compromis ne doit pas faire tomber la
+   fonction ni se faire adopter. */
+verifier('une entrée malformée est ignorée',
+	dashboard_sauvegarde_retrouvee(
+		['pas un tableau', ['octets' => 4096, 'date' => date('c', $maintenant)], ['identifiant' => 'sans_date', 'octets' => 4096]],
+		$maintenant - 120,
+		[]
+	) === null);
 
 echo "\n== Fraîcheur d’un compte rendu ==\n";
 

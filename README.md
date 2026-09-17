@@ -193,7 +193,7 @@ Le détail est dans [docs/installation.md](docs/installation.md).
 ### Sans installation SPIP
 
 ```bash
-php tests/test_protocole.php   # 295 vérifications : signature partagée, filtrage IP,
+php tests/test_protocole.php   # 304 vérifications : signature partagée, filtrage IP,
                                # validation des archives, masquage des identifiants,
                                # enchaînement des étapes d'un chantier
 php tests/test_structure.php   # 279 vérifications : manifestes, tables, autorisations,

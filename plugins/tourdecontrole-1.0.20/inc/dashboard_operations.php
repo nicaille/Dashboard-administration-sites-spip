@@ -97,6 +97,10 @@ function dashboard_operation_sauvegarder($id_dashboard_site, $options = []) {
 		return ['ok' => false, 'message' => 'Site inconnu', 'data' => []];
 	}
 
+	// L'instant du départ, pour reconnaître ensuite ce que cette demande-ci a
+	// produit — et non ce qui traînait déjà sur le site.
+	$depart = time();
+
 	$reponse = dashboard_appeler(
 		$site,
 		'sauvegarde_creer',
@@ -104,14 +108,39 @@ function dashboard_operation_sauvegarder($id_dashboard_site, $options = []) {
 		['timeout' => dashboard_config('timeout_long', 300)]
 	);
 
+	$adoptee = false;
+
 	if (!$reponse['ok']) {
 		$message = (string) ($reponse['erreur']['message'] ?? '');
-		dashboard_journaliser($id_dashboard_site, 'sauvegarde', 'erreur', $message, $reponse['erreur'], $reponse['duree_ms']);
+		$code    = (string) ($reponse['erreur']['code'] ?? '');
 
-		return ['ok' => false, 'message' => $message, 'data' => []];
+		/* Un silence ne dit rien de l'issue : un cache en frontal rend son 503
+		   bien avant que PHP ait fini l'export, et la sauvegarde existe le plus
+		   souvent malgré tout. Plutôt que d'annoncer un échec — et de pousser à
+		   refaire un travail déjà fait, deux fois plus long la seconde fois — on
+		   va voir ce que le site a réellement sur son disque. */
+		$sauvegarde = dashboard_silence($code)
+			? dashboard_sauvegarde_rattraper($id_dashboard_site, $depart)
+			: null;
+
+		if (!$sauvegarde) {
+			dashboard_journaliser($id_dashboard_site, 'sauvegarde', 'erreur', $message, $reponse['erreur'], $reponse['duree_ms']);
+
+			return ['ok' => false, 'message' => $message, 'code' => $code, 'data' => []];
+		}
+
+		$adoptee = true;
+		dashboard_journaliser(
+			$id_dashboard_site,
+			'sauvegarde',
+			'ok',
+			'Réponse perdue (' . $message . ') — sauvegarde retrouvée sur le site : ' . (string) $sauvegarde['identifiant'],
+			$sauvegarde,
+			$reponse['duree_ms']
+		);
+	} else {
+		$sauvegarde = $reponse['data']['sauvegarde'] ?? [];
 	}
-
-	$sauvegarde = $reponse['data']['sauvegarde'] ?? [];
 	$id_sauvegarde = (int) sql_insertq('spip_dashboard_sauvegardes', [
 		'id_dashboard_site' => (int) $id_dashboard_site,
 		'identifiant'       => substr((string) ($sauvegarde['identifiant'] ?? ''), 0, 64),
@@ -122,7 +151,10 @@ function dashboard_operation_sauvegarder($id_dashboard_site, $options = []) {
 		'date'              => date('Y-m-d H:i:s'),
 	]);
 
-	$message = 'Sauvegarde créée sur le site (' . dashboard_octets((int) ($sauvegarde['octets'] ?? 0)) . ')';
+	$message = ($adoptee
+		? 'Sauvegarde retrouvée sur le site, la réponse s’étant perdue ('
+		: 'Sauvegarde créée sur le site (')
+		. dashboard_octets((int) ($sauvegarde['octets'] ?? 0)) . ')';
 
 	if (!isset($options['rapatrier']) || $options['rapatrier']) {
 		$rapatriement = dashboard_rapatrier_sauvegarde($id_dashboard_site, $id_sauvegarde);
@@ -137,6 +169,117 @@ function dashboard_operation_sauvegarder($id_dashboard_site, $options = []) {
 	dashboard_journaliser($id_dashboard_site, 'sauvegarde', 'ok', $message, $sauvegarde, $reponse['duree_ms']);
 
 	return ['ok' => true, 'message' => $message, 'data' => $sauvegarde, 'id_dashboard_sauvegarde' => $id_sauvegarde];
+}
+
+/**
+ * L'inventaire des sauvegardes présentes sur le site géré.
+ *
+ * @param int $id_dashboard_site
+ * @return array
+ */
+function dashboard_operation_sauvegardes_lister($id_dashboard_site) {
+	include_spip('inc/dashboard_client');
+
+	$site = dashboard_charger_site($id_dashboard_site);
+	if (!$site) {
+		return ['ok' => false, 'message' => 'Site inconnu', 'code' => '', 'data' => []];
+	}
+
+	$reponse = dashboard_appeler($site, 'sauvegarde_lister');
+
+	if (!$reponse['ok']) {
+		return [
+			'ok' => false,
+			'message' => (string) ($reponse['erreur']['message'] ?? ''),
+			'code' => (string) ($reponse['erreur']['code'] ?? ''),
+			'data' => [],
+		];
+	}
+
+	// Tout ce qui vient d'un site géré est inerte avant d'aller plus loin.
+	return ['ok' => true, 'message' => '', 'code' => '', 'data' => dashboard_inerte((array) ($reponse['data']['sauvegardes'] ?? []))];
+}
+
+/**
+ * Parmi les sauvegardes d'un site, celle qu'une requête coupée vient de créer.
+ *
+ * Quand la demande de sauvegarde se solde par un silence — un 503 de Varnish,
+ * typiquement, dont la patience est plus courte que la nôtre — la sauvegarde a
+ * le plus souvent été produite quand même : PHP a poursuivi son travail derrière
+ * le cache qui avait déjà rendu la main. Reste à la reconnaître dans
+ * l'inventaire du site.
+ *
+ * Deux critères, et le premier fait l'essentiel du travail :
+ *
+ * - **elle nous est inconnue.** Toute sauvegarde déjà inscrite chez nous est
+ *   écartée, ce qui suffit à ne jamais adopter celle d'hier ;
+ * - **elle est récente.** Garde-fou contre l'adoption d'une orpheline
+ *   ancienne — un site où des sauvegardes traînent depuis avant l'appairage.
+ *   La tolérance est large à dessein : la date vient de l'horloge du site géré,
+ *   qui n'est pas la nôtre, et un décalage de quelques minutes entre deux
+ *   hébergements n'a rien d'exceptionnel.
+ *
+ * @param array $sauvegardes Inventaire rendu par le site géré
+ * @param int $depuis Horodatage à partir duquel une sauvegarde nous intéresse
+ * @param array $connus Identifiants déjà inscrits chez nous
+ * @param int $tolerance Écart d'horloge admis, en secondes
+ * @return array|null
+ */
+function dashboard_sauvegarde_retrouvee($sauvegardes, $depuis, $connus = [], $tolerance = 3600) {
+	$seuil = (int) $depuis - (int) $tolerance;
+	$retenue = null;
+	$date_retenue = 0;
+
+	foreach ((array) $sauvegardes as $sauvegarde) {
+		if (!is_array($sauvegarde)) {
+			continue;
+		}
+		$identifiant = (string) ($sauvegarde['identifiant'] ?? '');
+		if ($identifiant === '' || in_array($identifiant, (array) $connus, true)) {
+			continue;
+		}
+		// Une sauvegarde vide ne vaut pas la peine d'être adoptée : ce serait
+		// annoncer une protection qui n'en est pas une.
+		if ((int) ($sauvegarde['octets'] ?? 0) <= 0) {
+			continue;
+		}
+		$date = strtotime((string) ($sauvegarde['date'] ?? ''));
+		if (!$date || $date < $seuil) {
+			continue;
+		}
+		if ($date > $date_retenue) {
+			$retenue = $sauvegarde;
+			$date_retenue = $date;
+		}
+	}
+
+	return $retenue;
+}
+
+/**
+ * Va voir sur le site si la sauvegarde demandée existe, malgré le silence.
+ *
+ * Interroge l'inventaire du site géré et retient la sauvegarde que cette
+ * demande-ci vient de produire, s'il y en a une. Rien de trouvé — un site
+ * vraiment tombé, une autorisation refusée, une sauvegarde qui a réellement
+ * échoué — et l'appelant conclut à l'échec, comme avant.
+ *
+ * @param int $id_dashboard_site
+ * @param int $depart Horodatage du début de la demande
+ * @return array|null
+ */
+function dashboard_sauvegarde_rattraper($id_dashboard_site, $depart) {
+	$inventaire = dashboard_operation_sauvegardes_lister($id_dashboard_site);
+	if (empty($inventaire['ok'])) {
+		return null;
+	}
+
+	$connus = array_column(
+		(array) sql_allfetsel('identifiant', 'spip_dashboard_sauvegardes', 'id_dashboard_site = ' . (int) $id_dashboard_site),
+		'identifiant'
+	);
+
+	return dashboard_sauvegarde_retrouvee((array) $inventaire['data'], (int) $depart, $connus);
 }
 
 /**
@@ -172,6 +315,20 @@ function dashboard_rapatrier_sauvegarde($id_dashboard_site, $id_dashboard_sauveg
 		@unlink($dir . $nom);
 
 		return ['ok' => false, 'message' => 'rapatriement échoué : empreinte SHA-256 non conforme'];
+	}
+
+	/* Une sauvegarde retrouvée après une réponse perdue n'a pas d'empreinte :
+	   l'inventaire du site donne un nom, une taille et une date, pas de SHA-256
+	   — le calculer à chaque listage coûterait une lecture complète de chaque
+	   fichier. Reste la taille, et elle suffit à repérer une troncature. C'est
+	   d'autant moins théorique que ces sauvegardes-là sont précisément celles
+	   qui passent par un frontal ayant déjà montré qu'il coupait. */
+	if (empty($ligne['sha256']) && (int) $ligne['octets'] > 0 && (int) $resultat['octets'] !== (int) $ligne['octets']) {
+		@unlink($dir . $nom);
+
+		return ['ok' => false, 'message' => 'rapatriement échoué : '
+			. dashboard_octets((int) $resultat['octets']) . ' reçus pour '
+			. dashboard_octets((int) $ligne['octets']) . ' annoncés'];
 	}
 
 	sql_updateq('spip_dashboard_sauvegardes', [

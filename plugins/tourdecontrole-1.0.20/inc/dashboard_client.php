@@ -189,6 +189,33 @@ function dashboard_charger_site($id_dashboard_site) {
 }
 
 /**
+ * Cette erreur est-elle un silence, plutôt qu'une réponse ?
+ *
+ * La distinction décide de ce qu'on a le droit d'en conclure. Un agent qui
+ * **répond** « verrou SVP posé » ou « opération non autorisée » a délibéré : sa
+ * réponse se respecte. Un agent qui ne répond pas n'a rien dit du tout, et
+ * l'opération a très bien pu aboutir sans que nous le sachions.
+ *
+ * Deux façons de ne rien dire :
+ *
+ * - `transport` : la connexion n'a pas abouti, ou a été coupée en route ;
+ * - `reponse_illisible` : quelque chose est revenu, mais pas du JSON. Deux
+ *   causes fréquentes, et toutes deux innocentent l'agent — un site en cours de
+ *   mue qui sert sa page d'erreur, et un **cache ou répartiteur en frontal**
+ *   (Varnish, nginx, Cloudflare) qui rend un 502, 503 ou 504 en HTML parce que
+ *   sa propre patience est plus courte que la nôtre. Un export SQL de plusieurs
+ *   dizaines de secondes dépasse couramment le `first_byte_timeout` de Varnish,
+ *   soixante secondes par défaut, pendant que PHP poursuit tranquillement son
+ *   travail derrière.
+ *
+ * @param string $code Code d'erreur rendu par `dashboard_appeler()`
+ * @return bool
+ */
+function dashboard_silence($code) {
+	return in_array((string) $code, ['transport', 'reponse_illisible'], true);
+}
+
+/**
  * Appelle une opération sur l'agent d'un site.
  *
  * @param array $site Ligne de spip_dashboard_sites
