@@ -75,6 +75,26 @@ $GLOBALS['dashagent_config_test']['ips_autorisees'] = '198.51.100.0/25';
 verifier('masque non aligné sur un octet : intérieur', dashagent_ip_autorisee('198.51.100.127'));
 verifier('masque non aligné sur un octet : extérieur', !dashagent_ip_autorisee('198.51.100.128'));
 
+echo "\n== Adresse du spip_loader d’un site ==\n";
+
+/* Le script est à la racine web, là où pointe l'URL publique. Reste à joindre
+   les deux morceaux sans supposer qu'elle finit par une barre. */
+verifier('une adresse sans barre finale',
+	dashboard_url_loader('https://exemple.org') === 'https://exemple.org/spip_loader.php',
+	dashboard_url_loader('https://exemple.org'));
+verifier('une adresse avec barre finale',
+	dashboard_url_loader('https://exemple.org/') === 'https://exemple.org/spip_loader.php');
+verifier('un site dans un sous-répertoire',
+	dashboard_url_loader('https://exemple.org/dev/') === 'https://exemple.org/dev/spip_loader.php');
+verifier('la requête et l’ancre sont écartées',
+	dashboard_url_loader('https://exemple.org/dev/?page=x#ancre') === 'https://exemple.org/dev/spip_loader.php',
+	dashboard_url_loader('https://exemple.org/dev/?page=x#ancre'));
+/* Ce lien s'ouvre dans un nouvel onglet : il n'a pas à emmener ailleurs que sur
+   le site, ni à porter un pseudo-protocole. */
+verifier('une adresse vide ne donne pas de lien', dashboard_url_loader('') === '');
+verifier('javascript: est refusé', dashboard_url_loader('javascript:alert(1)') === '');
+verifier('un chemin relatif est refusé', dashboard_url_loader('/afcf/dev/') === '');
+
 echo "\n== Ce qu’on accepte de déposer comme spip_loader ==\n";
 
 /* Le fichier atterrit à la racine web, là où n'importe qui peut l'appeler, et
@@ -84,13 +104,37 @@ $loader = "<?php\n// spip_loader.php\n\$spip_loader_version = '3.1.2';\necho 'SP
 verifier('un spip_loader ordinaire est accepté', dashagent_loader_conforme($loader)['ok']);
 verifier('sa version est relevée', dashagent_loader_version($loader) === '3.1.2',
 	dashagent_loader_version($loader));
+
+/* Le script distribué aujourd'hui est un stub de PHAR : en-tête PHP lisible,
+   archive binaire à la suite. Ce sont ses constantes de classe qui le datent. */
+$stub = "<?php\n\nnamespace Spip\\Loader;\n\nuse Phar;\n\nfinal class Stub\n{\n"
+	. "    public const VERSION = '8.0.5';\n\n"
+	. "    public const FULL_VERSION = '8.0.5';\n\n"
+	. "    public const DATE = '2026-09-04 06:44:10';\n\n"
+	. "    public const NAME = 'spip_loader.phar';\n}\n";
+verifier('un stub de PHAR est accepté', dashagent_loader_conforme($stub)['ok'],
+	dashagent_loader_conforme($stub)['erreur']);
+verifier('la version du stub est relevée', dashagent_loader_version($stub) === '8.0.5',
+	dashagent_loader_version($stub));
+verifier('FULL_VERSION n’est pas prise pour VERSION',
+	dashagent_loader_version("<?php class S { public const FULL_VERSION = '9.9.9'; public const VERSION = '8.0.5'; }") === '8.0.5');
+verifier('à défaut de VERSION, FULL_VERSION fait l’affaire',
+	dashagent_loader_version("<?php class S { public const FULL_VERSION = '9.9.9'; }") === '9.9.9');
+verifier('la date de publication est relevée',
+	dashagent_loader_date($stub) === '2026-09-04 06:44:10', dashagent_loader_date($stub));
+verifier('un script sans date n’en invente pas', dashagent_loader_date($loader) === '');
 verifier('un fichier vide est refusé', !dashagent_loader_conforme('')['ok']);
 verifier('du HTML est refusé', !dashagent_loader_conforme('<html><body>404</body></html>')['ok']);
 verifier('du PHP qui ne parle pas de SPIP est refusé',
 	!dashagent_loader_conforme("<?php\nunlink(__FILE__);\n")['ok'],
 	dashagent_loader_conforme("<?php\nunlink(__FILE__);\n")['erreur']);
+/* La borne est calculée depuis la constante : le stub de PHAR pèse déjà deux
+   cents kilo-octets et grossira, la valeur bougera avec lui. */
 verifier('un PHP démesuré est refusé',
-	!dashagent_loader_conforme("<?php // spip_loader SPIP\n" . str_repeat('x', 2 * 1024 * 1024))['ok']);
+	!dashagent_loader_conforme("<?php // spip_loader SPIP\n"
+		. str_repeat('x', _DASHAGENT_LOADER_TAILLE_MAX))['ok']);
+verifier('un stub de la taille du vrai script passe',
+	dashagent_loader_conforme("<?php // spip_loader SPIP\n" . str_repeat('x', 210 * 1024))['ok']);
 /* Le script officiel n'annonce pas toujours sa version ; cela ne le disqualifie
    pas, l'absence se dit simplement à l'écran. */
 verifier('un spip_loader sans version reste acceptable',

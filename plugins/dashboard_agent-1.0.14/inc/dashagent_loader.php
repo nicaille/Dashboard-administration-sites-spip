@@ -23,11 +23,13 @@ if (!defined('_ECRIRE_INC_VERSION')) {
 /**
  * Taille maximale acceptée pour un spip_loader.
  *
- * Le fichier officiel pèse quelques dizaines de kilo-octets ; au-delà d'un
- * mégaoctet, ce n'est pas lui.
+ * Le script distribué est un stub de PHAR : l'archive y est jointe, et il pèse
+ * quelques centaines de kilo-octets — 207 Ko en 8.0.5. La borne laisse de la
+ * marge pour qu'il grossisse sans qu'on le refuse, tout en écartant ce qui
+ * n'aurait aucune raison d'être là.
  */
 if (!defined('_DASHAGENT_LOADER_TAILLE_MAX')) {
-	define('_DASHAGENT_LOADER_TAILLE_MAX', 1024 * 1024);
+	define('_DASHAGENT_LOADER_TAILLE_MAX', 4 * 1024 * 1024);
 }
 
 /**
@@ -63,6 +65,7 @@ function dashagent_loader_etat() {
 		'octets'        => 0,
 		'modifie'       => '',
 		'version'       => '',
+		'date_version'  => '',
 		'racine_ecrit'  => is_dir($racine) && is_writable($racine),
 	];
 
@@ -73,7 +76,11 @@ function dashagent_loader_etat() {
 	$etat['present'] = true;
 	$etat['octets']  = (int) @filesize($chemin);
 	$etat['modifie'] = date('Y-m-d H:i:s', (int) @filemtime($chemin));
-	$etat['version'] = dashagent_loader_version((string) @file_get_contents($chemin, false, null, 0, 65536));
+	// Seul l'en-tête est lu : le reste du fichier est l'archive PHAR, en binaire,
+	// et les constantes qui le datent sont dans ses premières lignes.
+	$entete = (string) @file_get_contents($chemin, false, null, 0, 65536);
+	$etat['version'] = dashagent_loader_version($entete);
+	$etat['date_version'] = dashagent_loader_date($entete);
 	// Un fichier présent mais non réinscriptible bloquerait le remplacement : le
 	// dire ici évite de ne le découvrir qu'au moment d'écrire.
 	$etat['fichier_ecrit'] = is_writable($chemin);
@@ -84,12 +91,27 @@ function dashagent_loader_etat() {
 /**
  * Numéro de version annoncé par un spip_loader, s'il en annonce un.
  *
- * @param string $source
+ * Le script distribué aujourd'hui est un **stub de PHAR** : un en-tête PHP
+ * lisible, suivi de l'archive elle-même en binaire. Ses constantes de classe
+ * sont ce qui le date :
+ *
+ *     public const VERSION = '8.0.5';
+ *     public const FULL_VERSION = '8.0.5';
+ *     public const DATE = '2026-09-04 06:44:10';
+ *
+ * `\bVERSION\b` ne se confond pas avec `FULL_VERSION` : le souligné qui la
+ * précède est un caractère de mot, il n'y a donc pas de frontière avant le V.
+ * Les formes plus anciennes — une variable, une constante globale — restent
+ * reconnues : un parc n'est pas à jour partout le même jour.
+ *
+ * @param string $source Début du fichier ; inutile de lire le binaire qui suit
  * @return string
  */
 function dashagent_loader_version($source) {
 	$source = (string) $source;
 	foreach ([
+		'/\bconst\s+VERSION\s*=\s*[\'"]([0-9][0-9a-z.\-]{0,20})/i',
+		'/\bconst\s+FULL_VERSION\s*=\s*[\'"]([0-9][0-9a-z.\-]{0,20})/i',
 		'/\$spip_loader_version\s*=\s*[\'"]([0-9][0-9a-z.\-]{0,20})/i',
 		'/define\s*\(\s*[\'"]_?SPIP_LOADER_VERSION[\'"]\s*,\s*[\'"]([0-9][0-9a-z.\-]{0,20})/i',
 		'/spip_loader\s+v?([0-9]+\.[0-9][0-9a-z.\-]{0,10})/i',
@@ -97,6 +119,24 @@ function dashagent_loader_version($source) {
 		if (preg_match($motif, $source, $m)) {
 			return $m[1];
 		}
+	}
+
+	return '';
+}
+
+/**
+ * Date de publication annoncée par le script, s'il en annonce une.
+ *
+ * Elle vaut mieux que la date du fichier sur le disque : celle-ci ne dit que
+ * le jour où on l'a déposé, pas l'âge de ce qu'on a déposé. Un script publié
+ * il y a deux ans mis en place hier paraîtrait neuf.
+ *
+ * @param string $source
+ * @return string
+ */
+function dashagent_loader_date($source) {
+	if (preg_match('/\bconst\s+DATE\s*=\s*[\'"]([0-9]{4}-[0-9]{2}-[0-9]{2}[0-9 :]{0,9})/', (string) $source, $m)) {
+		return trim($m[1]);
 	}
 
 	return '';

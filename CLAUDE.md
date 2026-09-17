@@ -127,7 +127,7 @@ autre chose que `''`.
 `tests/test_protocole.php` vérifie le filtre, `tests/integration/scenario.mjs`
 le rendu, charge utile à l'appui.
 
-## Trois pièges du compilateur, tous rencontrés
+## Quatre pièges du compilateur, tous rencontrés
 
 1. **Une balise à accolades dans un argument composite** (`op/#ID/#GET{x}`)
    désorganise l'analyse : les balises voisines arrivent littéralement dans la
@@ -140,8 +140,15 @@ le rendu, charge utile à l'appui.
    JavaScript compris. Un `#PAGINATION` écrit dans un `/* … */` pour
    l'explication produit une erreur de compilation que rien, sur la page, ne
    rattache au commentaire fautif.
+4. **Deux balises dans un même bloc optionnel** : la dernière en est le sujet,
+   la première n'est plus interprétée et ses parenthèses ressortent telles
+   quelles. `[<a href="(#URL_SITE)">(#URL_SITE|couper{48})</a>]` produisait
+   `href="(https://exemple.org/)"` — une adresse relative, du point de vue du
+   navigateur, qui ramenait sur l'espace privé du parc. Donner ses crochets à
+   chaque balise, ou calculer à part avec `#SET`.
 
-`tests/test_structure.php` vérifie les trois.
+`tests/test_structure.php` vérifie les quatre — le dernier en refusant toute
+valeur d'attribut qui s'ouvre sur une parenthèse littérale.
 
 ## Tests à passer avant tout commit
 

@@ -15,6 +15,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'action_depots_parc' => 'Refresh the whole fleet’s repositories',
 	'action_loader_etat' => 'Check the state on the site',
 	'action_loader_maj' => 'Deploy a fresh spip_loader.php',
+	'action_loader_ouvrir' => 'Open the site’s spip_loader',
 	'action_maj'               => 'Upgrade',
 	'action_maj_tous'          => 'Upgrade all (@nb@)',
 	'action_purger'            => 'Clear',

@@ -472,6 +472,31 @@ function dashboard_depots_perimes($infos) {
 }
 
 /**
+ * L'adresse du `spip_loader.php` d'un site, à partir de celle du site.
+ *
+ * Le script se trouve à la racine web, là où pointe l'URL publique. Reste à
+ * joindre les deux morceaux sans supposer que l'une finit par une barre — la
+ * moitié des fiches en portent une, l'autre non — et à écarter une adresse qui
+ * n'en est pas une : ce lien s'ouvre dans un nouvel onglet, il n'a pas à
+ * emmener ailleurs que sur le site.
+ *
+ * @filtre
+ * @param string $url URL publique du site géré
+ * @return string Chaîne vide si l'adresse est inutilisable
+ */
+function dashboard_url_loader($url) {
+	$url = trim((string) $url);
+	if ($url === '' || !preg_match('#^https?://#i', $url)) {
+		return '';
+	}
+
+	// Ni requête ni ancre : on veut la racine, pas la page qu'on nous a donnée.
+	$url = preg_replace('/[?#].*$/', '', $url);
+
+	return rtrim($url, '/') . '/spip_loader.php';
+}
+
+/**
  * Ce site a-t-il tel plugin actif ?
  *
  * Sert à n'afficher un onglet que là où il a un sens : proposer le tableau de
