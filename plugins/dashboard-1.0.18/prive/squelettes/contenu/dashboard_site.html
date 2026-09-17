@@ -1257,9 +1257,12 @@
 				}
 				cible.appendChild(ligne('Présent', r.present ? 'oui' : 'non'));
 				if (r.present) {
-					cible.appendChild(ligne('Modifié le', r.modifie || '—'));
-					cible.appendChild(ligne('Poids', (r.octets || 0) + ' octets'));
 					cible.appendChild(ligne('Version annoncée', r.version || 'non déclarée'));
+					// La date du script, pas celle du dépôt : un script publié il y
+					// a deux ans mis en place hier paraîtrait neuf.
+					if (r.date_version) { cible.appendChild(ligne('Publié le', r.date_version)); }
+					cible.appendChild(ligne('Déposé le', r.modifie || '—'));
+					cible.appendChild(ligne('Poids', (r.octets || 0) + ' octets'));
 				}
 				cible.appendChild(ligne('Racine inscriptible', r.racine_ecrit ? 'oui' : 'non'));
 			})

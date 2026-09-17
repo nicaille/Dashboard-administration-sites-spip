@@ -1018,9 +1018,15 @@ console.log('\n### Script d’installation (spip_loader.php)');
 // d'en rendre la source, et l'agent recevrait « SPIP loader » au lieu du script.
 // Le contrôle de contenu s'en aperçoit — c'est d'ailleurs lui qui l'a montré.
 const loaderSource = site + '/core-archives/spip_loader.txt';
+// Le vrai script est un stub de PHAR : en-tête PHP lisible, archive binaire à
+// la suite, et des constantes de classe qui le datent. La copie de test reprend
+// cet en-tête à l'identique — c'est lui que l'agent lit.
 writeFileSync(loaderSource,
-	"<?php\n// spip_loader.php — script d'installation de SPIP (copie de test)\n"
-	+ "$spip_loader_version = '3.1.2';\necho 'SPIP';\n");
+	"<?php\n\nnamespace Spip\\Loader;\n\nuse Phar;\n\nfinal class Stub\n{\n"
+	+ "    public const VERSION = '8.0.5';\n\n"
+	+ "    public const FULL_VERSION = '8.0.5';\n\n"
+	+ "    public const DATE = '2026-09-04 06:44:10';\n\n"
+	+ "    public const NAME = 'spip_loader.phar';\n}\n");
 
 await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
 await page.fill('[name="url_spip_loader"]', base + '/core-archives/spip_loader.txt');
@@ -1052,13 +1058,17 @@ dit('l’état du spip_loader distant est lisible',
 	/Présent/.test(await page.locator('#loader [data-loader-bloc="etat"]').innerText()),
 	(await page.locator('#loader [data-loader-bloc="etat"]').innerText()).replace(/\s+/g, ' ').trim());
 
+// Après le dépôt, l'état doit nommer la version et la date que le script annonce
+// lui-même : la date du fichier ne dit que le jour où on l'a posé.
+
+
 page.once('dialog', (d) => d.accept());
 await page.locator('#loader form.bouton_action_post button').first().click();
 await page.waitForLoadState('domcontentloaded').catch(() => {});
 await page.waitForTimeout(2500);
 dit('spip_loader.php est déposé à la racine du site', existsSync(site + '/spip_loader.php'));
 dit('la version déposée est annoncée',
-	/3\.1\.2/.test(await page.locator('body').innerText()),
+	/8\.0\.5/.test(await page.locator('body').innerText()),
 	(await page.locator('.reponse_formulaire').first().innerText().catch(() => '—')).trim());
 dit('le dépôt revient sous son encadré', page.url().includes('#loader'), page.url());
 
@@ -1067,6 +1077,12 @@ page.once('dialog', (d) => d.accept());
 await page.locator('#loader form.bouton_action_post button').first().click();
 await page.waitForLoadState('domcontentloaded').catch(() => {});
 await page.waitForTimeout(2500);
+await page.locator('[data-dashboard-loader-etat]').click();
+await page.waitForTimeout(2000);
+const etatLoader = (await page.locator('#loader [data-loader-bloc="etat"]').innerText()).replace(/\s+/g, ' ');
+dit('la version annoncée par le script est lue', /8\.0\.5/.test(etatLoader), etatLoader.trim());
+dit('la date de publication du script est lue', /2026-09-04/.test(etatLoader), etatLoader.trim());
+
 dit('l’ancien spip_loader est conservé',
 	readdirSync(site).some((n) => /^\.spip_loader\.php\.dashagent-\d{14}$/.test(n)),
 	readdirSync(site).filter((n) => /spip_loader/.test(n)).join(', '));

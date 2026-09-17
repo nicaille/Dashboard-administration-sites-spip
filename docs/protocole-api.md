@@ -331,8 +331,17 @@ fichiers — sa propre page le fait aussi —, dans la limite de cinq secondes.
 ### `loader_etat`
 
 Autorisation : `op_loader`. Décrit le `spip_loader.php` présent à la racine du
-site : `present`, `octets`, `modifie`, `version` (celle qu'il annonce, si tant
-est qu'il l'annonce), `racine_ecrit` et `fichier_ecrit`.
+site : `present`, `octets`, `modifie` (la date du fichier), `version` et
+`date_version` (celles que le script annonce), `racine_ecrit`, `fichier_ecrit`.
+
+Le script distribué est un **stub de PHAR** : un en-tête PHP lisible, suivi de
+l'archive en binaire. Ce sont ses constantes de classe qui le datent —
+`const VERSION`, `const FULL_VERSION`, `const DATE` — et seul cet en-tête est
+lu. Les formes antérieures, variable ou constante globale, restent reconnues.
+
+`date_version` vaut mieux que `modifie` pour juger de l'âge : la seconde ne dit
+que le jour du dépôt. Un script publié il y a deux ans, mis en place hier,
+paraîtrait neuf.
 
 ### `loader_maj`
 
