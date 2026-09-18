@@ -298,6 +298,76 @@ dit('le compte du parc reste celui des sites',
 		String(JSON.parse(sql('SELECT SUM(nb_plugins_maj) AS n FROM spip_dashboard_sites'))[0].n)),
 	(await page.locator('.dashboard-synthese li').last().innerText()).replace(/\s+/g, ' ').trim());
 
+// Le badge « N à mettre à jour » du tableau du parc nomme au survol les plugins
+// concernés : le décompte seul obligeait à ouvrir la fiche du site pour savoir
+// lesquels. Vérifié ici, tant que zzztest attend encore sa 1.0.1.
+const badgeMaj = page.locator('td .dashboard-survol').first();
+dit('le badge des mises à jour est présent dans le tableau du parc', (await badgeMaj.count()) === 1);
+
+if (await badgeMaj.count()) {
+	const liste = badgeMaj.locator('.dashboard-survol-liste');
+
+	// Fermée au repos : une liste toujours visible encombrerait le tableau.
+	dit('la liste des plugins est masquée au repos', !(await liste.isVisible()));
+
+	await badgeMaj.hover();
+	const nomme = (await liste.innerText()).trim();
+	dit('le survol du badge nomme les plugins à mettre à jour',
+		/Plugin de test/.test(nomme), nomme.replace(/\s+/g, ' ').slice(0, 80));
+
+	// Un nom par ligne : autant de <br /> que d'intervalles entre les noms.
+	const sauts = await liste.locator('br').count();
+	const noms = nomme.split('\n').map((l) => l.trim()).filter(Boolean).length;
+	dit('un plugin par ligne', sauts === Math.max(0, noms - 1), `${noms} nom(s), ${sauts} saut(s)`);
+
+	// Le clavier ouvre la même liste : un survol à la souris n'est pas une
+	// interface. La souris est écartée d'abord, sans quoi le survol masquerait
+	// le résultat du focus.
+	await page.mouse.move(0, 0);
+	dit('la liste se referme quand la souris s’éloigne', !(await liste.isVisible()));
+	await badgeMaj.focus();
+	dit('le focus clavier ouvre la même liste', await liste.isVisible());
+
+	// Le badge et sa liste se répondent, pour un lecteur d'écran.
+	const decrit = await badgeMaj.getAttribute('aria-describedby');
+	dit('le badge désigne sa liste', !!decrit && decrit === (await liste.getAttribute('id')), decrit || 'aucun');
+
+	// Ce qui vient d'un site géré reste inerte, ici comme ailleurs.
+	dit('la liste survolée ne porte aucun balisage venu du site',
+		!/<(svg|script|img|details|iframe)/i.test(await liste.innerHTML()));
+
+	/* Avec un seul plugin en attente, le séparateur n'est jamais exercé : le
+	   test passerait aussi bien si le <br /> était mal placé. On en ajoute donc
+	   un second, le temps de la vérification, avec un nom qui prouve au passage
+	   que rien de ce qui vient du site ne s'exécute. */
+	sqlEcrire("INSERT INTO spip_dashboard_plugins"
+		+ " (id_dashboard_site, prefixe, nom, version, version_disponible, maj_disponible, distribue)"
+		+ " VALUES (1, 'ZZZDEUX', 'Deuxieme <svg onload=alert(1)> plugin', '1.0.0', '2.0.0', 'oui', 'non')");
+	await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+
+	const badgeDeux = page.locator('td .dashboard-survol').first();
+	const listeDeux = badgeDeux.locator('.dashboard-survol-liste');
+	await badgeDeux.hover();
+	const deuxNoms = (await listeDeux.innerText()).trim().split('\n').map((l) => l.trim()).filter(Boolean);
+
+	dit('deux plugins en attente donnent deux noms',
+		deuxNoms.length === 2, deuxNoms.join(' | '));
+	dit('un saut de ligne sépare les deux noms, sans en ajouter à la fin',
+		(await listeDeux.locator('br').count()) === 1,
+		String(await listeDeux.locator('br').count()));
+	/* Le tri est bien celui des noms. Le premier n'est pas comparé par son début :
+	   SPIP préfixe de son marqueur « ⚠️ » un texte qu'il juge dangereux, ce que
+	   fait ici le nom hostile injecté exprès. */
+	dit('les noms sont triés',
+		/Deuxieme/.test(deuxNoms[0]) && /^Plugin de test$/.test(deuxNoms[1]), deuxNoms.join(' | '));
+	dit('un nom de plugin hostile reste inerte dans la liste',
+		!/<svg/i.test(await listeDeux.innerHTML()) && /onload/.test(await listeDeux.innerText()),
+		(await listeDeux.innerHTML()).replace(/\s+/g, ' ').slice(0, 120));
+
+	sqlEcrire("DELETE FROM spip_dashboard_plugins WHERE prefixe = 'ZZZDEUX'");
+	await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+}
+
 // Rendre au parc son rafraîchissement automatique pour la suite du parcours.
 await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
 await page.fill('[name="fraicheur_depots"]', '86400');
