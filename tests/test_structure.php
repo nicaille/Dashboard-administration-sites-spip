@@ -359,6 +359,43 @@ foreach ($plugins as $plugin) {
 	}
 }
 
+echo "\n== Aucun préfixe d’avant le renommage ne traîne ==\n";
+
+/* Le bug qui motive ce test : `dashagent_version_plugin()` cherchait encore
+   `$infos['DASHAGENT']` dans la liste des plugins actifs, que SPIP range sous le
+   préfixe **courant**. Elle rendait « 0 », et le parc affichait « Version de
+   l’agent : 0 » sur tous les sites — sans que rien n’échoue par ailleurs.
+
+   Une lecture de meta figée sur un ancien préfixe ne casse rien de visible : elle
+   rend une valeur par défaut, et se remarque des semaines plus tard. */
+$anciens = ['DASHAGENT', 'DASHBOARD'];
+$fautes  = [];
+foreach ($plugins as $plugin) {
+	$prefixe_courant = strtoupper((string) simplexml_load_file($plugin . '/paquet.xml')['prefix']);
+	foreach (fichiers($plugin, ['php']) as $fichier) {
+		$source = file_get_contents($fichier);
+		foreach ($anciens as $ancien) {
+			if ($ancien === $prefixe_courant) {
+				continue;
+			}
+			// Seules les lectures de la liste des plugins actifs sont en cause :
+			// le nom peut légitimement figurer ailleurs, dans un commentaire ou
+			// une chaîne de compatibilité.
+			if (preg_match('/\[\s*.' . $ancien . '.\s*\]\s*\[/', $source)) {
+				$fautes[] = str_replace($plugin . '/', '', $fichier) . " : \$…['$ancien'][…]";
+			}
+		}
+	}
+}
+verifier('aucune lecture de plugin actif ne vise un préfixe abandonné', !$fautes, implode(' ; ', $fautes));
+
+/* Et la contrepartie : le préfixe courant doit bien être cherché quelque part,
+   sans quoi le test ci-dessus passerait sur du code qui ne cherche plus rien. */
+$agent = chemin_plugin('tourdecontrole_agent');
+$version = file_get_contents($agent . '/inc/dashagent.php');
+verifier('l’agent lit sa version sous son préfixe courant',
+	strpos($version, 'TOURDECONTROLE_AGENT') !== false);
+
 echo "\n== Autorisations ==\n";
 
 foreach ($plugins as $plugin) {

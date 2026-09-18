@@ -219,7 +219,17 @@ function dashagent_erreur($code, $message, $http = 400, $detail = []) {
 function dashagent_version_plugin() {
 	$infos = unserialize($GLOBALS['meta']['plugin'] ?? '') ?: [];
 
-	return (string) ($infos['DASHAGENT']['version'] ?? '0');
+	/* SPIP range les plugins actifs sous leur **préfixe courant**. Celui-ci a
+	   changé en 1.0.15, et cette lecture cherchait encore l'ancien : elle rendait
+	   « 0 », que le parc affichait en guise de version de l'agent. L'ancien nom
+	   reste consulté en second, le temps que les sites soient tous à jour. */
+	foreach (['TOURDECONTROLE_AGENT', 'DASHAGENT'] as $prefixe) {
+		if (!empty($infos[$prefixe]['version'])) {
+			return (string) $infos[$prefixe]['version'];
+		}
+	}
+
+	return '0';
 }
 
 /**

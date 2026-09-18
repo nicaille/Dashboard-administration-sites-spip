@@ -909,6 +909,47 @@ verifier('le total connu du site est rappelé', strpos($rien, '3 au total') !== 
 verifier('les trois diagnostics diffèrent',
 	count(array_unique([$injoignable, $tue, $rien])) === 3);
 
+echo "\n== Mesurer un cache sans y laisser la synchronisation ==\n";
+
+/* Le poids des caches est une information de confort ; la synchronisation, elle,
+   ne l'est pas. Sur un site à des dizaines de milliers de fichiers de cache, le
+   parcours dépassait à lui seul les trente secondes que la tour de contrôle
+   accorde, et l'inventaire entier était perdu pour un chiffre accessoire. */
+$bac_cache = _DIR_TMP . 'mesure-cache/';
+if (!is_dir($bac_cache)) {
+	mkdir($bac_cache, 0777, true);
+}
+for ($i = 0; $i < 1200; $i++) {
+	file_put_contents($bac_cache . 'f' . $i . '.txt', 'x');
+}
+
+$complet = dashagent_mesurer_repertoire($bac_cache);
+verifier('sans échéance, tout est mesuré', $complet['fichiers'] === 1200 && !$complet['partiel'],
+	$complet['fichiers'] . ' fichier(s)');
+
+/* Une échéance déjà passée : la mesure doit rendre la main tout de suite, et le
+   dire — un chiffre partiel annoncé comme complet serait un mensonge. */
+$presse = dashagent_mesurer_repertoire($bac_cache, 20000, microtime(true) - 1);
+verifier('une échéance dépassée interrompt la mesure', $presse['partiel'] === true);
+verifier('et la mesure interrompue reste en deçà du total',
+	$presse['fichiers'] < 1200, $presse['fichiers'] . ' fichier(s) sur 1200');
+verifier('le répertoire est tout de même signalé comme existant', $presse['existe'] === true);
+
+// Le plafond en nombre de fichiers n'a pas disparu au passage.
+$plafonne = dashagent_mesurer_repertoire($bac_cache, 100);
+verifier('le plafond en nombre de fichiers tient toujours',
+	$plafonne['fichiers'] === 100 && $plafonne['partiel'] === true, $plafonne['fichiers'] . ' fichier(s)');
+
+// Une échéance large ne doit rien tronquer.
+$large = dashagent_mesurer_repertoire($bac_cache, 20000, microtime(true) + 30);
+verifier('une échéance large laisse la mesure aller au bout',
+	$large['fichiers'] === 1200 && !$large['partiel'], $large['fichiers'] . ' fichier(s)');
+
+foreach (glob($bac_cache . '*') as $f) {
+	@unlink($f);
+}
+@rmdir($bac_cache);
+
 echo "\n== Fraîcheur d’un compte rendu ==\n";
 
 /* L'encadré d'avancement disparaît avec le statut « en cours », et il ne restait
