@@ -10,6 +10,18 @@ if (!defined('_ECRIRE_INC_VERSION')) {
 }
 
 /**
+ * Temps accordé à la mesure des caches, pour l'inventaire entier.
+ *
+ * Le poids des caches est une information de confort ; la synchronisation, elle,
+ * ne l'est pas. Sur un gros site — des dizaines de milliers de fichiers de
+ * cache — le parcours dépassait à lui seul le délai d'attente de la tour de
+ * contrôle, et l'inventaire tout entier était perdu pour un chiffre accessoire.
+ */
+if (!defined('_DASHAGENT_CACHES_BUDGET')) {
+	define('_DASHAGENT_CACHES_BUDGET', 5.0);
+}
+
+/**
  * Construit l'inventaire complet renvoyé au dashboard.
  *
  * @param array $args
@@ -453,11 +465,18 @@ function dashagent_infos_caches() {
 	include_spip('inc/dashagent_cache');
 	include_spip('inc/dashagent_fs');
 
+	/* Un budget pour l'inventaire **entier**, et non par répertoire : cinq cibles
+	   à trois secondes chacune remettraient la synchronisation au-delà du délai
+	   de la tour de contrôle, qui est de trente secondes. Ce qui n'a pas été
+	   mesuré ressort « partiel », et l'inventaire est rendu quand même — un
+	   poids de cache approximatif vaut mieux qu'une synchronisation perdue. */
+	$echeance = microtime(true) + _DASHAGENT_CACHES_BUDGET;
+
 	$mesures = [];
 	foreach (dashagent_cibles_cache() as $cible => $definition) {
 		$total = ['existe' => false, 'octets' => 0, 'fichiers' => 0, 'partiel' => false];
 		foreach ($definition['repertoires'] as $dir) {
-			$m = dashagent_mesurer_repertoire($dir);
+			$m = dashagent_mesurer_repertoire($dir, 20000, $echeance);
 			$total['existe']   = $total['existe'] || $m['existe'];
 			$total['octets']  += $m['octets'];
 			$total['fichiers'] += $m['fichiers'];

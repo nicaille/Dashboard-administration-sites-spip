@@ -3,7 +3,7 @@
 ## Les dossiers de plugins portent leur version
 
 `plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.23`,
-`plugins/tourdecontrole_agent-1.0.17`.
+`plugins/tourdecontrole_agent-1.0.18`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
 dans le même commit que le changement de `version=` dans son `paquet.xml`. Un
@@ -147,6 +147,35 @@ vérifications, c'est là qu'il faut regarder.
 
 Un underscore dans un préfixe ne pose aucun problème — `porte_plume`, livré avec
 SPIP, en porte un.
+
+## Une lecture de meta figée sur un ancien préfixe ne casse rien de visible
+
+`dashagent_version_plugin()` cherchait `$infos['DASHAGENT']` dans la liste des
+plugins actifs, que SPIP range sous le **préfixe courant**. Après le renommage,
+elle rendait sa valeur par défaut — « 0 » — et le parc a affiché « Version de
+l'agent : 0 » pendant des semaines sans que rien n'échoue par ailleurs.
+
+C'est le propre de cette faute : elle ne lève aucune erreur, elle rend un
+défaut. Les renommages de préfixe doivent donc être relus **aussi** du côté des
+lectures de `$GLOBALS['meta']['plugin']`, que la liste des fichiers dérivés du
+préfixe ne couvre pas.
+
+`tests/test_structure.php` refuse maintenant toute lecture indexée sur un
+préfixe abandonné, et vérifie que l'agent cherche bien le sien.
+
+## Les opérations longues ont un budget, pas seulement un plafond
+
+La mesure des caches parcourait jusqu'à vingt mille fichiers par répertoire, un
+`stat()` par fichier. Le plafond en nombre ne protège pas du temps : sur un
+disque partagé, ce parcours dépassait à lui seul les trente secondes que la tour
+de contrôle accorde à une synchronisation, et l'inventaire entier était perdu
+pour un chiffre accessoire.
+
+`_DASHAGENT_CACHES_BUDGET` borne désormais l'inventaire **entier**, pas chaque
+répertoire — cinq cibles à trois secondes chacune auraient reproduit le
+problème. Ce qui n'a pas été parcouru ressort `partiel`, et l'inventaire est
+rendu quand même : une valeur approximative vaut mieux qu'une synchronisation
+perdue.
 
 ## Le dépôt SVP se fabrique, il ne s'écrit pas à la main
 

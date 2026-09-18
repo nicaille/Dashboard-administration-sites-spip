@@ -21,7 +21,7 @@ if (!defined('_ECRIRE_INC_VERSION')) {
  * @param int $max_fichiers
  * @return array{existe: bool, octets: int, fichiers: int, partiel: bool}
  */
-function dashagent_mesurer_repertoire($dir, $max_fichiers = 20000) {
+function dashagent_mesurer_repertoire($dir, $max_fichiers = 20000, $echeance = 0) {
 	$mesure = ['existe' => false, 'octets' => 0, 'fichiers' => 0, 'partiel' => false];
 	if (!is_dir($dir)) {
 		return $mesure;
@@ -35,6 +35,15 @@ function dashagent_mesurer_repertoire($dir, $max_fichiers = 20000) {
 		);
 		foreach ($iterateur as $fichier) {
 			if ($mesure['fichiers'] >= $max_fichiers) {
+				$mesure['partiel'] = true;
+				break;
+			}
+			/* Le plafond en nombre de fichiers ne protège pas du temps : vingt
+			   mille `stat()` sur un disque partagé et froid se comptent en
+			   dizaines de secondes, et la tour de contrôle abandonne à trente.
+			   On regarde l'horloge tous les 512 fichiers — assez souvent pour
+			   tenir le budget, assez rarement pour ne rien coûter. */
+			if ($echeance && ($mesure['fichiers'] % 512) === 0 && microtime(true) > $echeance) {
 				$mesure['partiel'] = true;
 				break;
 			}
