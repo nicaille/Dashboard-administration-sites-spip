@@ -71,6 +71,10 @@ remplace lui-même pendant qu'il répond, et le **cache ou répartiteur en front
 (Varnish, nginx, Cloudflare) dont la patience est plus courte que la nôtre — son
 `first_byte_timeout` vaut soixante secondes par défaut, là où un export SQL en
 prend davantage, et il rend un 503 en HTML pendant que PHP travaille encore.
+Rencontré en vrai sur l'option CDN d'un hébergement OVH, où ce délai n'est
+exposé dans **aucun réglage accessible** : un frontal qu'on administre se règle,
+un CDN d'hébergeur se contourne — en pointant `url_agent`, champ distinct de
+`url_site`, vers un nom que le CDN ne couvre pas.
 
 Toute opération longue doit donc savoir **aller constater** plutôt que conclure :
 
