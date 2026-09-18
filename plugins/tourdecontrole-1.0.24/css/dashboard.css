@@ -363,3 +363,60 @@
 	border: 1px solid rgba(0, 0, 0, .15);
 	background: #fff;
 }
+
+/* Tendance du WAF. Les teintes sont posées ici, en variables, pour deux raisons :
+   le thème sombre de l'espace privé n'a qu'à les redéfinir, et le JavaScript les
+   lit au lieu de les inventer.
+
+   Les deux pas — bleu pour les requêtes, orange pour les adresses — sont ceux
+   d'une palette catégorielle vérifiée : écart perceptuel suffisant sous les trois
+   formes de daltonisme, et contraste supérieur à 3:1 sur le fond, dans les deux
+   thèmes. */
+.dashboard-graphe {
+	--dashboard-graphe-requetes: #2a78d6;
+	--dashboard-graphe-ips:      #eb6834;
+	--dashboard-graphe-encre:    #52514e;
+	--dashboard-graphe-grille:   #e6e5e0;
+	margin: 1em 0;
+}
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) .dashboard-graphe {
+		--dashboard-graphe-requetes: #3987e5;
+		--dashboard-graphe-ips:      #d95926;
+		--dashboard-graphe-encre:    #c3c2b7;
+		--dashboard-graphe-grille:   #33322f;
+	}
+}
+:root[data-theme="dark"] .dashboard-graphe {
+	--dashboard-graphe-requetes: #3987e5;
+	--dashboard-graphe-ips:      #d95926;
+	--dashboard-graphe-encre:    #c3c2b7;
+	--dashboard-graphe-grille:   #33322f;
+}
+
+/* Une hauteur explicite : sans elle, un canvas en responsive s'étire sans fin. */
+.dashboard-graphe-cadre {
+	position: relative;
+	height: 220px;
+	margin-bottom: 1.2em;
+}
+
+/* Le sélecteur de fenêtre, sur une ligne au-dessus des deux graphiques. */
+.dashboard-graphe-fenetres {
+	margin-bottom: .8em;
+}
+.dashboard-graphe-fenetres .btn[aria-pressed="true"] {
+	font-weight: 700;
+}
+
+/* Le tableau qui double les courbes : replié, il ne les encombre pas. */
+.dashboard-graphe-tableau {
+	margin-top: .6em;
+}
+.dashboard-graphe-tableau summary {
+	cursor: pointer;
+	font-size: .95em;
+}
+.dashboard-graphe-tableau table {
+	margin-top: .5em;
+}

@@ -124,6 +124,19 @@ Chaque entrée de `plugins` porte : `prefixe`, `nom`, `version`,
 `version_disponible` provient des dépôts SVP locaux quand SVP est installé sur
 le site géré ; l'agent n'ouvre aucune connexion sortante pour la calculer.
 
+`waf_serie` s'ajoute quand le site a le plugin SPIP WAF, et vaut `null` sinon :
+`jours` (la profondeur demandée, quatre-vingt-dix au plus), `depuis` (le premier
+jour rendu) et `points`, une entrée par journée — `jour` (`AAAA-MM-JJ`),
+`requetes`, `ips`, `bans`. La série est **continue** : les journées sans
+événement valent zéro plutôt que de manquer, faute de quoi une courbe relierait
+deux jours distants comme s'ils se suivaient.
+
+Elle est rendue avec l'inventaire, et non par `waf_resume` : `waf_resume` vide
+d'abord la file d'événements du pare-feu, ce qui n'a rien à faire dans une
+synchronisation automatique. `waf_serie` ne fait que compter, et ne relève donc
+d'aucune autorisation particulière — l'inventaire n'est déjà rendu qu'à un
+appelant signé.
+
 ### `purger`
 
 Argument : `cibles`, tableau parmi `pages`, `squelettes`, `images`, `css_js`,

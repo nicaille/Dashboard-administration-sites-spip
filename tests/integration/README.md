@@ -29,6 +29,14 @@ tests/integration/executer.sh /chemin/vers/SPIP-v4.4.23.zip
 Le script travaille dans un répertoire temporaire, laisse le site installé pour
 inspection, et retourne un code de sortie non nul au premier échec.
 
+Le plugin **SPIP WAF** n'est pas livré ici — c'est une contribution tierce. La
+section qui le concerne, graphiques de tendance compris, est simplement sautée
+si l'archive n'est pas fournie :
+
+```bash
+WAF_ZIP=/chemin/waf-vX.Y.Z.zip tests/integration/executer.sh /chemin/SPIP-v4.4.23.zip
+```
+
 `DASHBOARD_TEST_DIR` impose le répertoire de travail. Si l'environnement
 n'autorise pas un démon lancé depuis un script, démarrez le serveur à part —
 le script détecte un serveur déjà en écoute et le réutilise :
@@ -68,6 +76,7 @@ DASHBOARD_TEST_SANS_PREPARATION=1 tests/integration/executer.sh <zip> 8321
 | Chantiers | chaque mise à jour commence par une sauvegarde neuve, affiche son encadré de progression, est menée à son terme par le pilote de la page, et porte au journal la transition de version comme sa conclusion |
 | Onglet Serveur | l'onglet est refusé tant que le site géré ne l'a pas autorisé ; une fois permis, le résumé, le parcours d'une table (tri, filtre, pagination), les fichiers de réglage et le phpinfo s'affichent — et aucune empreinte, aucun secret partagé, aucune variable d'environnement sensible n'atteint l'écran |
 | Migration du schéma | l'archive annonce aussi une version de schéma plus récente et embarque un palier qui ajoute une colonne : le test vérifie que la colonne existe, que la meta a suivi, et que l'espace privé du site n'est plus bloqué |
+| Tendance du WAF | la synchronisation range l'activité jour par jour, la fiche et la vue d'ensemble tracent deux graphiques (jamais un double axe), les courbes sont réellement peintes — pixels relus —, la série est continue, le sélecteur découpe la fenêtre sans recharger, et aucun script ne vient d'un hôte extérieur |
 | Restauration | le dump se rejoue dans une base neuve, contenu intact |
 
 ## Ce que le parcours ne couvre pas

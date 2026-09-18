@@ -12,7 +12,7 @@
 $racine = dirname(__DIR__);
 
 /**
- * Les dossiers de plugins portent leur version (`tourdecontrole-1.0.23`), pour qu'une
+ * Les dossiers de plugins portent leur version (`tourdecontrole-1.0.24`), pour qu'une
  * mise en ligne n'écrase pas la version précédente. On les retrouve donc par
  * préfixe, sans quoi ce fichier serait à retoucher à chaque montée de version.
  *
@@ -872,6 +872,57 @@ verifier('chaque API SPIP est appelée avec son include_spip', !$defauts);
 foreach (array_keys($defauts) as $defaut) {
 	echo "         $defaut\n";
 }
+
+echo "\n== La branche « sinon » d'une boucle ==\n";
+
+/*
+ * Ce qui suit `</BOUCLE_x>` jusqu'au `<//B_x>` n'est pas la fin du squelette :
+ * c'est la branche que SPIP rend **quand la boucle n'a rien trouvé**. Les deux
+ * balises de chargement de Chart.js y avaient atterri, en bas de fichier, à
+ * l'endroit qui semblait naturel — et les graphiques ne s'affichaient que sur
+ * un parc dont les tables sont absentes, c'est-à-dire jamais.
+ *
+ * Rien, sur la page, ne le dit : le bloc du graphique est bien là, son JSON
+ * aussi, et seul le tracé manque. Un `<script src>` dans cette branche est
+ * donc refusé — un chargement de bibliothèque n'a aucune raison d'être réservé
+ * au cas où la boucle est vide.
+ */
+$egares = [];
+$branches = 0;
+foreach ($plugins as $plugin) {
+	foreach (fichiers($plugin, ['html']) as $fichier) {
+		$source = file_get_contents($fichier);
+		if (!preg_match_all('{<//B_([a-z0-9_]+)>}i', $source, $fins, PREG_OFFSET_CAPTURE | PREG_SET_ORDER)) {
+			continue;
+		}
+		$affiche = str_replace($plugin . '/', '', $fichier);
+		foreach ($fins as $fin) {
+			$nom = $fin[1][0];
+			// Le début de la branche, c'est la dernière fermeture qui précède.
+			$debut = -1;
+			foreach (['</B_' . $nom . '>', '</BOUCLE_' . $nom . '>'] as $marque) {
+				$ou = strrpos(substr($source, 0, $fin[0][1]), $marque);
+				if ($ou !== false) {
+					$debut = max($debut, $ou + strlen($marque));
+				}
+			}
+			if ($debut < 0) {
+				continue;
+			}
+			$branches++;
+			$sinon = substr($source, $debut, $fin[0][1] - $debut);
+			if (preg_match('{<script[^>]+src=}i', $sinon)) {
+				$egares[$affiche . ' : <script src> dans la branche « sinon » de ' . $nom] = true;
+			}
+		}
+	}
+}
+
+verifier("$branches branches « sinon » relues, aucune ne charge de script", !$egares);
+foreach (array_keys($egares) as $egare) {
+	echo "         $egare\n";
+}
+
 
 echo "\n== Clefs de langue référencées ==\n";
 

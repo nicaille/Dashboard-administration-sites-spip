@@ -745,3 +745,130 @@ function dashboard_cibles_purge() {
 		'sessions'   => _T('dashboard:purge_sessions'),
 	];
 }
+
+/**
+ * Nombre de jours d'historique WAF servis à la page.
+ *
+ * Le sélecteur propose sept, trente et quatre-vingt-dix jours ; la page reçoit
+ * la fenêtre la plus large **une seule fois**, et le navigateur y découpe les
+ * autres. Basculer de trente à quatre-vingt-dix jours est alors instantané, et
+ * ne coûte ni requête ni rechargement — pour quelques kilo-octets de JSON.
+ */
+if (!defined('_DASHBOARD_WAF_FENETRE')) {
+	define('_DASHBOARD_WAF_FENETRE', 90);
+}
+
+/**
+ * Complète une série quotidienne, jour par jour, sans trou.
+ *
+ * Les jours sans événement n'existent pas en base : les inventer ici est
+ * indispensable à la lecture. Une courbe qui saute du 3 au 9 laisse croire à
+ * une continuité entre les deux, là où il ne s'est rien passé pendant cinq
+ * jours — c'est précisément l'inverse de ce qu'on veut montrer.
+ *
+ * @param array $connus Indexé par jour (AAAA-MM-JJ)
+ * @param int $jours
+ * @return array Liste de points, du plus ancien au plus récent
+ */
+function dashboard_waf_completer($connus, $jours) {
+	$jours   = max(1, min(365, (int) $jours));
+	$premier = date('Y-m-d', time() - ($jours - 1) * 86400);
+	$points  = [];
+
+	for ($i = 0; $i < $jours; $i++) {
+		$jour = date('Y-m-d', strtotime($premier . ' +' . $i . ' day'));
+		$points[] = [
+			'jour'     => $jour,
+			'requetes' => (int) ($connus[$jour]['requetes'] ?? 0),
+			'ips'      => (int) ($connus[$jour]['ips'] ?? 0),
+		];
+	}
+
+	return $points;
+}
+
+/**
+ * L'activité quotidienne du WAF d'un site, prête pour le graphique.
+ *
+ * @param int $id_dashboard_site
+ * @param int $jours
+ * @return array
+ */
+function dashboard_waf_serie($id_dashboard_site, $jours = _DASHBOARD_WAF_FENETRE) {
+	$depuis = date('Y-m-d', time() - (max(1, (int) $jours) - 1) * 86400);
+
+	$lignes = sql_allfetsel(
+		['jour', 'requetes', 'ips'],
+		'spip_dashboard_waf_jours',
+		['id_dashboard_site = ' . (int) $id_dashboard_site, 'jour >= ' . sql_quote($depuis)],
+		'',
+		'jour'
+	);
+
+	$connus = [];
+	foreach ((array) $lignes as $ligne) {
+		$connus[(string) $ligne['jour']] = $ligne;
+	}
+
+	return dashboard_waf_completer($connus, $jours);
+}
+
+/**
+ * La même chose pour le parc entier : la somme des sites équipés du WAF.
+ *
+ * Les requêtes s'additionnent sans réserve. Les adresses, non : une même IP qui
+ * frappe trois sites y est comptée trois fois, et le total n'est donc pas un
+ * nombre d'assaillants distincts. C'est assumé — le graphique mesure la
+ * pression subie par le parc, pas la population qui l'exerce, et il faudrait
+ * remonter les adresses elles-mêmes pour dire l'autre. La légende le dit.
+ *
+ * @param int $jours
+ * @return array
+ */
+function dashboard_waf_serie_parc($jours = _DASHBOARD_WAF_FENETRE) {
+	$depuis = date('Y-m-d', time() - (max(1, (int) $jours) - 1) * 86400);
+
+	$lignes = sql_allfetsel(
+		['jour', 'SUM(requetes) AS requetes', 'SUM(ips) AS ips'],
+		'spip_dashboard_waf_jours',
+		'jour >= ' . sql_quote($depuis),
+		'jour',
+		'jour'
+	);
+
+	$connus = [];
+	foreach ((array) $lignes as $ligne) {
+		$connus[(string) $ligne['jour']] = $ligne;
+	}
+
+	return dashboard_waf_completer($connus, $jours);
+}
+
+/**
+ * Une série en JSON, à déposer dans la page.
+ *
+ * Les quatre drapeaux d'échappement ne sont pas décoratifs : sans `JSON_HEX_TAG`,
+ * une valeur contenant `</script>` refermerait le bloc et le reste passerait pour
+ * du HTML. Ici les valeurs sont des entiers et des dates validées, mais la
+ * protection ne coûte rien et survivra au prochain champ ajouté.
+ *
+ * @param array $points
+ * @return string
+ */
+function dashboard_waf_json($points) {
+	return (string) json_encode(
+		['points' => array_values((array) $points)],
+		JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE
+	);
+}
+
+/**
+ * Le parc compte-t-il au moins un site équipé du WAF ?
+ *
+ * Sert à n'afficher l'encadré de tendance que s'il a quelque chose à montrer.
+ *
+ * @return bool
+ */
+function dashboard_waf_parc_present() {
+	return (bool) sql_countsel('spip_dashboard_waf_jours');
+}

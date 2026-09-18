@@ -1040,6 +1040,22 @@ const wafInstalle = JSON.parse(sql(
 if (!wafInstalle) {
 	console.log('  (sauté) plugin SPIP WAF absent du banc — relancer avec WAF_ZIP=/chemin/waf-vX.Y.Z.zip');
 } else {
+	/* De quoi faire parler la tendance : des blocages étalés sur plusieurs jours,
+	   avec un jour creux au milieu. Sans cela, la série tiendrait sur une seule
+	   colonne et ne dirait rien de ce que le graphique doit montrer. */
+	for (const [jours, ip, type, motif] of [
+		[9, '203.0.113.21', 'BLOCKED', 'SQLI'], [9, '203.0.113.22', 'BLOCKED', 'XSS'],
+		[6, '198.51.100.31', 'BLOCKED', 'SQLI'],
+		// Rien le 5e jour : le trou doit ressortir à zéro, pas disparaître.
+		[4, '198.51.100.32', 'BLOCKED', 'XSS'], [4, '198.51.100.33', 'BLOCKED', 'SQLI'],
+		[4, '198.51.100.34', 'BAN', 'BANNED_IP'],
+		[2, '192.0.2.44', 'BLOCKED', 'LOGIN_FAIL'],
+	]) {
+		sqlEcrire(`INSERT INTO spip_waf_events (date_event, ip, type, reason, trigger_info, method, uri, ua, extra)`
+			+ ` VALUES (datetime('now','-${jours} days'), '${ip}', '${type}', '${motif}', '', 'GET',`
+			+ ` '/spip.php?page=x', 'curl/8.5', '')`);
+	}
+
 	// De quoi faire parler le tableau : des blocages, une adresse bannie.
 	for (const [heure, ip, type, motif] of [
 		[1, '203.0.113.5', 'BLOCKED', 'SQLI'], [2, '203.0.113.5', 'BLOCKED', 'XSS'],
@@ -1064,9 +1080,16 @@ if (!wafInstalle) {
 
 	dit('l’onglet SPIP WAF apparaît sur un site qui a le plugin',
 		(await page.locator('#onglet-waf').count()) === 1);
+	// Les tableaux du graphique ne comptent pas : ils sont bâtis depuis notre
+	// propre base, remplie à la synchronisation précédente, sans rien demander au
+	// site géré. Ce qu'on veut établir ici, c'est qu'aucun chiffre **du pare-feu
+	// distant** n'est allé se chercher avant que l'onglet ne soit ouvert.
+	const tablesDistantes = await page.evaluate(() =>
+		Array.from(document.querySelectorAll('#panneau-waf table'))
+			.filter((t) => !t.closest('[data-dashboard-waf-graphe]')).length);
 	dit('rien n’est demandé au site avant d’ouvrir l’onglet',
 		/Le site sera interrogé|attente|Interrogation/i.test(await page.locator('#panneau-waf').innerText())
-			|| (await page.locator('#panneau-waf table').count()) === 0);
+			|| tablesDistantes === 0);
 
 	await page.locator('#onglet-waf').click();
 	await page.waitForTimeout(4000);
@@ -1091,6 +1114,86 @@ if (!wafInstalle) {
 		(await page.evaluate(() => window.__xss || 0)) === 0
 			&& !(await waf.innerHTML()).includes('<svg onload='),
 		(await waf.innerText()).includes('svg onload') ? 'rendue en texte' : 'absente');
+
+	/* La tendance. Elle vient de notre base, remplie à la synchronisation : une
+	   synchro est donc nécessaire avant qu'il y ait quoi que ce soit à tracer. */
+	await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+	await page.locator('form.bouton_action_post button', { hasText: 'Synchroniser' }).first().click();
+	await page.waitForLoadState('domcontentloaded');
+	await page.waitForTimeout(2000);
+
+	const jours = JSON.parse(sql('SELECT COUNT(*) AS n FROM spip_dashboard_waf_jours'))[0].n;
+	dit('la synchronisation range l’activité du WAF jour par jour', Number(jours) > 0, `${jours} journée(s)`);
+
+	await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+	await page.locator('#onglet-waf').click();
+	await page.waitForTimeout(1500);
+
+	const graphe = page.locator('[data-dashboard-waf-graphe]').first();
+	dit('le bloc de tendance est présent sur la fiche', (await graphe.count()) === 1);
+
+	if (await graphe.count()) {
+		// Deux graphiques distincts, jamais un double axe : « requêtes » et
+		// « adresses » n'ont pas le même ordre de grandeur.
+		dit('deux graphiques, pas un seul à double axe',
+			(await graphe.locator('canvas').count()) === 2);
+
+		// Chart.js a réellement dessiné : un canvas non peint reste vide.
+		const peint = await page.evaluate(() => {
+			const c = document.querySelector('[data-dashboard-waf-graphe] canvas');
+			if (!c || !c.width) { return false; }
+			const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+			for (let i = 3; i < d.length; i += 4) { if (d[i] !== 0) { return true; } }
+			return false;
+		});
+		dit('les courbes sont effectivement tracées', peint);
+
+		// La série porte la fenêtre large ; le sélecteur y découpe sans requête.
+		const points = await page.evaluate(() => {
+			const j = document.querySelector('[data-dashboard-waf-graphe] script[type="application/json"]');
+			return JSON.parse(j.textContent).points.length;
+		});
+		dit('la page reçoit la fenêtre large en une fois', points === 90, `${points} points`);
+
+		const trous = await page.evaluate(() => {
+			const j = document.querySelector('[data-dashboard-waf-graphe] script[type="application/json"]');
+			const p = JSON.parse(j.textContent).points;
+			for (let i = 1; i < p.length; i++) {
+				const attendu = new Date(Date.parse(p[i - 1].jour) + 86400000).toISOString().slice(0, 10);
+				if (p[i].jour !== attendu) { return p[i].jour; }
+			}
+			return '';
+		});
+		dit('la série n’a aucun trou de jour', trous === '', trous || 'continue');
+
+		// Le sélecteur change la fenêtre sans recharger la page.
+		await graphe.locator('[data-fenetre="7"]').click();
+		await page.waitForTimeout(400);
+		dit('le sélecteur retient la fenêtre choisie',
+			(await graphe.locator('[data-fenetre="7"]').getAttribute('aria-pressed')) === 'true');
+
+		// Le tableau qui double les courbes, pour qui ne les voit pas.
+		await graphe.locator('details summary').click();
+		await page.waitForTimeout(300);
+		const lignes = await graphe.locator('details tbody tr').count();
+		dit('un tableau double les courbes, réduit à la fenêtre choisie', lignes === 7, `${lignes} ligne(s)`);
+	}
+
+	// Et la tendance du parc, sur la vue d'ensemble.
+	await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+	await page.waitForTimeout(1200);
+	const grapheParc = page.locator('#waf [data-dashboard-waf-graphe]');
+	dit('la vue d’ensemble porte la tendance du parc', (await grapheParc.count()) === 1);
+	if (await grapheParc.count()) {
+		dit('elle aussi en deux graphiques', (await grapheParc.locator('canvas').count()) === 2);
+	}
+
+	// Chart.js est servi par le plugin, jamais par un CDN.
+	const sources = await page.evaluate(() =>
+		Array.from(document.querySelectorAll('script[src]')).map((s) => s.getAttribute('src')));
+	dit('aucun script n’est chargé depuis un hôte extérieur',
+		!sources.some((u) => /^https?:\/\//.test(u) && !u.includes('127.0.0.1')),
+		sources.filter((u) => /^https?:/.test(u)).join(' ') || 'tous locaux');
 }
 
 console.log('\n### Script d’installation (spip_loader.php)');

@@ -96,6 +96,13 @@ function tourdecontrole_upgrade($nom_meta_base_version, $version_cible) {
 		['tourdecontrole_creer_tables'],
 	];
 
+	// 1.0.7 : l'activité du WAF des sites est retenue jour par jour, pour en
+	// lire la tendance — et pour la garder au-delà des quatre-vingt-dix jours
+	// que le WAF conserve lui-même.
+	$maj['1.0.7'] = [
+		['tourdecontrole_creer_tables'],
+	];
+
 	include_spip('base/upgrade');
 	maj_plugin($nom_meta_base_version, $version_cible, $maj);
 }
@@ -114,6 +121,7 @@ function tourdecontrole_vider_tables($nom_meta_base_version) {
 	sql_drop_table('spip_dashboard_journal');
 	sql_drop_table('spip_dashboard_chantiers');
 	sql_drop_table('spip_dashboard_sauvegardes');
+	sql_drop_table('spip_dashboard_waf_jours');
 
 	effacer_meta('dashboard');
 	effacer_meta($nom_meta_base_version);
