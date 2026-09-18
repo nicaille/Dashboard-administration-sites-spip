@@ -422,6 +422,42 @@ function dashagent_sauvegarde_lister() {
 }
 
 /**
+ * Les exports restés inachevés, comme preuve d'un processus interrompu.
+ *
+ * Un `.partiel` que personne n'a renommé ne vaut rien comme sauvegarde — il
+ * n'est d'ailleurs jamais listé. Mais il vaut beaucoup comme **indice** : il
+ * prouve que PHP a commencé à écrire et n'est pas allé au bout, ce qui désigne
+ * une limite du site — temps d'exécution, mémoire — et non le cache en frontal.
+ *
+ * Sans cette information, une tour de contrôle qui ne retrouve aucune sauvegarde
+ * après un 503 ne peut pas distinguer « l'export n'a jamais démarré » de « il a
+ * été tué en route », et renvoie la même erreur opaque dans les deux cas.
+ *
+ * Aucun identifiant n'est rendu : ces fichiers ne se téléchargent ni ne se
+ * restaurent, ils se constatent.
+ *
+ * @return array
+ */
+function dashagent_sauvegarde_inacheves() {
+	$dir = dashagent_dir_sauvegardes();
+	if (!$dir) {
+		return [];
+	}
+	$liste = [];
+	foreach ((array) glob($dir . 'sauvegarde-*.sql.gz.partiel') as $chemin) {
+		$liste[] = [
+			'octets' => (int) filesize($chemin),
+			'date'   => date('c', (int) filemtime($chemin)),
+		];
+	}
+	usort($liste, function ($a, $b) {
+		return strcmp($b['date'], $a['date']);
+	});
+
+	return $liste;
+}
+
+/**
  * Résout un identifiant de sauvegarde en chemin local sûr.
  *
  * @param string $identifiant
