@@ -875,6 +875,40 @@ foreach (glob($bac . '*') as $f) {
 }
 @rmdir($bac);
 
+echo "\n== Dire ce qu’on a vu, quand on n’a rien trouvé ==\n";
+
+/* Le rattrapage muet était pire que pas de rattrapage : il renvoyait le message
+   d'origine, mot pour mot celui d'avant le correctif. En le lisant, impossible
+   de savoir s'il avait cherché sans trouver ou s'il n'était pas installé — deux
+   situations qui n'appellent pas les mêmes gestes. */
+$injoignable = dashboard_sauvegarde_diagnostic(
+	['sauvegarde' => null, 'joignable' => false, 'sauvegardes' => 0, 'inacheves' => 0, 'octets_inacheve' => 0]
+);
+verifier('un site muet jusque sur son inventaire est signalé comme tel',
+	strpos($injoignable, 'n’a pas répondu non plus') !== false, $injoignable);
+
+/* L'indice qui désigne le bon coupable : un export commencé et non terminé
+   innocente le cache en frontal, et accuse une limite du site géré. */
+$tue = dashboard_sauvegarde_diagnostic(
+	['sauvegarde' => null, 'joignable' => true, 'sauvegardes' => 2, 'inacheves' => 1, 'octets_inacheve' => 1048576]
+);
+verifier('un export inachevé est nommé comme tel', strpos($tue, 'inachevé') !== false, $tue);
+verifier('et il oriente vers les limites du site, pas vers le cache',
+	strpos($tue, 'max_execution_time') !== false && strpos($tue, 'memory_limit') !== false, $tue);
+verifier('la taille de l’export inachevé est dite', strpos($tue, '1 Mio') !== false || strpos($tue, '1 M') !== false, $tue);
+
+/* Rien du tout : l'export n'a pas même démarré. */
+$rien = dashboard_sauvegarde_diagnostic(
+	['sauvegarde' => null, 'joignable' => true, 'sauvegardes' => 3, 'inacheves' => 0, 'octets_inacheve' => 0]
+);
+verifier('un site qui répond sans rien de neuf est distingué',
+	strpos($rien, 'aucune sauvegarde nouvelle') !== false, $rien);
+verifier('le total connu du site est rappelé', strpos($rien, '3 au total') !== false, $rien);
+
+/* Les trois constats doivent être distincts : c'est toute leur raison d'être. */
+verifier('les trois diagnostics diffèrent',
+	count(array_unique([$injoignable, $tue, $rien])) === 3);
+
 echo "\n== Fraîcheur d’un compte rendu ==\n";
 
 /* L'encadré d'avancement disparaît avec le statut « en cours », et il ne restait

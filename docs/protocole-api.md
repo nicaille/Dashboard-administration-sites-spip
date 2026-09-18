@@ -146,6 +146,13 @@ Produit un export SQL gzip dans `tmp/dashagent/sauvegardes/`. Retour :
 
 Listage et suppression, par `identifiant`.
 
+`sauvegarde_lister` rend aussi `inacheves` : les exports restés en plan
+(`.partiel`), sans identifiant puisqu'ils ne se téléchargent ni ne se
+restaurent. Ils ne valent rien comme sauvegarde et beaucoup comme indice —
+leur présence prouve que PHP a été interrompu en cours d'écriture, ce qui
+désigne une limite du site géré plutôt que le cache en frontal. Les agents
+d'avant la 1.0.17 n'en rendent pas.
+
 ### `sauvegarde_telecharger`
 
 Argument : `identifiant`. **Ne renvoie pas de JSON** mais le fichier lui-même,

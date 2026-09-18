@@ -94,7 +94,14 @@ function dashagent_executer($op, $args) {
 		case 'sauvegarde_lister':
 			include_spip('inc/dashagent_sauvegarde');
 
-			return ['ok' => true, 'sauvegardes' => dashagent_sauvegarde_lister()];
+			// `inacheves` accompagne la liste : un export tué en route ne s'y
+			// trouve pas, et c'est justement ce qu'il faut savoir quand aucune
+			// sauvegarde n'a été produite.
+			return [
+				'ok' => true,
+				'sauvegardes' => dashagent_sauvegarde_lister(),
+				'inacheves'   => dashagent_sauvegarde_inacheves(),
+			];
 
 		case 'sauvegarde_supprimer':
 			include_spip('inc/dashagent_sauvegarde');

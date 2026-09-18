@@ -119,11 +119,18 @@ function dashboard_operation_sauvegarder($id_dashboard_site, $options = []) {
 		   souvent malgré tout. Plutôt que d'annoncer un échec — et de pousser à
 		   refaire un travail déjà fait, deux fois plus long la seconde fois — on
 		   va voir ce que le site a réellement sur son disque. */
-		$sauvegarde = dashboard_silence($code)
+		$constat    = dashboard_silence($code)
 			? dashboard_sauvegarde_rattraper($id_dashboard_site, $depart)
-			: null;
+			: [];
+		$sauvegarde = $constat['sauvegarde'] ?? null;
 
 		if (!$sauvegarde) {
+			/* Dire qu'on est allé voir. Sans cela le message est celui d'avant le
+			   rattrapage, et personne ne peut savoir en le lisant si le correctif
+			   a cherché ou s'il n'est pas là. */
+			if ($constat) {
+				$message .= ' — ' . dashboard_sauvegarde_diagnostic($constat);
+			}
 			dashboard_journaliser($id_dashboard_site, 'sauvegarde', 'erreur', $message, $reponse['erreur'], $reponse['duree_ms']);
 
 			return ['ok' => false, 'message' => $message, 'code' => $code, 'data' => []];
@@ -197,7 +204,15 @@ function dashboard_operation_sauvegardes_lister($id_dashboard_site) {
 	}
 
 	// Tout ce qui vient d'un site géré est inerte avant d'aller plus loin.
-	return ['ok' => true, 'message' => '', 'code' => '', 'data' => dashboard_inerte((array) ($reponse['data']['sauvegardes'] ?? []))];
+	return [
+		'ok' => true,
+		'message' => '',
+		'code' => '',
+		'data' => dashboard_inerte((array) ($reponse['data']['sauvegardes'] ?? [])),
+		// Les exports restés en plan : sans valeur comme sauvegarde, précieux
+		// comme indice. Les agents d'avant la 1.0.17 n'en rendent pas.
+		'inacheves' => dashboard_inerte((array) ($reponse['data']['inacheves'] ?? [])),
+	];
 }
 
 /**
@@ -373,7 +388,7 @@ function dashboard_sauvegarde_verifier($chemin) {
 function dashboard_sauvegarde_rattraper($id_dashboard_site, $depart) {
 	$inventaire = dashboard_operation_sauvegardes_lister($id_dashboard_site);
 	if (empty($inventaire['ok'])) {
-		return null;
+		return ['sauvegarde' => null, 'joignable' => false, 'sauvegardes' => 0, 'inacheves' => 0, 'octets_inacheve' => 0];
 	}
 
 	$connus = array_column(
@@ -381,7 +396,49 @@ function dashboard_sauvegarde_rattraper($id_dashboard_site, $depart) {
 		'identifiant'
 	);
 
-	return dashboard_sauvegarde_retrouvee((array) $inventaire['data'], (int) $depart, $connus);
+	$inacheves = (array) ($inventaire['inacheves'] ?? []);
+
+	return [
+		'sauvegarde'      => dashboard_sauvegarde_retrouvee((array) $inventaire['data'], (int) $depart, $connus),
+		'joignable'       => true,
+		'sauvegardes'     => count((array) $inventaire['data']),
+		'inacheves'       => count($inacheves),
+		'octets_inacheve' => (int) ($inacheves[0]['octets'] ?? 0),
+	];
+}
+
+/**
+ * Ce que dire quand on est allé voir, et qu'on n'a rien trouvé.
+ *
+ * Le rattrapage muet était pire que pas de rattrapage du tout : il renvoyait le
+ * message d'origine, mot pour mot celui d'avant. Impossible, en le lisant, de
+ * savoir si le correctif avait cherché sans trouver ou s'il n'était pas
+ * installé — deux situations qui n'appellent pas les mêmes gestes.
+ *
+ * Le constat désigne en outre le bon coupable, ce que le 503 ne fait pas :
+ *
+ * - **un export inachevé sur le disque** prouve que PHP a commencé à écrire sans
+ *   aller au bout. Le cache en frontal n'y est alors pour rien : c'est une
+ *   limite du site géré, temps d'exécution ou mémoire ;
+ * - **rien du tout**, et l'export n'a pas même démarré — autorisation, place
+ *   disque, base illisible.
+ *
+ * @param array $constat Rendu par dashboard_sauvegarde_rattraper()
+ * @return string
+ */
+function dashboard_sauvegarde_diagnostic($constat) {
+	if (empty($constat['joignable'])) {
+		return 'le site n’a pas répondu non plus quand on lui a demandé ses sauvegardes';
+	}
+
+	if (!empty($constat['inacheves'])) {
+		return 'un export inachevé de ' . dashboard_octets((int) $constat['octets_inacheve'])
+			. ' traîne sur le site : PHP a été interrompu en cours d’écriture.'
+			. ' Regarder max_execution_time et memory_limit du site géré, plutôt que le cache en frontal';
+	}
+
+	return 'le site répond mais n’annonce aucune sauvegarde nouvelle ('
+		. (int) $constat['sauvegardes'] . ' au total) : l’export n’a pas abouti';
 }
 
 /**
