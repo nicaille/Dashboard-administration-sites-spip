@@ -108,8 +108,29 @@
 			</td>
 			<td>
 				#NB_PLUGINS
+				[(#REM)
+					Le décompte seul obligeait à ouvrir la fiche du site pour savoir
+					de quels plugins il s'agit. Le survol du badge les nomme.
+
+					La liste reprend les deux critères qui font le décompte :
+					une mise à jour annoncée, et un plugin qui n'est pas livré avec
+					SPIP — celui-là suit le core et ne se met pas à jour seul.
+
+					`tabindex` et `aria-describedby` parce qu'un survol à la souris
+					n'est pas une interface : au clavier, le focus ouvre la même
+					liste, et un lecteur d'écran la rattache au badge.
+				]
 				[(#NB_PLUGINS_MAJ|>{0}|oui)
-					<span class="dashboard-badge dashboard-badge-maj">[(#NB_PLUGINS_MAJ)] <:dashboard:a_mettre_a_jour:></span>
+					<span class="dashboard-badge dashboard-badge-maj dashboard-survol"
+						tabindex="0" aria-describedby="plugins-maj-#ID_DASHBOARD_SITE">
+						[(#NB_PLUGINS_MAJ)] <:dashboard:a_mettre_a_jour:>
+						<span class="dashboard-survol-liste" role="tooltip" id="plugins-maj-#ID_DASHBOARD_SITE">
+							<BOUCLE_maj(DASHBOARD_PLUGINS){id_dashboard_site}{maj_disponible=oui}{distribue=non}{par nom, prefixe}>
+							[(#COMPTEUR_BOUCLE|>{1}|oui)<br />]
+							[(#NOM|sinon{#PREFIXE}|entites_html)]
+							</BOUCLE_maj>
+						</span>
+					</span>
 				]
 			</td>
 			<td>[(#DATE_SYNC|dashboard_date_lisible{jour})][(#DATE_SYNC|dashboard_date_lisible{jour}|non)<:dashboard:jamais:>]</td>

@@ -2,7 +2,7 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.21`,
+`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.22`,
 `plugins/tourdecontrole_agent-1.0.16`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,

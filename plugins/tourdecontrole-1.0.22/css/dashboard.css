@@ -80,6 +80,45 @@
 
 .dashboard-ligne-maj { background: rgba(255, 213, 128, .18); }
 
+/* Le badge « N à mettre à jour » nomme au survol les plugins concernés : un
+   décompte sans les noms obligeait à ouvrir la fiche du site pour savoir de quoi
+   il retourne.
+
+   Le fond et la couleur du texte sont posés ensemble, à dessein : le thème privé
+   met le texte du badge en brun sur ocre, et un fond blanc sans couleur explicite
+   rendrait la liste illisible — le travers déjà rencontré sur les boutons de
+   pagination. */
+.dashboard-survol {
+	position: relative;
+	cursor: help;
+}
+.dashboard-survol-liste {
+	display: none;
+	position: absolute;
+	z-index: 20;
+	top: 100%;
+	left: 0;
+	margin-top: .3em;
+	padding: .5em .7em;
+	min-width: 12em;
+	max-width: 24em;
+	border: 1px solid #b9b9b9;
+	border-radius: 4px;
+	background: #fff;
+	color: #222;
+	/* Le badge impose `nowrap` à sa descendance : la liste le reprend à son compte. */
+	white-space: normal;
+	text-align: left;
+	font-size: 1.05em;
+	line-height: 1.5;
+	box-shadow: 0 2px 6px rgba(0, 0, 0, .2);
+}
+.dashboard-survol:hover .dashboard-survol-liste,
+.dashboard-survol:focus .dashboard-survol-liste,
+.dashboard-survol:focus-within .dashboard-survol-liste {
+	display: block;
+}
+
 /* Les boutons sont ceux du thème privé : `.btn` et `.btn.btn_secondaire`. On
    redéfinissait ici un fond blanc sans redéfinir la couleur du texte, que le
    thème met en blanc — d'où des libellés invisibles sur les boutons de
