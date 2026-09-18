@@ -700,17 +700,17 @@ echo "\n== Un silence n’est pas un verdict ==\n";
    la réponse peut ne jamais revenir alors que la mise à jour a réussi. Compter ce
    silence pour un échec annoncerait perdue une opération aboutie. */
 verifier('une connexion qui n’aboutit pas est un silence',
-	dashboard_chantier_silence('transport'));
+	dashboard_silence('transport'));
 verifier('une réponse qui n’est pas du JSON est un silence',
-	dashboard_chantier_silence('reponse_illisible'),
+	dashboard_silence('reponse_illisible'),
 	'un site en cours de mue sert sa page d’erreur, pas du JSON');
 
 /* La distinction est tout le sujet : un agent qui répond « verrou posé » a
    délibéré, et sa réponse se respecte. */
 foreach (['svp_verrou', 'svp_absent', 'paquet_inconnu', 'dependance', 'autorisation', 'inconnue'] as $code) {
-	verifier("« $code » est une réponse, pas un silence", !dashboard_chantier_silence($code));
+	verifier("« $code » est une réponse, pas un silence", !dashboard_silence($code));
 }
-verifier('un code vide n’est pas un silence', !dashboard_chantier_silence(''));
+verifier('un code vide n’est pas un silence', !dashboard_silence(''));
 
 /* Le repli sur l'archive, lui, ne se déclenche que sur les deux refus qui disent
    « je ne sais pas traiter ce plugin » — à ne pas confondre avec un silence. */
@@ -734,6 +734,146 @@ verifier('une version de départ vide se relit sans décalage',
 
 verifier('le plafond de silences laisse le temps à SPIP de se reprendre',
 	defined('_DASHBOARD_PLUGIN_SILENCES') && _DASHBOARD_PLUGIN_SILENCES >= 3);
+
+echo "\n== Retrouver une sauvegarde après une réponse perdue ==\n";
+
+/* Un cache en frontal rend son 503 bien avant que PHP ait fini l'export : la
+   sauvegarde existe le plus souvent malgré tout. Encore faut-il reconnaître la
+   bonne dans l'inventaire du site, et surtout n'en adopter aucune quand il n'y
+   en a pas — annoncer une protection qu'on n'a pas serait pire que l'échec. */
+$maintenant = time();
+$inventaire = [
+	['identifiant' => 'ancienne', 'octets' => 4096, 'date' => date('c', $maintenant - 86400 * 3)],
+	['identifiant' => 'connue',   'octets' => 4096, 'date' => date('c', $maintenant - 60)],
+	['identifiant' => 'fraiche',  'octets' => 8192, 'date' => date('c', $maintenant - 10)],
+];
+
+$trouvee = dashboard_sauvegarde_retrouvee($inventaire, $maintenant - 120, ['connue']);
+verifier('la sauvegarde que la demande vient de produire est retrouvée',
+	($trouvee['identifiant'] ?? '') === 'fraiche', (string) ($trouvee['identifiant'] ?? 'aucune'));
+
+verifier('une sauvegarde déjà inscrite chez nous n’est jamais adoptée',
+	($trouvee['identifiant'] ?? '') !== 'connue');
+
+/* Le garde-fou qui compte : sur un site où rien n'a été produit, il ne faut
+   rien adopter du tout — même s'il traîne de vieilles sauvegardes. */
+$rien = dashboard_sauvegarde_retrouvee(
+	[['identifiant' => 'ancienne', 'octets' => 4096, 'date' => date('c', $maintenant - 86400 * 3)]],
+	$maintenant - 120,
+	[]
+);
+verifier('une orpheline ancienne n’est pas adoptée', $rien === null, (string) ($rien['identifiant'] ?? '—'));
+
+verifier('un inventaire vide n’adopte rien',
+	dashboard_sauvegarde_retrouvee([], $maintenant - 120, []) === null);
+
+/* Une sauvegarde vide serait une protection en trompe-l’œil. */
+verifier('une sauvegarde de zéro octet n’est pas adoptée',
+	dashboard_sauvegarde_retrouvee(
+		[['identifiant' => 'vide', 'octets' => 0, 'date' => date('c', $maintenant)]],
+		$maintenant - 120,
+		[]
+	) === null);
+
+/* La date vient de l’horloge du site géré, pas de la nôtre : un décalage de
+   quelques minutes entre deux hébergements n’a rien d’exceptionnel, et ne doit
+   pas faire manquer une sauvegarde bien réelle. */
+$decalee = dashboard_sauvegarde_retrouvee(
+	[['identifiant' => 'decalee', 'octets' => 4096, 'date' => date('c', $maintenant - 900)]],
+	$maintenant - 120,
+	[]
+);
+verifier('un décalage d’horloge de quinze minutes ne fait pas manquer la sauvegarde',
+	($decalee['identifiant'] ?? '') === 'decalee');
+
+/* Mais la tolérance a une fin, sans quoi elle ne protégerait plus de rien. */
+verifier('au-delà de la tolérance, plus rien n’est adopté',
+	dashboard_sauvegarde_retrouvee(
+		[['identifiant' => 'trop_vieille', 'octets' => 4096, 'date' => date('c', $maintenant - 7200)]],
+		$maintenant - 120,
+		[]
+	) === null);
+
+/* La plus récente l’emporte quand plusieurs sont inconnues. */
+$plusieurs = dashboard_sauvegarde_retrouvee([
+	['identifiant' => 'avant', 'octets' => 4096, 'date' => date('c', $maintenant - 70)],
+	['identifiant' => 'apres', 'octets' => 4096, 'date' => date('c', $maintenant - 5)],
+], $maintenant - 120, []);
+verifier('entre deux inconnues, la plus récente l’emporte',
+	($plusieurs['identifiant'] ?? '') === 'apres');
+
+/* Une entrée malformée venue d’un site compromis ne doit pas faire tomber la
+   fonction ni se faire adopter. */
+verifier('une entrée malformée est ignorée',
+	dashboard_sauvegarde_retrouvee(
+		['pas un tableau', ['octets' => 4096, 'date' => date('c', $maintenant)], ['identifiant' => 'sans_date', 'octets' => 4096]],
+		$maintenant - 120,
+		[]
+	) === null);
+
+echo "\n== Une sauvegarde rapatriée est-elle intacte ? ==\n";
+
+/* Le fichier existe, il pèse son poids, et rien de tout cela ne dit qu'il est
+   lisible. Un export interrompu sur le site géré produit une archive gzip
+   amputée qui voyage parfaitement : empreinte et taille du transfert sont
+   justes, le contenu est perdu. Cela ne se découvre que le jour où l'on veut
+   restaurer — c'est-à-dire au pire moment. */
+$bac = _DIR_TMP . 'sauvegardes-verif/';
+if (!is_dir($bac)) {
+	mkdir($bac, 0777, true);
+}
+
+$dump = "-- Sauvegarde SPIP\nINSERT INTO spip_articles VALUES (1);\nSET FOREIGN_KEY_CHECKS=1;\n";
+
+file_put_contents($bac . 'saine.sql.gz', gzencode($dump));
+$saine = dashboard_sauvegarde_verifier($bac . 'saine.sql.gz');
+verifier('une archive saine est reconnue', $saine['ok'] === true, $saine['raison']);
+verifier('une archive d’avant la marque de fin n’est pas dite complète', $saine['complet'] === false,
+	'son absence ne prouve rien : les sauvegardes d’avant l’agent 1.0.16 n’en portent pas');
+
+/* Le cas qui motive tout : le processus tué en cours d'écriture. */
+$entiere = file_get_contents($bac . 'saine.sql.gz');
+file_put_contents($bac . 'tronquee.sql.gz', substr($entiere, 0, strlen($entiere) - 6));
+$tronquee = dashboard_sauvegarde_verifier($bac . 'tronquee.sql.gz');
+verifier('une archive tronquée est refusée', $tronquee['ok'] === false, $tronquee['raison']);
+
+/* Un octet retourné au milieu : le CRC32 du pied de page doit mordre. */
+$abimee = $entiere;
+$abimee[40] = chr(ord($abimee[40]) ^ 0x01);
+file_put_contents($bac . 'abimee.sql.gz', $abimee);
+verifier('une archive corrompue est refusée',
+	dashboard_sauvegarde_verifier($bac . 'abimee.sql.gz')['ok'] === false);
+
+/* La marque de fin distingue l'archive valide de l'archive complète : un export
+   tué proprement entre deux tables produit un gzip parfaitement lisible, et
+   incomplet. */
+file_put_contents($bac . 'complete.sql.gz', gzencode($dump . "-- fin de sauvegarde 2026-09-18T10:00:00+02:00\n"));
+$complete = dashboard_sauvegarde_verifier($bac . 'complete.sql.gz');
+verifier('la marque de fin atteste un export mené à son terme',
+	$complete['ok'] === true && $complete['complet'] === true);
+
+verifier('un fichier absent est refusé',
+	dashboard_sauvegarde_verifier($bac . 'jamais-vue.sql.gz')['ok'] === false);
+file_put_contents($bac . 'vide.sql.gz', '');
+verifier('un fichier vide est refusé', dashboard_sauvegarde_verifier($bac . 'vide.sql.gz')['ok'] === false);
+file_put_contents($bac . 'courte.sql.gz', 'abc');
+verifier('un fichier trop court pour porter un pied gzip est refusé',
+	dashboard_sauvegarde_verifier($bac . 'courte.sql.gz')['ok'] === false);
+
+/* Une archive volumineuse, pour éprouver la lecture par blocs : le vérificateur
+   ne doit pas garder tout le dump en mémoire, ni perdre la marque de fin au
+   passage d'un bloc à l'autre. */
+file_put_contents($bac . 'grosse.sql.gz',
+	gzencode(str_repeat("INSERT INTO spip_articles VALUES (1);\n", 40000) . "-- fin de sauvegarde 2026-09-18T10:00:00+02:00\n"));
+$grosse = dashboard_sauvegarde_verifier($bac . 'grosse.sql.gz');
+verifier('une archive de plusieurs blocs est vérifiée sans perdre sa marque de fin',
+	$grosse['ok'] === true && $grosse['complet'] === true,
+	$grosse['octets'] . ' octets décompressés');
+
+foreach (glob($bac . '*') as $f) {
+	@unlink($f);
+}
+@rmdir($bac);
 
 echo "\n== Fraîcheur d’un compte rendu ==\n";
 

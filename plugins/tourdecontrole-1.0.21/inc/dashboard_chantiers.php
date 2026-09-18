@@ -569,7 +569,7 @@ function dashboard_chantier_etape_plugin($chantier) {
 	// Elle déplace elle aussi du code en cours d'exécution, et se tait de la même
 	// façon quand ce code est celui de l'agent.
 	$reponse = dashboard_operation_plugin_maj($id_site, $prefixe);
-	if (empty($reponse['ok']) && dashboard_chantier_silence((string) ($reponse['code'] ?? ''))) {
+	if (empty($reponse['ok']) && dashboard_silence((string) ($reponse['code'] ?? ''))) {
 		return [
 			'ok'      => true,
 			'rester'  => true,
@@ -622,7 +622,7 @@ function dashboard_chantier_plugin_svp_avancer($id_site, $prefixe, $version_avan
 		// Le site n'a rien répondu — ce qui est exactement ce qu'on attend d'un
 		// agent en train de se remplacer lui-même. On ne conclut pas : on ira
 		// voir.
-		if (dashboard_chantier_silence((string) ($reponse['code'] ?? ''))) {
+		if (dashboard_silence((string) ($reponse['code'] ?? ''))) {
 			return [
 				'ok'      => true,
 				'rester'  => true,
@@ -657,27 +657,6 @@ function dashboard_chantier_plugin_svp_avancer($id_site, $prefixe, $version_avan
 	dashboard_synchroniser($id_site);
 
 	return ['ok' => true, 'reste' => '', 'message' => $message];
-}
-
-/**
- * Cette erreur est-elle un silence, plutôt qu'une réponse ?
- *
- * La distinction décide de tout ce qui suit. Un agent qui **répond** « verrou
- * SVP posé » ou « dépendance absente » a délibéré : sa réponse se respecte, et
- * le chantier s'arrête là. Un agent qui ne répond pas n'a rien dit du tout.
- *
- * Deux façons de ne rien dire, et la seconde est la plus trompeuse :
- *
- * - `transport` : la connexion n'a pas abouti, ou a été coupée en route ;
- * - `reponse_illisible` : quelque chose est revenu, mais pas du JSON. C'est la
- *   signature d'un site en cours de mue — SPIP sert sa page d'erreur parce que
- *   le dossier du plugin qui devait répondre vient d'être déplacé.
- *
- * @param string $code Code d'erreur rendu par le client
- * @return bool
- */
-function dashboard_chantier_silence($code) {
-	return in_array((string) $code, ['transport', 'reponse_illisible'], true);
 }
 
 /**
@@ -783,7 +762,7 @@ function dashboard_chantier_etape_plugins($chantier) {
 	// passé sous silence : son échec est retenu et figurera au compte rendu.
 	$echecs = dashboard_chantier_echecs($chantier);
 	if (empty($reponse['ok'])) {
-		if (dashboard_chantier_silence((string) ($reponse['code'] ?? ''))) {
+		if (dashboard_silence((string) ($reponse['code'] ?? ''))) {
 			/* Le site s'est tu. Inutile de le sonder ici : l'étape « sync » qui
 			   clôt cette opération relira l'inventaire de toute façon, et c'est
 			   lui qui dira si la version a bougé. Retenir un échec maintenant

@@ -47,6 +47,18 @@ function dashagent_tables_statistiques() {
 }
 
 /**
+ * Marque de fin écrite au bas de chaque sauvegarde.
+ *
+ * Elle atteste que l'export est allé à son terme — ce que le pied de page du
+ * gzip, seul, ne dit pas : un script tué proprement entre deux tables produit
+ * une archive valide et incomplète. La tour de contrôle la cherche au
+ * rapatriement.
+ */
+if (!defined('_DASHAGENT_SAUVEGARDE_FIN')) {
+	define('_DASHAGENT_SAUVEGARDE_FIN', '-- fin de sauvegarde');
+}
+
+/**
  * Crée une sauvegarde de la base.
  *
  * @param array $args
@@ -81,13 +93,30 @@ function dashagent_sauvegarde_creer($args = []) {
 	$nom_fichier = 'sauvegarde-' . $identifiant . '.sql.gz';
 	$chemin      = $dir . $nom_fichier;
 
+	/* L'export s'écrit sous un nom provisoire, et ne prend son nom définitif
+	   qu'une fois terminé. Sans cela, un processus tué en cours d'écriture —
+	   dépassement du temps d'exécution, de la mémoire, ou worker emporté par
+	   l'hébergement — laisse une archive amputée sous le nom d'une sauvegarde
+	   valide. Elle serait listée, adoptée, et donnerait l'illusion d'une
+	   protection le jour où il faudrait restaurer.
+
+	   Le renommage, lui, est atomique sur le même système de fichiers : à aucun
+	   instant le nom définitif ne désigne un fichier incomplet. */
+	$provisoire = $chemin . '.partiel';
+
 	$debut  = microtime(true);
-	$erreur = dashagent_sauvegarde_ecrire($chemin, $tables);
+	$erreur = dashagent_sauvegarde_ecrire($provisoire, $tables);
 
 	if ($erreur !== '') {
-		@unlink($chemin);
+		@unlink($provisoire);
 
 		return ['ok' => false, 'erreur' => $erreur, 'sauvegarde' => []];
+	}
+
+	if (!@rename($provisoire, $chemin)) {
+		@unlink($provisoire);
+
+		return ['ok' => false, 'erreur' => 'Sauvegarde écrite mais impossible à publier sous son nom', 'sauvegarde' => []];
 	}
 
 	dashagent_sauvegarde_purger_anciennes($dir);
@@ -146,6 +175,13 @@ function dashagent_sauvegarde_ecrire($chemin, $tables) {
 	if (strncmp(dashagent_moteur_sql(), 'sqlite', 6) !== 0) {
 		gzwrite($gz, "SET FOREIGN_KEY_CHECKS=1;\n");
 	}
+
+	/* La dernière ligne du dump atteste que l'export est allé à son terme. Le
+	   pied de page du gzip prouve déjà qu'aucun octet n'a été perdu en route,
+	   mais il ne dit rien de ce que le script avait encore à écrire quand il a
+	   été interrompu : un export tué proprement entre deux tables produit une
+	   archive gzip parfaitement valide, et incomplète. */
+	gzwrite($gz, _DASHAGENT_SAUVEGARDE_FIN . ' ' . date('c') . "\n");
 	gzclose($gz);
 
 	return '';
@@ -433,6 +469,16 @@ function dashagent_sauvegarde_purger_anciennes($dir = '') {
 	$n = 0;
 	foreach ((array) glob($dir . 'sauvegarde-*.sql.gz') as $chemin) {
 		if (filemtime($chemin) < $limite && @unlink($chemin)) {
+			$n++;
+		}
+	}
+
+	/* Les exports restés en plan. Un `.partiel` que personne n'a renommé est la
+	   trace d'un processus tué en cours d'écriture : il n'est bon à rien, et
+	   n'est de toute façon jamais listé. Une heure de délai suffit à ne pas
+	   emporter celui d'un export en cours sur un gros site. */
+	foreach ((array) glob($dir . 'sauvegarde-*.sql.gz.partiel') as $chemin) {
+		if (filemtime($chemin) < time() - 3600 && @unlink($chemin)) {
 			$n++;
 		}
 	}
