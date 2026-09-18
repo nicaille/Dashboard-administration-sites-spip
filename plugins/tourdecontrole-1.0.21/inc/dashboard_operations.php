@@ -257,6 +257,108 @@ function dashboard_sauvegarde_retrouvee($sauvegardes, $depuis, $connus = [], $to
 }
 
 /**
+ * Marque de fin qu'écrit l'agent au bas de chaque sauvegarde.
+ *
+ * Sa présence prouve que l'export est allé à son terme. Son absence ne prouve
+ * rien : les sauvegardes produites avant la version 1.0.16 de l'agent n'en
+ * portent pas.
+ */
+if (!defined('_DASHBOARD_SAUVEGARDE_FIN')) {
+	define('_DASHBOARD_SAUVEGARDE_FIN', '-- fin de sauvegarde');
+}
+
+/**
+ * Une sauvegarde rapatriée est-elle intacte ?
+ *
+ * Le fichier existe, il pèse son poids, et rien de tout cela ne dit qu'il est
+ * lisible. Un export interrompu — le processus tué par une limite de temps ou de
+ * mémoire pendant qu'il écrivait — laisse une archive gzip amputée, dont la
+ * présence rassure à tort. Restaurer une base à partir d'un fichier pareil se
+ * découvre le jour où l'on en a besoin, c'est-à-dire le pire.
+ *
+ * Le contrôle s'appuie sur le pied de page du format gzip : quatre octets de
+ * CRC32 et quatre de taille décompressée, en petit-boutiste, tout à la fin du
+ * fichier. Tronquer une archive mutile toujours ce pied, et recalculer les deux
+ * valeurs en relisant le flux les prend en défaut à coup sûr. C'est ce que fait
+ * `gzip -t` en ligne de commande.
+ *
+ * Deux verdicts distincts, et les confondre serait une faute :
+ *
+ * - `ok` à faux **prouve** que le fichier est abîmé ;
+ * - `complet` à faux dit seulement que la marque de fin n'a pas été vue. Les
+ *   sauvegardes d'avant la version 1.0.16 de l'agent n'en portent pas : leur
+ *   refuser sa confiance reviendrait à jeter des sauvegardes valides.
+ *
+ * @param string $chemin
+ * @return array{ok: bool, complet: bool, octets: int, raison: string}
+ */
+function dashboard_sauvegarde_verifier($chemin) {
+	$verdict = ['ok' => false, 'complet' => false, 'octets' => 0, 'raison' => ''];
+
+	if (!is_file($chemin) || !filesize($chemin)) {
+		return ['raison' => 'fichier absent ou vide'] + $verdict;
+	}
+
+	// Le pied de page, lu dans le fichier brut : c'est lui qui porte la preuve.
+	$brut = @fopen($chemin, 'rb');
+	if (!$brut) {
+		return ['raison' => 'fichier illisible'] + $verdict;
+	}
+	fseek($brut, -8, SEEK_END);
+	$pied = (string) fread($brut, 8);
+	fclose($brut);
+
+	if (strlen($pied) !== 8) {
+		return ['raison' => 'archive trop courte pour être un gzip'] + $verdict;
+	}
+	$annonce = unpack('Vcrc/Vtaille', $pied);
+
+	$gz = @gzopen($chemin, 'rb');
+	if (!$gz) {
+		return ['raison' => 'archive gzip illisible'] + $verdict;
+	}
+
+	$crc    = hash_init('crc32b');
+	$octets = 0;
+	$queue  = '';
+
+	while (!gzeof($gz)) {
+		$bloc = @gzread($gz, 262144);
+		if ($bloc === false) {
+			gzclose($gz);
+
+			return ['raison' => 'flux gzip interrompu'] + $verdict;
+		}
+		if ($bloc === '') {
+			break;
+		}
+		hash_update($crc, $bloc);
+		$octets += strlen($bloc);
+		// De quoi retrouver la marque de fin sans garder tout le dump en mémoire.
+		$queue = substr($queue . $bloc, -512);
+	}
+	gzclose($gz);
+
+	// La taille du pied de page est prise modulo 2^32 : au-delà de quatre
+	// gigaoctets décompressés, la comparer telle quelle serait un faux échec.
+	if (($octets % 4294967296) !== (int) $annonce['taille']) {
+		return ['ok' => false, 'complet' => false, 'octets' => $octets,
+			'raison' => 'archive tronquée : ' . $octets . ' octets lus, ' . (int) $annonce['taille'] . ' annoncés'];
+	}
+	if (hexdec(hash_final($crc)) !== (int) $annonce['crc']) {
+		return ['ok' => false, 'complet' => false, 'octets' => $octets,
+			'raison' => 'archive corrompue : empreinte CRC32 non conforme'];
+	}
+
+	return [
+		'ok'      => true,
+		'complet' => strpos($queue, _DASHBOARD_SAUVEGARDE_FIN) !== false,
+		'octets'  => $octets,
+		'raison'  => '',
+	];
+}
+
+/**
  * Va voir sur le site si la sauvegarde demandée existe, malgré le silence.
  *
  * Interroge l'inventaire du site géré et retient la sauvegarde que cette
@@ -331,6 +433,18 @@ function dashboard_rapatrier_sauvegarde($id_dashboard_site, $id_dashboard_sauveg
 			. dashboard_octets((int) $ligne['octets']) . ' annoncés'];
 	}
 
+	/* Empreinte et taille disent que le transfert s'est bien passé ; elles ne
+	   disent rien de ce qui a été transféré. Un export interrompu sur le site
+	   géré produit une archive amputée qui voyage parfaitement. Relire le gzip
+	   est le seul contrôle qui porte sur le contenu — et le seul moment pour le
+	   faire est maintenant, pas le jour où il faudra restaurer. */
+	$verdict = dashboard_sauvegarde_verifier($dir . $nom);
+	if (!$verdict['ok']) {
+		@unlink($dir . $nom);
+
+		return ['ok' => false, 'message' => 'rapatriement échoué : ' . $verdict['raison']];
+	}
+
 	sql_updateq('spip_dashboard_sauvegardes', [
 		'fichier' => $nom,
 		'octets'  => (int) $resultat['octets'],
@@ -338,7 +452,14 @@ function dashboard_rapatrier_sauvegarde($id_dashboard_site, $id_dashboard_sauveg
 		'statut'  => 'locale',
 	], 'id_dashboard_sauvegarde = ' . (int) $id_dashboard_sauvegarde);
 
-	return ['ok' => true, 'message' => 'rapatriée localement (' . dashboard_octets((int) $resultat['octets']) . ')'];
+	$message = 'rapatriée localement (' . dashboard_octets((int) $resultat['octets']) . ')';
+	// La marque de fin n'existe qu'à partir de la version 1.0.16 de l'agent :
+	// son absence ne se signale pas, elle ne prouverait rien.
+	if ($verdict['complet']) {
+		$message .= ', export complet vérifié';
+	}
+
+	return ['ok' => true, 'message' => $message];
 }
 
 /**

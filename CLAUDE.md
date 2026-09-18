@@ -2,8 +2,8 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.20`,
-`plugins/tourdecontrole_agent-1.0.15`.
+`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.21`,
+`plugins/tourdecontrole_agent-1.0.16`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
 dans le même commit que le changement de `version=` dans son `paquet.xml`. Un
@@ -85,6 +85,24 @@ tolérance d'horloge, la date venant du site géré et non de nous.
 
 Une sauvegarde adoptée n'a pas d'empreinte : l'inventaire n'en publie pas. Le
 rapatriement contrôle alors la taille annoncée, faute de SHA-256.
+
+**Présente ne veut pas dire valide.** Empreinte et taille attestent le transfert,
+jamais le contenu : un export interrompu sur le site géré voyage parfaitement.
+Trois protections, à trois endroits :
+
+- l'agent écrit sous `.partiel` et **renomme au succès** — le renommage étant
+  atomique, le nom définitif ne désigne jamais un fichier incomplet ;
+- chaque dump se termine par `_DASHAGENT_SAUVEGARDE_FIN`. Le pied de page du gzip
+  prouve qu'aucun octet n'a été perdu ; il ne dit rien de ce que le script avait
+  encore à écrire quand il a été tué entre deux tables ;
+- `dashboard_sauvegarde_verifier()` relit l'archive au rapatriement : CRC32 et
+  taille décompressée du pied de page, recalculés sur le flux — ce que fait
+  `gzip -t`.
+
+Ses deux verdicts ne se confondent pas : `ok` à faux **prouve** que le fichier
+est abîmé, `complet` à faux dit seulement que la marque n'a pas été vue. Les
+sauvegardes d'avant l'agent 1.0.16 n'en portent pas, et les refuser reviendrait
+à jeter des sauvegardes valides.
 
 ## Le préfixe d'un plugin n'est pas le préfixe de ses fonctions
 

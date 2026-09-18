@@ -811,6 +811,70 @@ verifier('une entrée malformée est ignorée',
 		[]
 	) === null);
 
+echo "\n== Une sauvegarde rapatriée est-elle intacte ? ==\n";
+
+/* Le fichier existe, il pèse son poids, et rien de tout cela ne dit qu'il est
+   lisible. Un export interrompu sur le site géré produit une archive gzip
+   amputée qui voyage parfaitement : empreinte et taille du transfert sont
+   justes, le contenu est perdu. Cela ne se découvre que le jour où l'on veut
+   restaurer — c'est-à-dire au pire moment. */
+$bac = _DIR_TMP . 'sauvegardes-verif/';
+if (!is_dir($bac)) {
+	mkdir($bac, 0777, true);
+}
+
+$dump = "-- Sauvegarde SPIP\nINSERT INTO spip_articles VALUES (1);\nSET FOREIGN_KEY_CHECKS=1;\n";
+
+file_put_contents($bac . 'saine.sql.gz', gzencode($dump));
+$saine = dashboard_sauvegarde_verifier($bac . 'saine.sql.gz');
+verifier('une archive saine est reconnue', $saine['ok'] === true, $saine['raison']);
+verifier('une archive d’avant la marque de fin n’est pas dite complète', $saine['complet'] === false,
+	'son absence ne prouve rien : les sauvegardes d’avant l’agent 1.0.16 n’en portent pas');
+
+/* Le cas qui motive tout : le processus tué en cours d'écriture. */
+$entiere = file_get_contents($bac . 'saine.sql.gz');
+file_put_contents($bac . 'tronquee.sql.gz', substr($entiere, 0, strlen($entiere) - 6));
+$tronquee = dashboard_sauvegarde_verifier($bac . 'tronquee.sql.gz');
+verifier('une archive tronquée est refusée', $tronquee['ok'] === false, $tronquee['raison']);
+
+/* Un octet retourné au milieu : le CRC32 du pied de page doit mordre. */
+$abimee = $entiere;
+$abimee[40] = chr(ord($abimee[40]) ^ 0x01);
+file_put_contents($bac . 'abimee.sql.gz', $abimee);
+verifier('une archive corrompue est refusée',
+	dashboard_sauvegarde_verifier($bac . 'abimee.sql.gz')['ok'] === false);
+
+/* La marque de fin distingue l'archive valide de l'archive complète : un export
+   tué proprement entre deux tables produit un gzip parfaitement lisible, et
+   incomplet. */
+file_put_contents($bac . 'complete.sql.gz', gzencode($dump . "-- fin de sauvegarde 2026-09-18T10:00:00+02:00\n"));
+$complete = dashboard_sauvegarde_verifier($bac . 'complete.sql.gz');
+verifier('la marque de fin atteste un export mené à son terme',
+	$complete['ok'] === true && $complete['complet'] === true);
+
+verifier('un fichier absent est refusé',
+	dashboard_sauvegarde_verifier($bac . 'jamais-vue.sql.gz')['ok'] === false);
+file_put_contents($bac . 'vide.sql.gz', '');
+verifier('un fichier vide est refusé', dashboard_sauvegarde_verifier($bac . 'vide.sql.gz')['ok'] === false);
+file_put_contents($bac . 'courte.sql.gz', 'abc');
+verifier('un fichier trop court pour porter un pied gzip est refusé',
+	dashboard_sauvegarde_verifier($bac . 'courte.sql.gz')['ok'] === false);
+
+/* Une archive volumineuse, pour éprouver la lecture par blocs : le vérificateur
+   ne doit pas garder tout le dump en mémoire, ni perdre la marque de fin au
+   passage d'un bloc à l'autre. */
+file_put_contents($bac . 'grosse.sql.gz',
+	gzencode(str_repeat("INSERT INTO spip_articles VALUES (1);\n", 40000) . "-- fin de sauvegarde 2026-09-18T10:00:00+02:00\n"));
+$grosse = dashboard_sauvegarde_verifier($bac . 'grosse.sql.gz');
+verifier('une archive de plusieurs blocs est vérifiée sans perdre sa marque de fin',
+	$grosse['ok'] === true && $grosse['complet'] === true,
+	$grosse['octets'] . ' octets décompressés');
+
+foreach (glob($bac . '*') as $f) {
+	@unlink($f);
+}
+@rmdir($bac);
+
 echo "\n== Fraîcheur d’un compte rendu ==\n";
 
 /* L'encadré d'avancement disparaît avec le statut « en cours », et il ne restait
