@@ -2,7 +2,7 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.25`,
+`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.26`,
 `plugins/tourdecontrole_agent-1.0.19`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
@@ -259,6 +259,28 @@ invisibles sur les boutons de pagination.
   emporte la page entière. Quand le nombre vient d'une fonction et non d'un
   champ de boucle, faire la chaîne de langue en PHP
   (`dashboard_agent_maj_libelle()`).
+
+## `#VAL|filtre` passe une chaîne vide, pas « rien »
+
+SPIP compile `#VAL|mon_filtre` en `mon_filtre('')`. Une valeur par défaut
+déclarée dans la signature **ne joue donc pas** — l'argument est bel et bien
+passé — et la chaîne vide atterrit dans le premier paramètre.
+
+`dashboard_waf_serie_parc($jours = 90)` en est mort à petit feu : le `''` valait
+zéro, la fenêtre se réduisait au jour même, et la tendance du parc traçait deux
+courbes vides. L'encadré était là, son JSON aussi, et seules les courbes
+manquaient — rien, sur la page, ne le disait. Le parcours d'intégration ne
+vérifiait pour ce graphique-là que sa *présence*, là où celui de la fiche d'un
+site relisait déjà les pixels du canvas : le défaut a vécu dans cet écart.
+
+La convention, que le reste du code suivait déjà : **un filtre appelé
+`#VAL|nom` ne prend pas de paramètre, ou en prend un nommé `$rien`.** Ce nom est
+le seul moyen de dire « je sais que SPIP me passe une chaîne vide, et je n'en
+fais rien ». `tests/test_structure.php` refuse tout autre premier paramètre.
+
+Et, ceinture et bretelles, une fenêtre de jours se normalise au lieu de se
+supposer : `dashboard_waf_fenetre()` ramène zéro, le vide et le négatif à la
+fenêtre par défaut.
 
 ## Ce qui vient d'un site géré est inerte, toujours
 

@@ -217,10 +217,10 @@ Le détail est dans [docs/installation.md](docs/installation.md).
 ### Sans installation SPIP
 
 ```bash
-php tests/test_protocole.php   # 337 vérifications : signature partagée, filtrage IP,
+php tests/test_protocole.php   # 343 vérifications : signature partagée, filtrage IP,
                                # validation des archives, masquage des identifiants,
                                # enchaînement des étapes d'un chantier
-php tests/test_structure.php   # 307 vérifications : manifestes, tables, autorisations,
+php tests/test_structure.php   # 308 vérifications : manifestes, tables, autorisations,
                                # API SPIP appelée, pièges de squelette, langue
 php tests/test_depot.php       # 36 vérifications : catalogue SVP, archives publiées
 ```

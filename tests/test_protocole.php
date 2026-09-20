@@ -981,6 +981,32 @@ for ($i = 1; $i < count($complete); $i++) {
 }
 verifier('les jours se suivent un à un, sans trou ni doublon', $suite);
 
+/* Le défaut qui a fait tracer deux courbes vides sur la vue d'ensemble.
+
+   `#VAL|dashboard_waf_serie_parc` ne transmet pas « rien » : SPIP compile cet
+   appel en `dashboard_waf_serie_parc('')`. La valeur par défaut déclarée dans
+   la signature ne joue alors pas — l'argument est passé —, la chaîne vide vaut
+   zéro, et le plancher la ramenait à un. La tendance du parc ne portait qu'un
+   seul point, celui du jour, et Chart.js n'a rien à tracer avec un point.
+
+   Rien ne le signalait : l'encadré était là, son JSON aussi, et seules les
+   courbes manquaient. Ce qui se vérifie ici, c'est donc ce qu'une fenêtre
+   *vide* doit valoir. */
+verifier('une fenêtre vide vaut la fenêtre par défaut',
+	dashboard_waf_fenetre('') === _DASHBOARD_WAF_FENETRE, dashboard_waf_fenetre(''));
+verifier('une fenêtre nulle aussi',
+	dashboard_waf_fenetre(0) === _DASHBOARD_WAF_FENETRE, dashboard_waf_fenetre(0));
+verifier('une fenêtre négative aussi',
+	dashboard_waf_fenetre(-5) === _DASHBOARD_WAF_FENETRE, dashboard_waf_fenetre(-5));
+verifier('une fenêtre demandée est respectée', dashboard_waf_fenetre(7) === 7);
+verifier('une fenêtre démesurée est bornée', dashboard_waf_fenetre(9999) === 365);
+
+/* Et la conséquence, là où elle se voyait : une série complétée sans fenêtre
+   porte la fenêtre par défaut, pas un point. */
+$sans_fenetre = dashboard_waf_completer([], '');
+verifier('une série sans fenêtre porte la fenêtre par défaut',
+	count($sans_fenetre) === _DASHBOARD_WAF_FENETRE, count($sans_fenetre));
+
 /* Un jour hors fenêtre ne doit pas s'y inviter, et un inventaire vide doit tout
    de même rendre une série complète — sans quoi le graphique n'aurait aucun axe
    sur un site qui n'a jamais rien bloqué. */
