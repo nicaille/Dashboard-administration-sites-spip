@@ -162,6 +162,77 @@ function dashagent_waf_bans($limite = 20) {
 }
 
 /**
+ * L'activité du WAF jour par jour, pour en lire la tendance.
+ *
+ * Les chiffres instantanés disent l'état ; ils ne disent pas si la pression
+ * monte. Deux cents requêtes bloquées ne veulent pas la même chose selon
+ * qu'elles sont l'ordinaire du site ou le décuple de la semaine passée.
+ *
+ * Trois précautions, et les deux premières tiennent à la portabilité — l'agent
+ * tourne sur MySQL comme sur SQLite :
+ *
+ * - **le groupement se fait sur `substr(date_event, 1, 10)`**, et non sur
+ *   `DATE()`, qui ne se comporte pas partout pareil. Le format d'une date SQL
+ *   étant « AAAA-MM-JJ … », ses dix premiers caractères sont le jour ;
+ * - **la borne est calculée en PHP**, jamais par `DATE_SUB()` — c'est déjà la
+ *   règle du reste de ce fichier ;
+ * - **les jours sans événement sont rendus à zéro.** Une série trouée se lit de
+ *   travers : une courbe qui saute du 3 au 9 laisse croire à une continuité
+ *   entre les deux, là où il ne s'est rien passé pendant cinq jours.
+ *
+ * Le WAF purge ses événements au bout de quatre-vingt-dix jours, les bans mis à
+ * part : demander au-delà ne rendrait que des zéros, d'où le plafond.
+ *
+ * @param int $jours
+ * @return array
+ */
+function dashagent_waf_serie($jours = 30) {
+	$jours  = max(1, min(90, (int) $jours));
+	$bloque = sql_quote(dashagent_waf_constante('WAF_EVT_BLOCKED', 'BLOCKED'));
+	$ban    = sql_quote(dashagent_waf_constante('WAF_EVT_BAN', 'BAN'));
+
+	/* Le premier jour de la fenêtre, à minuit : une borne posée à l'heure
+	   courante amputerait le plus ancien jour d'une fraction, et sa colonne
+	   serait plus basse que la réalité sans que rien ne le signale. */
+	$premier = date('Y-m-d', time() - ($jours - 1) * 86400);
+
+	$lignes = sql_allfetsel(
+		'substr(date_event, 1, 10) AS jour'
+		. ', SUM(CASE WHEN type = ' . $bloque . ' THEN 1 ELSE 0 END) AS requetes'
+		. ', COUNT(DISTINCT CASE WHEN type = ' . $bloque . ' THEN ip ELSE NULL END) AS ips'
+		. ', SUM(CASE WHEN type = ' . $ban . ' THEN 1 ELSE 0 END) AS bans',
+		'spip_waf_events',
+		[
+			'type IN (' . $bloque . ', ' . $ban . ')',
+			'date_event >= ' . sql_quote($premier . ' 00:00:00'),
+		],
+		'jour',
+		'jour',
+		'',
+		'',
+		'',
+		'continue'
+	);
+
+	$par_jour = [];
+	foreach ((array) $lignes as $ligne) {
+		$par_jour[(string) $ligne['jour']] = [
+			'requetes' => (int) $ligne['requetes'],
+			'ips'      => (int) $ligne['ips'],
+			'bans'     => (int) $ligne['bans'],
+		];
+	}
+
+	$points = [];
+	for ($i = 0; $i < $jours; $i++) {
+		$jour = date('Y-m-d', strtotime($premier . ' +' . $i . ' day'));
+		$points[] = ['jour' => $jour] + ($par_jour[$jour] ?? ['requetes' => 0, 'ips' => 0, 'bans' => 0]);
+	}
+
+	return ['jours' => $jours, 'depuis' => $premier, 'points' => $points];
+}
+
+/**
  * Ce qui a été bloqué ces derniers jours, par jour et par motif.
  *
  * La borne de date est calculée en PHP : `DATE_SUB(NOW(), INTERVAL n DAY)`,

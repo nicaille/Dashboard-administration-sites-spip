@@ -48,6 +48,22 @@ function dashagent_infos_collecter($args = []) {
 	$infos['caches']  = $avec_caches ? dashagent_infos_caches() : null;
 	$infos['capacites'] = dashagent_infos_capacites();
 
+	/* La tendance du WAF voyage avec l'inventaire, et non par un appel à part :
+	   la tour de contrôle la range à chaque synchronisation, et son graphique du
+	   parc entier n'a plus à interroger les sites un par un pour s'afficher.
+
+	   C'est `dashagent_waf_serie()` et non `waf_resume` : celui-là vide d'abord
+	   la file d'événements du WAF, ce qui n'a rien à faire dans une
+	   synchronisation de routine. Ici, une requête indexée et rien d'autre. */
+	$infos['waf_serie'] = null;
+	include_spip('inc/dashagent_waf');
+	if (function_exists('dashagent_waf_disponible')) {
+		$waf = dashagent_waf_disponible();
+		if (!empty($waf['ok'])) {
+			$infos['waf_serie'] = dashagent_waf_serie((int) ($args['waf_jours'] ?? 90));
+		}
+	}
+
 	return $infos;
 }
 

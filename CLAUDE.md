@@ -2,8 +2,8 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.23`,
-`plugins/tourdecontrole_agent-1.0.18`.
+`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.24`,
+`plugins/tourdecontrole_agent-1.0.19`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
 dans le même commit que le changement de `version=` dans son `paquet.xml`. Un
@@ -265,8 +265,9 @@ la tour de contrôle, qui détient les secrets de tout le parc.
 - **à l'entrée** : tout ce qu'un agent répond passe par `dashboard_inerte()`
   avant d'atteindre la base — `dashboard_synchroniser()`,
   `dashboard_enregistrer_plugins()`, `dashboard_journaliser()`,
-  `dashboard_chantier_ecrire()`. Un nouveau champ venu de l'agent se range
-  derrière l'un de ces quatre points, pas à côté ;
+  `dashboard_chantier_ecrire()` et `dashboard_enregistrer_waf_serie()`, qui ne
+  laisse passer qu'une date et des entiers. Un nouveau champ venu de l'agent se
+  range derrière l'un de ces cinq points, pas à côté ;
 - **à l'affichage** : un champ SQL rendu tel quel (`#VERSION_SPIP`, `#PREFIXE`…)
   porte `|entites_html`. `|textebrut` et `|couper{N}` suffisent aussi — ils
   retirent les balises ; `|typo` ne suffit qu'à moitié (il ôte les attributs,
@@ -280,7 +281,7 @@ autre chose que `''`.
 `tests/test_protocole.php` vérifie le filtre, `tests/integration/scenario.mjs`
 le rendu, charge utile à l'appui.
 
-## Quatre pièges du compilateur, tous rencontrés
+## Cinq pièges du compilateur, tous rencontrés
 
 1. **Une balise à accolades dans un argument composite** (`op/#ID/#GET{x}`)
    désorganise l'analyse : les balises voisines arrivent littéralement dans la
@@ -300,8 +301,17 @@ le rendu, charge utile à l'appui.
    navigateur, qui ramenait sur l'espace privé du parc. Donner ses crochets à
    chaque balise, ou calculer à part avec `#SET`.
 
-`tests/test_structure.php` vérifie les quatre — le dernier en refusant toute
-valeur d'attribut qui s'ouvre sur une parenthèse littérale.
+5. **Ce qui suit `</BOUCLE_x>` n'est pas la fin du squelette** : jusqu'au
+   `<//B_x>`, c'est la branche que SPIP rend **quand la boucle n'a rien
+   trouvé**. Les deux `<script src>` de Chart.js y avaient atterri, en bas de
+   fichier, à l'endroit qui semblait naturel — et les graphiques ne se
+   traçaient que sur un parc dont les tables sont absentes, c'est-à-dire
+   jamais. Rien sur la page ne le dit : le bloc est là, son JSON aussi, seul le
+   tracé manque.
+
+`tests/test_structure.php` vérifie les cinq — le quatrième en refusant toute
+valeur d'attribut qui s'ouvre sur une parenthèse littérale, le cinquième tout
+`<script src>` rangé dans une branche « sinon ».
 
 ## Tests à passer avant tout commit
 

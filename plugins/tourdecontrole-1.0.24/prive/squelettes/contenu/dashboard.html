@@ -57,6 +57,38 @@
 	]
 ]
 
+[(#REM)
+	La tendance du parc : la somme, jour par jour, de ce que les sites équipés du
+	WAF ont bloqué. Elle ne s'affiche que s'il y a quelque chose à montrer.
+
+	Les requêtes s'additionnent sans réserve ; les adresses, non — une même IP qui
+	frappe trois sites y compte trois fois. Le graphique mesure donc la pression
+	subie par le parc, pas le nombre d'assaillants distincts, et sa légende le dit.
+]
+[(#VAL|dashboard_waf_parc_present|oui)
+#SET{serie_parc,#VAL|dashboard_waf_serie_parc}
+<div class="box" id="waf">
+	<div class="box__body clearfix">
+		<h2 class="box__title"><:dashboard:titre_waf_parc:></h2>
+		<p class="explication"><:dashboard:explication_waf_parc:></p>
+		<div class="dashboard-graphe" data-dashboard-waf-graphe data-jours="30"
+			data-libelle-requetes="<:dashboard:graphe_requetes_parc:>"
+			data-libelle-ips="<:dashboard:graphe_ips_parc:>"
+			data-libelle-jour="<:dashboard:graphe_jour:>"
+			data-libelle-tableau="<:dashboard:graphe_tableau:>">
+			<div class="dashboard-graphe-fenetres">
+				<button type="button" class="btn btn_secondaire" data-fenetre="7" aria-pressed="false"><:dashboard:graphe_7j:></button>
+				<button type="button" class="btn btn_secondaire" data-fenetre="30" aria-pressed="true"><:dashboard:graphe_30j:></button>
+				<button type="button" class="btn btn_secondaire" data-fenetre="90" aria-pressed="false"><:dashboard:graphe_90j:></button>
+			</div>
+			<div class="dashboard-graphe-cadre"><canvas data-graphe="requetes"></canvas></div>
+			<div class="dashboard-graphe-cadre"><canvas data-graphe="ips"></canvas></div>
+			<script type="application/json">[(#GET{serie_parc}|dashboard_waf_json)]</script>
+		</div>
+	</div>
+</div>
+]
+
 <B_sites>
 <table class="spip liste dashboard-parc">
 	<caption><:dashboard:parc_caption:></caption>
@@ -225,6 +257,12 @@
 	});
 })();
 </script>
+
+[(#REM)
+	Chart.js est embarqué dans le plugin, jamais appelé sur un CDN.
+]
+<script src="[(#CHEMIN{javascript/chart.umd.min.js}|timestamp)]"></script>
+<script src="[(#CHEMIN{javascript/dashboard_waf_graphes.js}|timestamp)]"></script>
 
 </BOUCLE_installe>
 <div class="dashboard-fiche dashboard-fiche-alerte">

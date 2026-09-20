@@ -80,6 +80,7 @@ function dashboard_synchroniser($id_dashboard_site, $options = []) {
 	], 'id_dashboard_site = ' . (int) $id_dashboard_site);
 
 	dashboard_enregistrer_plugins($id_dashboard_site, $plugins);
+	dashboard_enregistrer_waf_serie($id_dashboard_site, $infos['waf_serie'] ?? null);
 
 	dashboard_journaliser($id_dashboard_site, 'sync', 'ok', '', [
 		'spip'        => $version_spip,
@@ -89,6 +90,62 @@ function dashboard_synchroniser($id_dashboard_site, $options = []) {
 	], $reponse['duree_ms']);
 
 	return ['ok' => true, 'message' => '', 'site' => dashboard_charger_site($id_dashboard_site)];
+}
+
+/**
+ * Range l'activité quotidienne du WAF d'un site.
+ *
+ * Un cinquième point d'entrée s'ajoute aux quatre qui rendent inerte ce qui
+ * vient d'un site géré : les valeurs sont contraintes à des entiers et le jour
+ * à une date, ce qui ne laisse rien passer de ce qu'un site compromis pourrait
+ * vouloir écrire chez nous.
+ *
+ * Les jours déjà connus sont réécrits plutôt qu'ajoutés — la clef unique
+ * (site, jour) le garantit de toute façon, mais l'écrire ici évite de compter
+ * deux fois la même journée quand deux synchronisations se suivent. Les jours
+ * plus anciens ne sont jamais effacés : c'est là tout l'intérêt de cette table,
+ * garder la tendance quand le WAF, lui, aura purgé ses événements.
+ *
+ * @param int $id_dashboard_site
+ * @param array|null $serie Rendue par l'agent, ou null si le site n'a pas le WAF
+ * @return int Nombre de journées enregistrées
+ */
+function dashboard_enregistrer_waf_serie($id_dashboard_site, $serie) {
+	$points = is_array($serie['points'] ?? null) ? $serie['points'] : [];
+	if (!$points) {
+		return 0;
+	}
+
+	$n = 0;
+	foreach ($points as $point) {
+		if (!is_array($point)) {
+			continue;
+		}
+		// Une date, et rien d'autre : la valeur vient d'un site géré.
+		$jour = (string) ($point['jour'] ?? '');
+		if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $jour)) {
+			continue;
+		}
+
+		$champs = [
+			'requetes' => max(0, (int) ($point['requetes'] ?? 0)),
+			'ips'      => max(0, (int) ($point['ips'] ?? 0)),
+			'bans'     => max(0, (int) ($point['bans'] ?? 0)),
+		];
+
+		$where = 'id_dashboard_site = ' . (int) $id_dashboard_site . ' AND jour = ' . sql_quote($jour);
+		if (sql_countsel('spip_dashboard_waf_jours', $where)) {
+			sql_updateq('spip_dashboard_waf_jours', $champs, $where);
+		} else {
+			sql_insertq('spip_dashboard_waf_jours', $champs + [
+				'id_dashboard_site' => (int) $id_dashboard_site,
+				'jour'              => $jour,
+			]);
+		}
+		$n++;
+	}
+
+	return $n;
 }
 
 /**

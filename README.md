@@ -91,6 +91,12 @@ n'est pas la page du plugin recopiée — ses sections se chargent en AJAX, et
 accueillir ici le balisage d'un site qui peut être compromis n'était pas
 envisageable. L'agent rend les données, le tableau de bord les redessine.
 
+Deux graphiques en donnent la **tendance** sur sept, trente ou quatre-vingt-dix
+jours — par site et pour le parc entier. Ils viennent de notre base, remplie à
+chaque synchronisation : ils s'affichent sans rien demander au site, et le parc
+garde la mémoire des journées que le WAF, lui, finit par purger. Chart.js est
+embarqué dans le plugin, jamais appelé sur un CDN.
+
 **Le spip_loader.php** vit à la racine web, hors de l'arborescence que remplace
 une mise à jour du core : il vieillit sans que rien ne le signale. Un encadré en
 donne l'état et le renouvelle depuis `get.spip.net`. Le contenu téléchargé est
@@ -116,7 +122,7 @@ Ce qui reste exposé malgré tout est décrit dans [docs/securite.md](docs/secur
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/tourdecontrole-1.0.19`, `plugins/tourdecontrole_agent-1.0.15`. Ce n'est pas
+`plugins/tourdecontrole-<version>`, `plugins/tourdecontrole_agent-<version>`. Ce n'est pas
 décoratif : en déposant la nouvelle version **à côté** de l'ancienne plutôt que
 par-dessus, on évite le travers classique de la mise en ligne par FTP, où les
 fichiers supprimés entre deux versions survivent dans le dossier écrasé et
@@ -193,10 +199,10 @@ Le détail est dans [docs/installation.md](docs/installation.md).
 ### Sans installation SPIP
 
 ```bash
-php tests/test_protocole.php   # 326 vérifications : signature partagée, filtrage IP,
+php tests/test_protocole.php   # 337 vérifications : signature partagée, filtrage IP,
                                # validation des archives, masquage des identifiants,
                                # enchaînement des étapes d'un chantier
-php tests/test_structure.php   # 281 vérifications : manifestes, tables, autorisations,
+php tests/test_structure.php   # 289 vérifications : manifestes, tables, autorisations,
                                # API SPIP appelée, pièges de squelette, langue
 php tests/test_depot.php       # 36 vérifications : catalogue SVP, archives publiées
 ```
@@ -213,10 +219,12 @@ de casser l'espace privé. La même liste est contrôlée à l'exécution :
 *Configuration → Dashboard : configuration* signale les fonctions attendues qui
 manqueraient sur l'installation réelle.
 
-Elle tient aussi deux pièges de squelette qui échouent **sans rien dire** : une
-balise à accolades placée dans un argument composite, et de la syntaxe de balise
+Elle tient aussi trois pièges de squelette qui échouent **sans rien dire** : une
+balise à accolades placée dans un argument composite, de la syntaxe de balise
 écrite dans un commentaire HTML — que SPIP compile quand même, une balise
-invalide emportant alors le bloc entier.
+invalide emportant alors le bloc entier —, et un `<script src>` rangé après
+`</BOUCLE_x>`, c'est-à-dire dans la branche que SPIP ne rend **que si la boucle
+n'a rien trouvé**.
 
 Le premier fichier couvre le masquage des identifiants dans les deux sens : rien
 de sensible ne passe (`pass`, `AWS_ACCESS_KEY_ID`, `low_sec`, les aléas de

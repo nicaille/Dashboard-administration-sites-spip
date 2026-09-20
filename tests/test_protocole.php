@@ -950,6 +950,60 @@ foreach (glob($bac_cache . '*') as $f) {
 }
 @rmdir($bac_cache);
 
+echo "\n== Une série quotidienne se lit sans trou ==\n";
+
+/* Les jours sans événement n'existent pas en base. Les inventer est
+   indispensable à la lecture : une courbe qui saute du 3 au 9 laisse croire à
+   une continuité entre les deux, là où il ne s'est rien passé pendant cinq
+   jours — l'inverse exact de ce qu'un graphique de tendance doit montrer. */
+$aujourdhui = date('Y-m-d');
+$hier       = date('Y-m-d', strtotime('-1 day'));
+$avant      = date('Y-m-d', strtotime('-6 day'));
+
+$complete = dashboard_waf_completer([
+	$avant      => ['requetes' => 12, 'ips' => 3],
+	$aujourdhui => ['requetes' => 40, 'ips' => 7],
+], 7);
+
+verifier('la fenêtre rend exactement le nombre de jours demandé', count($complete) === 7, count($complete));
+verifier('elle commence au plus ancien jour de la fenêtre', $complete[0]['jour'] === $avant, $complete[0]['jour']);
+verifier('et finit aujourd’hui', $complete[6]['jour'] === $aujourdhui, $complete[6]['jour']);
+verifier('les jours connus gardent leurs chiffres',
+	$complete[0]['requetes'] === 12 && $complete[6]['requetes'] === 40);
+verifier('les jours sans événement valent zéro, ils ne manquent pas',
+	$complete[3]['requetes'] === 0 && $complete[3]['ips'] === 0 && isset($complete[3]['jour']));
+
+/* Les jours se suivent sans saut : c'est toute la propriété qu'on cherche. */
+$suite = true;
+for ($i = 1; $i < count($complete); $i++) {
+	$attendu = date('Y-m-d', strtotime($complete[$i - 1]['jour'] . ' +1 day'));
+	$suite = $suite && $complete[$i]['jour'] === $attendu;
+}
+verifier('les jours se suivent un à un, sans trou ni doublon', $suite);
+
+/* Un jour hors fenêtre ne doit pas s'y inviter, et un inventaire vide doit tout
+   de même rendre une série complète — sans quoi le graphique n'aurait aucun axe
+   sur un site qui n'a jamais rien bloqué. */
+$hors = dashboard_waf_completer([date('Y-m-d', strtotime('-40 day')) => ['requetes' => 99, 'ips' => 9]], 7);
+verifier('un jour antérieur à la fenêtre est ignoré',
+	array_sum(array_column($hors, 'requetes')) === 0);
+
+$vide = dashboard_waf_completer([], 30);
+verifier('un inventaire vide rend quand même trente jours à zéro',
+	count($vide) === 30 && array_sum(array_column($vide, 'requetes')) === 0);
+
+/* Le JSON déposé dans la page : les quatre drapeaux d'échappement sont ce qui
+   empêche une valeur de refermer le bloc <script> qui la porte. */
+$json = dashboard_waf_json([['jour' => '2026-09-18', 'requetes' => 5, 'ips' => 2]]);
+$relu = json_decode($json, true);
+verifier('le JSON se relit', is_array($relu['points'] ?? null) && count($relu['points']) === 1);
+verifier('il ne contient aucun chevron littéral', strpos($json, '<') === false && strpos($json, '>') === false);
+
+$piege = dashboard_waf_json([['jour' => '2026-09-18', 'requetes' => 1, 'ips' => '</script><svg onload=alert(1)>']]);
+verifier('une valeur hostile ne referme pas le bloc script',
+	strpos($piege, '</script>') === false && strpos($piege, '<svg') === false,
+	substr($piege, 0, 90));
+
 echo "\n== Fraîcheur d’un compte rendu ==\n";
 
 /* L'encadré d'avancement disparaît avec le statut « en cours », et il ne restait

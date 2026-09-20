@@ -105,6 +105,7 @@ function tourdecontrole_declarer_tables_objets_sql($tables) {
 		'info_nb_objets'       => 'dashboard:info_nb_sites',
 	];
 
+
 	return $tables;
 }
 
@@ -214,6 +215,36 @@ function tourdecontrole_declarer_tables_principales($tables) {
 			'PRIMARY KEY'           => 'id_dashboard_sauvegarde',
 			'KEY id_dashboard_site' => 'id_dashboard_site',
 			'KEY date'              => 'date',
+		],
+	];
+
+
+	/* L'activité du WAF d'un site, un enregistrement par jour.
+	 *
+	 * Une table plutôt qu'une colonne JSON sur le site, pour deux raisons. La
+	 * somme du parc entier devient un simple GROUP BY, là où il aurait fallu
+	 * décoder puis additionner en PHP site par site. Et surtout, l'historique
+	 * **survit à la rétention du WAF** : celui-ci purge ses événements au bout
+	 * de quatre-vingt-dix jours, alors que la tendance sur un an est justement
+	 * ce qu'on voudra lire dans un an.
+	 *
+	 * La clef unique sur (site, jour) fait de chaque synchronisation une simple
+	 * réécriture des jours rapportés : relire deux fois la même journée ne la
+	 * compte pas deux fois. */
+	$tables['spip_dashboard_waf_jours'] = [
+		'field' => [
+			'id_dashboard_waf_jour' => 'bigint(21) NOT NULL',
+			'id_dashboard_site'     => 'bigint(21) DEFAULT 0 NOT NULL',
+			'jour'                  => "date DEFAULT '0000-00-00' NOT NULL",
+			'requetes'              => 'bigint(21) DEFAULT 0 NOT NULL',
+			'ips'                   => 'bigint(21) DEFAULT 0 NOT NULL',
+			'bans'                  => 'bigint(21) DEFAULT 0 NOT NULL',
+			'maj'                   => 'TIMESTAMP',
+		],
+		'key' => [
+			'PRIMARY KEY'           => 'id_dashboard_waf_jour',
+			'UNIQUE KEY site_jour'  => 'id_dashboard_site, jour',
+			'KEY jour'              => 'jour',
 		],
 	];
 

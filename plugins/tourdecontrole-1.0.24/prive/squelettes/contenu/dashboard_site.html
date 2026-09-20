@@ -332,6 +332,33 @@
 		<section id="panneau-waf" role="tabpanel" aria-labelledby="onglet-waf"
 		         data-dashboard-waf="[(#URL_ACTION_AUTEUR{dashboard_serveur,#ID_DASHBOARD_SITE})]">
 			<p class="explication"><:dashboard:explication_waf:></p>
+
+			[(#REM)
+				La tendance vient de notre base, remplie à chaque synchronisation :
+				elle s'affiche donc tout de suite, sans attendre l'appel distant qui
+				remplit le reste de l'onglet.
+
+				Le JSON porte quatre-vingt-dix jours ; le sélecteur y découpe les
+				fenêtres plus courtes sans rien redemander.
+			]
+			#SET{serie,#ID_DASHBOARD_SITE|dashboard_waf_serie}
+			[(#GET{serie}|count|>{0}|oui)
+			<div class="dashboard-graphe" data-dashboard-waf-graphe data-jours="30"
+				data-libelle-requetes="<:dashboard:graphe_requetes:>"
+				data-libelle-ips="<:dashboard:graphe_ips:>"
+				data-libelle-jour="<:dashboard:graphe_jour:>"
+				data-libelle-tableau="<:dashboard:graphe_tableau:>">
+				<div class="dashboard-graphe-fenetres">
+					<button type="button" class="btn btn_secondaire" data-fenetre="7" aria-pressed="false"><:dashboard:graphe_7j:></button>
+					<button type="button" class="btn btn_secondaire" data-fenetre="30" aria-pressed="true"><:dashboard:graphe_30j:></button>
+					<button type="button" class="btn btn_secondaire" data-fenetre="90" aria-pressed="false"><:dashboard:graphe_90j:></button>
+				</div>
+				<div class="dashboard-graphe-cadre"><canvas data-graphe="requetes"></canvas></div>
+				<div class="dashboard-graphe-cadre"><canvas data-graphe="ips"></canvas></div>
+				<script type="application/json">[(#GET{serie}|dashboard_waf_json)]</script>
+			</div>
+			]
+
 			<div data-waf-bloc="resume" class="dashboard-serveur-bloc"><p class="petition"><:dashboard:serveur_attente:></p></div>
 		</section>
 		]
@@ -1286,6 +1313,15 @@
 	});
 })();
 </script>
+
+[(#REM)
+	Chart.js est embarqué dans le plugin, jamais appelé sur un CDN : l'espace privé
+	de la tour de contrôle détient les secrets de tout le parc, il n'a pas à
+	joindre un hôte extérieur à chaque affichage — et il peut très bien être
+	derrière un pare-feu sortant.
+]
+<script src="[(#CHEMIN{javascript/chart.umd.min.js}|timestamp)]"></script>
+<script src="[(#CHEMIN{javascript/dashboard_waf_graphes.js}|timestamp)]"></script>
 
 </BOUCLE_installe>
 <div class="dashboard-fiche dashboard-fiche-alerte">

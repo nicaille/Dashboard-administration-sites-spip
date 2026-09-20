@@ -18,8 +18,8 @@ Pas un service : **deux fichiers statiques**, servis en HTTP.
 ```
 plugins.xml                    le catalogue
 plugins.thin.xml               une copie (voir plus bas)
-archives/tourdecontrole-1.0.19.zip  une archive par plugin et par version
-archives/tourdecontrole_agent-1.0.15.zip
+archives/tourdecontrole-<version>.zip      une archive par plugin et par version
+archives/tourdecontrole_agent-<version>.zip
 index.html                     une page lisible par un humain
 ```
 
