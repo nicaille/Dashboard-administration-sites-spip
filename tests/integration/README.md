@@ -79,6 +79,7 @@ DASHBOARD_TEST_SANS_PREPARATION=1 tests/integration/executer.sh <zip> 8321
 | Tendance du WAF | la synchronisation range l'activité jour par jour ; la fiche **et** la vue d'ensemble tracent chacune deux graphiques (jamais un double axe), portent la fenêtre entière, des chiffres non nuls, et des courbes réellement peintes — pixels relus des deux côtés ; la série est continue, le sélecteur découpe la fenêtre sans recharger, et aucun script ne vient d'un hôte extérieur |
 | Actions groupées | les cases à cocher ne portent aucune adresse, les quatre files d'adresses signées sont présentes, le décompte suit la sélection, et synchroniser puis vider la sélection atteignent réellement le site |
 | Mise à jour de l'agent | une version plus récente est publiée au dépôt local en cours de parcours : le parc s'en aperçoit, le bouton apparaît avec son décompte, le chantier sauvegarde puis remplace l'agent — qui se coupe la parole à lui-même —, la nouvelle version est déployée à côté de l'ancienne, l'agent répond encore, et le bouton disparaît |
+| Contrôle d'intégrité | sans adresse réglée rien n'est proposé ; le dépôt est refusé tant que le site ne l'a pas accordé, et `op_loader` ne l'ouvre pas ; déposé, la version et l'édition sont lues dans la queue d'un fichier de 300 Ko ; un spip_loader est refusé à sa place ; le retrait écarte le fichier par renommage, et un retrait à vide n'est pas une erreur |
 | Restauration | le dump se rejoue dans une base neuve, contenu intact |
 
 ## Ce que le parcours ne couvre pas

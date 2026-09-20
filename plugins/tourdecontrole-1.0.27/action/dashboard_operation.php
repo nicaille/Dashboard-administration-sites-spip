@@ -83,6 +83,14 @@ function action_dashboard_operation_dist() {
 			$resultat = dashboard_operation_loader_maj($id_site);
 			break;
 
+		case 'check_maj':
+			$resultat = dashboard_operation_check_maj($id_site);
+			break;
+
+		case 'check_retirer':
+			$resultat = dashboard_operation_check_retirer($id_site);
+			break;
+
 		case 'sauvegarde':
 			$resultat = dashboard_operation_sauvegarder($id_site, [
 				'rapatrier'         => $complement !== 'distante',

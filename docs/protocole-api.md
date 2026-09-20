@@ -377,6 +377,59 @@ avant d'être remplacé, et remis si l'écriture échoue.
 Retourne `octets`, `sha256`, `version_avant`, `version_apres`, `sauvegarde` et
 l'`etat` d'après.
 
+### `check_etat`
+
+Autorisation : `op_check`. Décrit le `spip_check.php` présent à la racine du
+site : `present`, `octets`, `modifie`, `version`, `edition` (`complete` ou
+`lite`), `racine_ecrit`, `fichier_ecrit`, et `config` — le nom du fichier
+d'autorisation trouvé, s'il y en a un.
+
+La version se lit **dans la queue du fichier**, à l'inverse du spip_loader : les
+bibliothèques embarquées occupent tout le début du livrable, et le code de
+l'outil vient après. En 2.4.0, `spipCheckToolVersion()` est au 854 687ᵉ octet
+sur 953 235. Seuls les 256 derniers kilo-octets sont relus.
+
+`config` compte à l'usage : sans fichier d'autorisation, SPIP Check n'ouvre son
+interface qu'à l'auteur nº 1 **du site géré**. Le savoir avant de déposer évite
+un clic pour rien.
+
+### `check_maj`
+
+Autorisation : `op_check`. Télécharge un `spip_check.php` et le dépose à la
+racine.
+
+Argument : `url` — https obligatoire, **sans valeur par défaut**. SPIP Check est
+une contribution tierce qui ne publie pas d'adresse stable comparable au
+`get.spip.net/spip_loader.php` du core ; en inscrire une devinée reviendrait à
+livrer une fonction qui échoue en silence. Sans adresse réglée, l'opération
+refuse.
+
+Le contenu est contrôlé avant écriture : du PHP, moins de huit méga-octets, et
+portant la fonction que son gabarit engendre — un spip_loader n'y passe pas,
+bien qu'il soit du PHP et qu'il parle de SPIP. Le fichier en place est renommé
+`.spip_check.php.dashagent-<date>` avant d'être remplacé, et remis si l'écriture
+échoue.
+
+Retourne `octets`, `sha256`, `version_avant`, `version_apres`, `edition`,
+`sauvegarde` et l'`etat` d'après.
+
+### `check_retirer`
+
+Autorisation : `op_check`. Retire le `spip_check.php` de la racine, **par
+renommage** : `.spip_check.php.dashagent-<date>`. Le fichier n'est plus
+appelable et le retour arrière reste possible. Un site qui n'en a pas répond
+`ok` sans rien faire.
+
+Le fichier de configuration éventuel n'est pas touché : il ne contient que des
+identifiants d'auteurs, il ne s'exécute pas tout seul, et il sert aussi au
+spip_loader.
+
+Ces trois opérations relèvent de `op_check`, refusée par défaut, et `op_loader`
+ne les ouvre pas. L'agent ne **lance** pas le contrôle et n'en lit pas les
+résultats : SPIP Check s'autorise sur une session d'administrateur du site géré,
+là où l'agent s'authentifie par signature. Contourner cette autorisation pour le
+piloter à distance reviendrait à poser une porte dérobée sur tout le parc.
+
 ## Écrire un autre client
 
 Rien n'oblige à passer par le plugin dashboard. Un script suffit :

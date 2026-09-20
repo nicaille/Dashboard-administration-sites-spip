@@ -120,7 +120,15 @@ une mise à jour du core : il vieillit sans que rien ne le signale. Un encadré 
 donne l'état et le renouvelle depuis `get.spip.net`. Le contenu téléchargé est
 contrôlé avant d'être écrit, et l'ancien fichier conservé.
 
-Les deux sont refusées par défaut, sous des autorisations distinctes qu'aucune
+**Le contrôle d'intégrité** ([SPIP Check](https://git.spip.net/technova69/spip-check),
+GPL 3) se dépose de la même façon, et se **retire** — c'est là toute la
+différence avec le spip_loader, qui reste. L'encadré en donne l'état, la version
+et l'édition, et un lien l'ouvre chez le site. Le parc ne conduit pas le
+contrôle : l'outil n'accepte qu'un webmestre connecté sur le site géré, et
+contourner cette autorisation pour le piloter à distance reviendrait à poser une
+porte dérobée sur tout le parc.
+
+Les trois sont refusées par défaut, sous des autorisations distinctes qu'aucune
 autre n'ouvre.
 
 ## Consulter l'état d'un serveur
@@ -217,10 +225,10 @@ Le détail est dans [docs/installation.md](docs/installation.md).
 ### Sans installation SPIP
 
 ```bash
-php tests/test_protocole.php   # 343 vérifications : signature partagée, filtrage IP,
+php tests/test_protocole.php   # 372 vérifications : signature partagée, filtrage IP,
                                # validation des archives, masquage des identifiants,
                                # enchaînement des étapes d'un chantier
-php tests/test_structure.php   # 308 vérifications : manifestes, tables, autorisations,
+php tests/test_structure.php   # 312 vérifications : manifestes, tables, autorisations,
                                # API SPIP appelée, pièges de squelette, langue
 php tests/test_depot.php       # 36 vérifications : catalogue SVP, archives publiées
 ```

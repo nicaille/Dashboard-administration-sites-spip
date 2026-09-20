@@ -95,6 +95,86 @@ verifier('une adresse vide ne donne pas de lien', dashboard_url_loader('') === '
 verifier('javascript: est refusé', dashboard_url_loader('javascript:alert(1)') === '');
 verifier('un chemin relatif est refusé', dashboard_url_loader('/afcf/dev/') === '');
 
+echo "\n== Adresse du spip_check d’un site ==\n";
+
+/* Même fabrication que pour le spip_loader, et même réserve : c'est un lien de
+   navigation vers le site géré, jamais une adresse d'action. */
+verifier('l’adresse se déduit de celle du site',
+	dashboard_url_check('https://exemple.org') === 'https://exemple.org/spip_check.php',
+	dashboard_url_check('https://exemple.org'));
+verifier('un site dans un sous-répertoire est suivi',
+	dashboard_url_check('https://exemple.org/dev/') === 'https://exemple.org/dev/spip_check.php');
+verifier('la requête et l’ancre sont écartées',
+	dashboard_url_check('https://exemple.org/dev/?page=x#ancre') === 'https://exemple.org/dev/spip_check.php');
+verifier('une adresse vide ne donne pas de lien', dashboard_url_check('') === '');
+verifier('javascript: est refusé', dashboard_url_check('javascript:alert(1)') === '');
+
+echo "\n== Ce qu’on accepte de déposer comme spip_check ==\n";
+
+/* Le livrable est engendré depuis un gabarit qui pose la version et l'édition
+   en dur, tout à la fin d'un fichier d'un mégaoctet — les bibliothèques
+   embarquées occupent tout le début. C'est donc la **queue** qu'on relit, à
+   l'inverse du spip_loader dont l'en-tête porte les constantes. */
+$queue_check = "function spipCheckToolVersion(): string {\n\treturn '2.4.0';\n}\n\n"
+	. "function spipCheckEdition(): string {\n\treturn 'complete';\n}\n";
+$check = "<?php\n\nnamespace Jfcherng\\Utility {\n\tclass MbString {}\n}\n\n" . $queue_check;
+
+verifier('un spip_check est accepté', dashagent_check_conforme($check)['ok'],
+	dashagent_check_conforme($check)['erreur']);
+verifier('sa version est relevée', dashagent_check_version($queue_check) === '2.4.0',
+	dashagent_check_version($queue_check));
+verifier('son édition est relevée', dashagent_check_edition($queue_check) === 'complete',
+	dashagent_check_edition($queue_check));
+verifier('l’édition lite est reconnue',
+	dashagent_check_edition("function spipCheckEdition(): string {\n\treturn 'lite';\n}") === 'lite');
+
+/* Un mégaoctet de code contient quantité de nombres à points : c'est le corps
+   de la fonction qu'on lit, jamais une occurrence isolée du numéro. */
+verifier('un numéro de version isolé n’est pas pris pour celui de l’outil',
+	dashagent_check_version("<?php\n// voir la version 9.9.9 du protocole\n\$x = '1.2.3';\n") === '');
+verifier('un fichier sans la fonction n’annonce pas de version',
+	dashagent_check_version("<?php\nclass S { public const VERSION = '8.0.5'; }\n") === '');
+
+verifier('un fichier vide est refusé', !dashagent_check_conforme('')['ok']);
+verifier('du HTML est refusé', !dashagent_check_conforme('<html><body>404</body></html>')['ok']);
+/* Le cas qui compte : une erreur d'adresse ou un miroir détourné servant un
+   PHP quelconque. Sans la marque du gabarit, il n'entre pas. */
+verifier('du PHP qui n’est pas un spip_check est refusé',
+	!dashagent_check_conforme("<?php\nunlink(__FILE__);\n")['ok'],
+	dashagent_check_conforme("<?php\nunlink(__FILE__);\n")['erreur']);
+/* Un spip_loader est du PHP, il parle de SPIP, et il n'est pas un spip_check :
+   les deux contrôles ne se confondent pas. */
+verifier('un spip_loader n’est pas accepté comme spip_check',
+	!dashagent_check_conforme("<?php\n// spip_loader.php\n\$spip_loader_version = '3.1.2';\necho 'SPIP';\n")['ok']);
+verifier('un PHP démesuré est refusé',
+	!dashagent_check_conforme("<?php\n" . str_repeat('x', _DASHAGENT_CHECK_TAILLE_MAX) . $queue_check)['ok']);
+/* La borne de relecture doit couvrir le livrable réel : en 2.4.0, la fonction
+   est au 854 687ᵉ octet sur 953 235, soit à 98 548 octets de la fin. */
+verifier('la queue relue couvre largement le livrable réel',
+	_DASHAGENT_CHECK_QUEUE > 98548 * 2, _DASHAGENT_CHECK_QUEUE);
+verifier('un livrable de la taille du vrai fichier passe',
+	dashagent_check_conforme("<?php\n" . str_repeat('x', 950 * 1024) . "\n" . $queue_check)['ok']);
+
+/* Trois opérations, une seule autorisation, refusée par défaut. Déposer cet
+   outil rend appelable à la racine web un lecteur de tout le disque. */
+$GLOBALS['dashagent_config_test'] = [];
+foreach (['check_etat', 'check_maj', 'check_retirer'] as $op) {
+	verifier("$op est refusée par défaut", !dashagent_operation_autorisee($op));
+}
+$GLOBALS['dashagent_config_test'] = ['op_loader' => 'on'];
+foreach (['check_etat', 'check_maj', 'check_retirer'] as $op) {
+	verifier("op_loader n’ouvre pas $op", !dashagent_operation_autorisee($op));
+}
+$GLOBALS['dashagent_config_test'] = ['op_check' => 'on'];
+foreach (['check_etat', 'check_maj', 'check_retirer'] as $op) {
+	verifier("$op s’ouvre avec op_check", dashagent_operation_autorisee($op));
+}
+/* Et réciproquement : op_check n'ouvre rien d'autre. */
+verifier('op_check n’ouvre pas le spip_loader', !dashagent_operation_autorisee('loader_maj'));
+verifier('op_check n’ouvre pas la sauvegarde', !dashagent_operation_autorisee('sauvegarde_creer'));
+$GLOBALS['dashagent_config_test'] = [];
+
+
 echo "\n== Ce qu’on accepte de déposer comme spip_loader ==\n";
 
 /* Le fichier atterrit à la racine web, là où n'importe qui peut l'appeler, et

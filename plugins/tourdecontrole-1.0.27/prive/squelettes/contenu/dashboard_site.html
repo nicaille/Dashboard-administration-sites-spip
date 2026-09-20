@@ -453,6 +453,44 @@
 </div>
 ]
 
+[(#REM)
+	SPIP Check : un contrôle d'intégrité tiers, déposé comme le spip_loader et
+	ouvert dans le navigateur — mais qui, lui, se retire après usage. C'est la
+	seule différence de fond entre les deux encadrés, et elle explique le
+	troisième bouton.
+
+	Le parc ne lance pas le contrôle et n'en lit pas les résultats : SPIP Check
+	s'autorise sur une session d'administrateur du site géré, là où l'agent
+	s'authentifie par signature. Contourner cette autorisation pour le piloter à
+	distance reviendrait à poser une porte dérobée sur tout le parc.
+]
+#SET{retour_check,#SELF|ancre_url{check}}
+#SET{url_check_source,#VAL|dashboard_url_check_source}
+[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+<div class="dashboard-fiche" id="check"
+     data-dashboard-check="[(#URL_ACTION_AUTEUR{dashboard_serveur,#ID_DASHBOARD_SITE})]">
+	<h2><:dashboard:titre_check:></h2>
+	<p class="explication"><:dashboard:explication_check:></p>
+	#SET{url_check,#URL_SITE|dashboard_url_check}
+	<p class="boutons">
+		<button type="button" class="btn btn_secondaire" data-dashboard-check-etat><:dashboard:action_check_etat:></button>
+		[(#GET{url_check}|oui)
+		<a class="btn btn_secondaire" href="[(#GET{url_check}|attribut_url)]" target="_blank" rel="noreferrer noopener"><:dashboard:action_check_ouvrir:></a>
+		]
+	</p>
+	<div data-check-bloc="etat"></div>
+	[(#GET{url_check_source}|oui)
+	<p class="boutons">
+		[(#BOUTON_ACTION{<:dashboard:action_check_maj:>,#URL_ACTION_AUTEUR{dashboard_operation,check_maj/#ID_DASHBOARD_SITE,#GET{retour_check}},btn btn_danger,<:dashboard:check_confirmation:>})]
+		[(#BOUTON_ACTION{<:dashboard:action_check_retirer:>,#URL_ACTION_AUTEUR{dashboard_operation,check_retirer/#ID_DASHBOARD_SITE,#GET{retour_check}},btn btn_secondaire})]
+	</p>
+	]
+	[(#GET{url_check_source}|non)
+	<p class="reponse_formulaire reponse_formulaire_erreur"><:dashboard:check_sans_source:></p>
+	]
+</div>
+]
+
 [(#CORE_MAJ|=={oui}|oui)
 <div class="dashboard-fiche dashboard-fiche-alerte" id="core">
 	<h2><:dashboard:titre_core_maj:></h2>
@@ -1301,6 +1339,80 @@
 					cible.appendChild(ligne('Poids', (r.octets || 0) + ' octets'));
 				}
 				cible.appendChild(ligne('Racine inscriptible', r.racine_ecrit ? 'oui' : 'non'));
+			})
+			.catch(function () {
+				cible.textContent = '';
+				bouton.disabled = false;
+				var e = document.createElement('p');
+				e.className = 'reponse_formulaire reponse_formulaire_erreur';
+				e.textContent = 'Le site n’a pas répondu.';
+				cible.appendChild(e);
+			});
+	});
+})();
+</script>
+
+<script type="text/javascript">
+/* L'état de SPIP Check chez le site géré, relevé à la demande — comme celui du
+   spip_loader, et pour la même raison : c'est un aller-retour de plus vers le
+   site, pour une information qu'on ne consulte qu'au moment d'agir. */
+(function () {
+	var bloc = document.querySelector('[data-dashboard-check]');
+	if (!bloc) { return; }
+
+	var bouton = bloc.querySelector('[data-dashboard-check-etat]');
+	var cible = bloc.querySelector('[data-check-bloc="etat"]');
+	if (!bouton || !cible) { return; }
+
+	/* Tout passe par textContent : ce qui vient d'un site géré est inerte. */
+	function ligne(libelle, valeur) {
+		var p = document.createElement('p');
+		var b = document.createElement('strong');
+		b.textContent = libelle + ' : ';
+		p.appendChild(b);
+		p.appendChild(document.createTextNode(String(valeur)));
+		return p;
+	}
+
+	bouton.addEventListener('click', function () {
+		bouton.disabled = true;
+		cible.textContent = '';
+		var attente = document.createElement('p');
+		attente.className = 'petition';
+		attente.textContent = 'Interrogation du site…';
+		cible.appendChild(attente);
+
+		fetch(bloc.getAttribute('data-dashboard-check') + '&operation=check_etat', {
+			credentials: 'same-origin',
+			headers: { 'X-Requested-With': 'XMLHttpRequest' }
+		})
+			.then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.json(); })
+			.then(function (r) {
+				cible.textContent = '';
+				bouton.disabled = false;
+				if (!r.ok) {
+					var e = document.createElement('p');
+					e.className = 'reponse_formulaire reponse_formulaire_erreur';
+					e.textContent = r.message || 'Le site n’a pas répondu.';
+					cible.appendChild(e);
+					return;
+				}
+				cible.appendChild(ligne('Présent', r.present ? 'oui' : 'non'));
+				if (r.present) {
+					cible.appendChild(ligne('Version', r.version || 'non déclarée'));
+					// L'édition complète embarque le détecteur antimalware, la
+					// lite non — et c'est elle qu'il faut sur les hébergements
+					// dont l'antivirus supprime la première au dépôt.
+					if (r.edition) { cible.appendChild(ligne('Édition', r.edition)); }
+					cible.appendChild(ligne('Déposé le', r.modifie || '—'));
+					cible.appendChild(ligne('Poids', (r.octets || 0) + ' octets'));
+				}
+				cible.appendChild(ligne('Racine inscriptible', r.racine_ecrit ? 'oui' : 'non'));
+				// Sans fichier de configuration, SPIP Check n'ouvre son
+				// interface qu'à l'auteur nº 1 du site géré. Le dire ici évite
+				// de déposer l'outil pour découvrir au clic qu'on n'y a pas accès.
+				cible.appendChild(ligne('Accès',
+					r.config ? ('réglé par ' + r.config) : 'auteur nº 1 du site uniquement'));
 			})
 			.catch(function () {
 				cible.textContent = '';

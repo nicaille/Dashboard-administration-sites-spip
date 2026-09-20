@@ -2,8 +2,8 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.26`,
-`plugins/tourdecontrole_agent-1.0.19`.
+`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.27`,
+`plugins/tourdecontrole_agent-1.0.20`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
 dans le même commit que le changement de `version=` dans son `paquet.xml`. Un
@@ -363,6 +363,34 @@ Le contrat de réponse est le même pour les quatre opérations : tant que
 `termine` est faux, le pilote rappelle **la même adresse**. C'est ainsi qu'une
 opération en plusieurs temps — six dépôts à relire, un chantier de cinq étapes —
 tient dans une boucle qui n'en sait rien.
+
+## Porter un outil tiers, sans le piloter
+
+SPIP Check (`git.spip.net/technova69/spip-check`, GPL 3) est un contrôle
+d'intégrité autonome, déposé à la racine d'un site et ouvert dans le navigateur.
+Le parc sait le déposer, en lire la version et le retirer
+(`inc/dashagent_check.php`, encadré `#check` de la fiche d'un site) — et **rien
+de plus**.
+
+La raison est dans l'outil : il s'autorise sur une **session** d'administrateur
+du site géré, là où l'agent s'authentifie par signature. Contourner cette
+autorisation pour le piloter à distance reviendrait à poser une porte dérobée
+sur tout le parc. L'agent se borne donc à ce que le FTP faisait à la main.
+
+Trois différences avec le `spip_loader.php`, dont tout le reste est copié :
+
+- **il se retire** (`check_retirer`), parce qu'un mégaoctet de code capable de
+  lire tout le disque n'a rien à faire en permanence à la racine web. Par
+  renommage, jamais par suppression ;
+- **sa version se lit dans la queue du fichier**, pas dans l'en-tête : les
+  bibliothèques embarquées occupent tout le début du livrable. On relit
+  `_DASHAGENT_CHECK_QUEUE` octets à la fin, pas le mégaoctet entier ;
+- **son adresse de téléchargement n'a pas de défaut.** Aucune adresse stable
+  n'existe pour ce projet ; en deviner une reviendrait à livrer une fonction qui
+  échoue en silence. Vide, l'encadré le dit et ne propose rien.
+
+L'autorisation `op_check` lui est propre : `op_loader` ne l'ouvre pas, et
+réciproquement.
 
 ## Tests à passer avant tout commit
 

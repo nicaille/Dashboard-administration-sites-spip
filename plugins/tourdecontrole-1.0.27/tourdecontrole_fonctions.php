@@ -497,6 +497,43 @@ function dashboard_url_loader($url) {
 }
 
 /**
+ * Adresse du `spip_check.php` d'un site géré, à partir de son adresse publique.
+ *
+ * Même fabrication que pour le spip_loader, et même réserve : c'est un lien de
+ * navigation vers le site géré, pas une adresse d'action. Il n'ouvre rien tout
+ * seul — SPIP Check n'accepte qu'un administrateur connecté **sur ce site-là**.
+ *
+ * @filtre
+ * @param string $url Adresse publique du site
+ * @return string
+ */
+function dashboard_url_check($url) {
+	$url = trim((string) $url);
+	if ($url === '' || !preg_match('#^https?://#i', $url)) {
+		return '';
+	}
+
+	$url = preg_replace('/[?#].*$/', '', $url);
+
+	return rtrim($url, '/') . '/spip_check.php';
+}
+
+/**
+ * L'adresse d'où SPIP Check est téléchargé, si elle est réglée.
+ *
+ * Sans elle, rien à proposer : l'encadré le dit plutôt que d'offrir un bouton
+ * qui échouerait. Sans paramètre, parce que `#VAL|nom` passe la chaîne vide.
+ *
+ * @filtre
+ * @return string
+ */
+function dashboard_url_check_source() {
+	include_spip('inc/dashboard_operations');
+
+	return trim((string) dashboard_config('url_spip_check', _DASHBOARD_CHECK_URL));
+}
+
+/**
  * Ce site a-t-il tel plugin actif ?
  *
  * Sert à n'afficher un onglet que là où il a un sens : proposer le tableau de

@@ -34,6 +34,7 @@ function dashboard_serveur_operations() {
 		// demande, en données, et sans rien conserver ici.
 		'waf_resume'      => ['debut', 'lot', 'type', 'ip', 'jours', 'bans'],
 		'loader_etat'     => [],
+		'check_etat'      => [],
 	];
 }
 

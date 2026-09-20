@@ -189,6 +189,13 @@ function dashagent_operation_autorisee($operation) {
 		// qu'on puisse demander à distance, et il ne se confond avec aucun autre.
 		'loader_etat'             => 'op_loader',
 		'loader_maj'              => 'op_loader',
+		// SPIP Check lit tout le disque du site et sait déplacer des fichiers.
+		// Le déposer, c'est rendre cette puissance appelable à la racine web —
+		// derrière son propre contrôle d'accès, mais appelable. Une
+		// autorisation à part, et le retrait sous la même.
+		'check_etat'              => 'op_check',
+		'check_maj'               => 'op_check',
+		'check_retirer'           => 'op_check',
 	];
 
 	if (!isset($permissions[$operation])) {

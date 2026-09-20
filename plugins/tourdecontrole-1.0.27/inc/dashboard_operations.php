@@ -23,6 +23,23 @@ if (!defined('_DASHBOARD_LOADER_URL')) {
 }
 
 /**
+ * Adresse de téléchargement de SPIP Check.
+ *
+ * Vide par défaut, et c'est délibéré. SPIP Check est une contribution tierce
+ * (git.spip.net/technova69/spip-check, GPL 3) qui ne publie pas d'adresse
+ * stable comparable au `get.spip.net/spip_loader.php` du core. Inscrire ici une
+ * adresse devinée reviendrait à livrer une fonction qui échoue en silence chez
+ * tout le monde ; tant que le réglage est vide, l'encadré le dit et ne propose
+ * rien.
+ *
+ * Se règle dans *Configuration du tableau de bord*. Rien n'oblige à pointer le
+ * dépôt d'origine : un miroir interne convient, et se contrôle.
+ */
+if (!defined('_DASHBOARD_CHECK_URL')) {
+	define('_DASHBOARD_CHECK_URL', '');
+}
+
+/**
  * Répertoire local de stockage des sauvegardes rapatriées.
  *
  * @param int $id_dashboard_site
@@ -934,6 +951,101 @@ function dashboard_operation_loader_maj($id_dashboard_site) {
 		. ($apres !== '' ? ' — version ' . ($avant !== '' && $avant !== $apres ? $avant . ' → ' . $apres : $apres) : '');
 
 	dashboard_journaliser($id_dashboard_site, 'loader_maj', 'ok', $message, $data, $reponse['duree_ms']);
+
+	return ['ok' => true, 'message' => $message, 'data' => $data];
+}
+
+/**
+ * Dépose SPIP Check à la racine d'un site géré.
+ *
+ * Comme le spip_loader : un aller-retour, pas de chantier, pas de sauvegarde de
+ * base à prendre — c'est un fichier, que l'agent met lui-même de côté avant
+ * d'écrire le nouveau. Et journalisé, parce que rendre appelable à la racine
+ * web un outil qui lit tout le disque n'est pas un geste anodin.
+ *
+ * @param int $id_dashboard_site
+ * @return array
+ */
+function dashboard_operation_check_maj($id_dashboard_site) {
+	include_spip('inc/dashboard_client');
+	include_spip('inc/dashboard_journal');
+
+	$site = dashboard_charger_site($id_dashboard_site);
+	if (!$site) {
+		return ['ok' => false, 'message' => 'Site inconnu', 'data' => []];
+	}
+
+	$url = trim((string) dashboard_config('url_spip_check', _DASHBOARD_CHECK_URL));
+	if ($url === '') {
+		return [
+			'ok'      => false,
+			'message' => 'Aucune adresse de téléchargement de SPIP Check n’est réglée',
+			'data'    => [],
+		];
+	}
+
+	$reponse = dashboard_appeler(
+		$site,
+		'check_maj',
+		['url' => $url],
+		['timeout' => dashboard_config('timeout_long', 300)]
+	);
+
+	if (!$reponse['ok']) {
+		$message = (string) ($reponse['erreur']['message'] ?? '');
+		dashboard_journaliser($id_dashboard_site, 'check_maj', 'erreur', $message, $reponse['erreur'], $reponse['duree_ms']);
+
+		return ['ok' => false, 'message' => $message, 'data' => $reponse['data']];
+	}
+
+	$data = (array) $reponse['data'];
+	$avant = (string) ($data['version_avant'] ?? '');
+	$apres = (string) ($data['version_apres'] ?? '');
+	$edition = (string) ($data['edition'] ?? '');
+	$message = 'spip_check.php déposé (' . dashboard_octets((int) ($data['octets'] ?? 0)) . ')'
+		. ($apres !== '' ? ' — version ' . ($avant !== '' && $avant !== $apres ? $avant . ' → ' . $apres : $apres) : '')
+		. ($edition !== '' ? ' (' . $edition . ')' : '');
+
+	dashboard_journaliser($id_dashboard_site, 'check_maj', 'ok', $message, $data, $reponse['duree_ms']);
+
+	return ['ok' => true, 'message' => $message, 'data' => $data];
+}
+
+/**
+ * Retire SPIP Check de la racine d'un site géré.
+ *
+ * L'outil s'emploie ponctuellement et se retire après usage — c'est ce que dit
+ * sa propre documentation, et c'est ce qui le sépare du spip_loader, lequel a
+ * vocation à rester. L'agent le renomme plutôt que de l'effacer : le fichier
+ * n'est plus appelable, et le retour arrière reste possible.
+ *
+ * @param int $id_dashboard_site
+ * @return array
+ */
+function dashboard_operation_check_retirer($id_dashboard_site) {
+	include_spip('inc/dashboard_client');
+	include_spip('inc/dashboard_journal');
+
+	$site = dashboard_charger_site($id_dashboard_site);
+	if (!$site) {
+		return ['ok' => false, 'message' => 'Site inconnu', 'data' => []];
+	}
+
+	$reponse = dashboard_appeler($site, 'check_retirer', [], ['timeout' => dashboard_config('timeout', 30)]);
+
+	if (!$reponse['ok']) {
+		$message = (string) ($reponse['erreur']['message'] ?? '');
+		dashboard_journaliser($id_dashboard_site, 'check_retirer', 'erreur', $message, $reponse['erreur'], $reponse['duree_ms']);
+
+		return ['ok' => false, 'message' => $message, 'data' => $reponse['data']];
+	}
+
+	$data = (array) $reponse['data'];
+	$message = ((string) ($data['retire'] ?? '') !== '')
+		? 'spip_check.php retiré de la racine du site'
+		: 'Aucun spip_check.php à retirer';
+
+	dashboard_journaliser($id_dashboard_site, 'check_retirer', 'ok', $message, $data, $reponse['duree_ms']);
 
 	return ['ok' => true, 'message' => $message, 'data' => $data];
 }

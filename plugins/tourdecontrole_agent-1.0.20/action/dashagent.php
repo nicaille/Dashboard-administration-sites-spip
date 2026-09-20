@@ -30,7 +30,7 @@ function action_dashagent_dist() {
 	$args    = $requete['args'];
 
 	// Les opérations lourdes peuvent dépasser le temps d'exécution par défaut.
-	if (in_array($op, ['sauvegarde_creer', 'plugin_maj', 'plugin_svp_avancer', 'depots_actualiser', 'core_maj', 'base_maj', 'loader_maj', 'waf_resume'], true)) {
+	if (in_array($op, ['sauvegarde_creer', 'plugin_maj', 'plugin_svp_avancer', 'depots_actualiser', 'core_maj', 'base_maj', 'loader_maj', 'check_maj', 'waf_resume'], true)) {
 		@set_time_limit(600);
 		@ini_set('memory_limit', '512M');
 	}
@@ -209,6 +209,21 @@ function dashagent_executer($op, $args) {
 			include_spip('inc/dashagent_loader');
 
 			return dashagent_loader_maj($args);
+
+		case 'check_etat':
+			include_spip('inc/dashagent_check');
+
+			return dashagent_check_etat();
+
+		case 'check_maj':
+			include_spip('inc/dashagent_check');
+
+			return dashagent_check_maj($args);
+
+		case 'check_retirer':
+			include_spip('inc/dashagent_check');
+
+			return dashagent_check_retirer();
 
 		default:
 			return ['ok' => false, 'erreur' => 'Opération non implémentée : ' . $op];

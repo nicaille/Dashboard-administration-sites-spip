@@ -1,7 +1,7 @@
 <paquet
 	prefix="tourdecontrole_agent"
 	categorie="maintenance"
-	version="1.0.19"
+	version="1.0.20"
 	etat="test"
 	compatibilite="[4.1.0;4.*]"
 	schema="1.0.5"

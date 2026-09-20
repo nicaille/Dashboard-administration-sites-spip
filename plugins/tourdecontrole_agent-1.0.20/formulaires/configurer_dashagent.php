@@ -35,6 +35,7 @@ function formulaires_configurer_dashagent_charger_dist() {
 		'op_serveur'        => dashagent_config('op_serveur', ''),
 		'op_waf'            => dashagent_config('op_waf', ''),
 		'op_loader'         => dashagent_config('op_loader', ''),
+		'op_check'          => dashagent_config('op_check', ''),
 		'retention_journal' => dashagent_config('retention_journal', 90),
 		'retention_backup'  => dashagent_config('retention_backup', 7),
 		'url_agent'         => url_de_base() . 'spip.php?action=dashagent',
@@ -108,7 +109,7 @@ function formulaires_configurer_dashagent_traiter_dist() {
 	$config['retention_backup']  = max(1, (int) _request('retention_backup'));
 
 	foreach (['op_infos', 'op_purger', 'op_sauvegarde', 'op_plugin_maj', 'op_core_maj', 'op_serveur',
-		'op_waf', 'op_loader'] as $op) {
+		'op_waf', 'op_loader', 'op_check'] as $op) {
 		$config[$op] = (_request($op) === 'on') ? 'on' : '';
 	}
 
