@@ -420,3 +420,30 @@
 .dashboard-graphe-tableau table {
 	margin-top: .5em;
 }
+
+/* Barre d'actions groupées, au-dessus du tableau du parc. Elle reprend
+   l'agencement de la ligne des dépôts : mêmes boutons du privé, même compte
+   rendu en italique. */
+.dashboard-parc-groupe {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .6em;
+	align-items: center;
+	margin: 0 0 .6em;
+}
+.dashboard-parc-groupe-compte {
+	font-size: .9em;
+	opacity: .8;
+}
+
+/* La colonne des cases : aussi étroite que possible, et la case centrée sur la
+   ligne plutôt que collée en haut de cellule. */
+.dashboard-parc-cocher {
+	width: 1%;
+	white-space: nowrap;
+	vertical-align: middle;
+	text-align: center;
+}
+.dashboard-parc-cocher input {
+	margin: 0;
+}

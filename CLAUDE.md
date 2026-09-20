@@ -2,7 +2,7 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.24`,
+`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.25`,
 `plugins/tourdecontrole_agent-1.0.19`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
@@ -253,7 +253,12 @@ invisibles sur les boutons de pagination.
   échappatoire : `#SET{x,non,oui}` est coupé sur sa virgule et `x` vaut `non`.
 - **Un libellé qui porte un décompte** se calcule avec `#SET` avant l'appel, et
   par `#VAL{clef}|_T{#ARRAY{nb,#BALISE}}` — une chaîne de langue à arguments
-  écrite directement dans un `#SET` rend une chaîne vide.
+  écrite directement dans un `#SET` rend une chaîne vide. Et il y faut une
+  balise **simple** : `#ARRAY{nb,#GET{x}}` ajoute un niveau d'accolades que
+  l'analyse ne suit plus, pour un « Argument manquant dans la balise SET » qui
+  emporte la page entière. Quand le nombre vient d'une fonction et non d'un
+  champ de boucle, faire la chaîne de langue en PHP
+  (`dashboard_agent_maj_libelle()`).
 
 ## Ce qui vient d'un site géré est inerte, toujours
 
@@ -311,7 +316,31 @@ le rendu, charge utile à l'appui.
 
 `tests/test_structure.php` vérifie les cinq — le quatrième en refusant toute
 valeur d'attribut qui s'ouvre sur une parenthèse littérale, le cinquième tout
-`<script src>` rangé dans une branche « sinon ».
+`<script src>` rangé dans une branche « sinon ». Il refuse aussi tout
+`#ARRAY{…#GET{…}}`, variante du premier.
+
+## Une case à cocher ne donne aucun droit
+
+Les actions de parc — relire les dépôts, synchroniser ou vider une sélection,
+mettre à jour l'agent — se pilotent depuis le navigateur, un site par requête
+(`action/dashboard_parc.php`, `javascript/dashboard_parc.js`). D'où une règle
+qui tient tout :
+
+**Aucune adresse d'action n'est fabriquée en JavaScript.** Le squelette écrit
+une file par opération, chacune ne contenant que les sites que l'utilisateur a
+le droit d'opérer, et chaque adresse est signée pour son couple
+`operation/id_site`. La case à cocher, elle, ne porte qu'un identifiant : elle
+**désigne**, elle n'autorise pas. Un site coché absent de la file est écarté.
+
+Trois écritures doivent donc s'accorder, et rien ne les relie à l'exécution : le
+bouton (`data-parc-action="sync"`), la file (`data-parc-file="sync"`) et le
+`case 'sync':` de l'action. Qu'une seule manque et le bouton ne fait rien, sans
+erreur ni message — `tests/test_structure.php` les confronte.
+
+Le contrat de réponse est le même pour les quatre opérations : tant que
+`termine` est faux, le pilote rappelle **la même adresse**. C'est ainsi qu'une
+opération en plusieurs temps — six dépôts à relire, un chantier de cinq étapes —
+tient dans une boucle qui n'en sait rien.
 
 ## Tests à passer avant tout commit
 

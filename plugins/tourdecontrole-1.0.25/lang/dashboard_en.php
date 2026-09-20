@@ -12,7 +12,10 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'action_base_maj' => 'Migrate the database now',
 	'action_core_maj'          => 'Upgrade SPIP now',
 	'action_depots_maj' => 'Refresh repositories',
+	'action_agent_parc' => 'Update the agent (@nb@ site(s))',
 	'action_depots_parc' => 'Refresh the whole fleet’s repositories',
+	'action_purger_selection' => 'Clear the selection’s caches',
+	'action_sync_selection' => 'Synchronise the selection',
 	'action_loader_etat' => 'Check the state on the site',
 	'action_loader_maj' => 'Deploy a fresh spip_loader.php',
 	'action_loader_ouvrir' => 'Open the site’s spip_loader',
@@ -71,6 +74,8 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'depots_minutes' => '@n@ minute(s) ago',
 	'depots_parc_perimes' => '@nb@ site(s) are reading a stale catalogue',
 	'depots_parc_relus' => 'Repository catalogues re-read, at the oldest,',
+	'confirmer_agent_parc' => 'Update the agent on @nb@ site(s)? Each site is backed up first, then its agent replaced — it will fall silent for a moment during the operation.',
+	'explication_agent_parc' => 'Some sites are running an old version of the agent.',
 	'depots_relus' => 'Repository catalogue re-read',
 	'derniere_erreur' => 'Last error:',
 
@@ -181,6 +186,8 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'operation_sync'            => 'Synchronisation',
 
 	// P
+	'parc_cocher_page' => 'Tick every site on this page',
+	'parc_selection' => '@nb@ site(s) selected',
 	'parc_caption'      => 'Sites in the fleet, grouped then sorted by name.',
 	'parc_vide'         => 'No site in the fleet yet.',
 	'plugin_distribue'  => 'shipped with SPIP',

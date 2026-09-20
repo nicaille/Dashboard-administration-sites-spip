@@ -20,6 +20,14 @@
 	<li class="dashboard-attention"><strong>[(#GET{synthese}|table_valeur{plugins_maj})]</strong> <:dashboard:synthese_plugins_maj:></li>
 </ul>
 
+[(#REM)
+	Tout ce qui se pilote site après site vit dans ce conteneur : le pilote
+	(javascript/dashboard_parc.js) n'y cherche que trois choses — des boutons
+	`data-parc-action`, des cases `data-parc-site`, et les files d'adresses
+	signées qui disent quel site peut recevoir quelle opération.
+]
+<div data-dashboard-parc>
+
 [(#VAL|dashboard_depots_parc_age|oui)
 	[(#REM)
 		Ce nombre est la somme de ce que chaque site a relevé, et chaque site ne
@@ -28,32 +36,62 @@
 	]
 	#SET{depots_perimes,#VAL|dashboard_depots_parc_perimes}
 	<p class="dashboard-depots[(#GET{depots_perimes}|>{0}|oui) dashboard-depots-perimes]"
-	   id="depots">
+	   id="depots" data-parc-bloc>
 		<span>
 			<:dashboard:depots_parc_relus:> [(#VAL|dashboard_depots_parc_age)][(#GET{depots_perimes}|>{0}|oui)
 			&mdash; <:dashboard:depots_parc_perimes{nb=#GET{depots_perimes}}:>]
 		</span>
 		[(#AUTORISER{operer,dashboard_site})
-		<button type="button" class="btn btn_secondaire" data-dashboard-depots-parc>
+		<button type="button" class="btn btn_secondaire"
+		        data-parc-action="depots" data-parc-tours="20">
 			<:dashboard:action_depots_parc:>
 		</button>
-		<span class="dashboard-depots-avancement" role="status" aria-live="polite"></span>
+		<span class="dashboard-depots-avancement" role="status" aria-live="polite" data-parc-avancement></span>
 		]
 	</p>
+]
 
+[(#REM)
+	La mise à jour de l'agent sur tout le parc.
+
+	C'est une mise à jour de plugin ordinaire — même chantier, mêmes étapes,
+	même sauvegarde de la base avant de toucher au moindre fichier —, à ceci
+	près que le plugin remplacé est celui qui répond. L'agent se coupe donc la
+	parole à lui-même, et le site se tait au beau milieu de l'opération. Ce
+	silence est prévu : dashboard_chantier_plugin_verifier() va constater
+	plutôt que conclure.
+
+	Le décompte vient du dernier inventaire de chaque site ; l'action, elle,
+	revérifie site par site au moment d'agir, et n'ouvre aucun chantier — donc
+	aucune sauvegarde — sur un site déjà à jour.
+]
+#SET{agent_maj,#VAL|dashboard_agent_maj_parc}
+[(#REM)
+	Les deux libellés portent un décompte, et se calculent donc en PHP.
+
+	La forme habituelle — `#VAL{clef}|_T{#ARRAY{nb,#BALISE}}` — veut une balise
+	simple à la place du nombre. Y glisser un `#GET{…}` y ajoute des accolades
+	imbriquées, que l'analyse ne suit plus : « Argument manquant dans la balise
+	SET », et la vue d'ensemble entière tombe sur une erreur de squelette.
+]
+#SET{libelle_agent,#VAL|dashboard_agent_maj_libelle}
+#SET{confirmer_agent,#VAL|dashboard_agent_maj_confirmation}
+[(#GET{agent_maj}|>{0}|oui)
 	[(#AUTORISER{operer,dashboard_site})
-	[(#REM)
-		La file des sites à relire, en clair dans la page : le pilote la lit et
-		l'enchaîne. Chaque adresse est signée pour son site, comme n'importe
-		quelle action — aucune n'est fabriquée en JavaScript.
-	]
-	<ul class="dashboard-parc-file" hidden>
-		<BOUCLE_file(DASHBOARD_SITES){statut = publie}{par titre}>
-			[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
-			<li><a href="[(#URL_ACTION_AUTEUR{dashboard_parc,#ID_DASHBOARD_SITE})]">#TITRE</a></li>
-			]
-		</BOUCLE_file>
-	</ul>
+	<p class="dashboard-depots dashboard-agent-parc" id="agent" data-parc-bloc>
+		<span><:dashboard:explication_agent_parc:></span>
+		[(#REM)
+			Un chantier fait bien plus d'allers-retours qu'une relecture de
+			dépôts : cinq étapes, dont une qui rejoue tant que SVP n'a pas fini,
+			et jusqu'à six tentatives pendant que le site se tait.
+		]
+		<button type="button" class="btn btn_secondaire"
+		        data-parc-action="agent_maj" data-parc-tours="60"
+		        data-parc-confirmer="[(#GET{confirmer_agent}|attribut_html)]">
+			[(#GET{libelle_agent})]
+		</button>
+		<span class="dashboard-depots-avancement" role="status" aria-live="polite" data-parc-avancement></span>
+	</p>
 	]
 ]
 
@@ -90,10 +128,43 @@
 ]
 
 <B_sites>
+[(#AUTORISER{synchroniser,dashboard_site})
+[(#REM)
+	Agir sur plusieurs sites d'un coup. La case ne fait que **désigner** : elle
+	ne crée aucun droit et ne fabrique aucune adresse. C'est la file d'adresses
+	signées, plus bas, qui dit ce qu'un site peut recevoir — un site coché qui
+	n'y figure pas est simplement écarté, et le pilote le dit.
+
+	Le tableau est paginé : « tout cocher » ne coche donc que la page affichée.
+	C'est ce que dit son intitulé, plutôt que de laisser croire à une sélection
+	qu'on ne voit pas.
+]
+<div class="dashboard-parc-groupe" data-parc-bloc>
+	<span class="dashboard-parc-groupe-compte" data-parc-compte
+	      data-gabarit="<:dashboard:parc_selection:>"></span>
+	<button type="button" class="btn btn_secondaire"
+	        data-parc-action="sync" data-parc-selection="oui" data-parc-tours="2">
+		<:dashboard:action_sync_selection:>
+	</button>
+	[(#AUTORISER{operer,dashboard_site})
+	<button type="button" class="btn btn_secondaire"
+	        data-parc-action="purger" data-parc-selection="oui" data-parc-tours="2">
+		<:dashboard:action_purger_selection:>
+	</button>
+	]
+	<span class="dashboard-depots-avancement" role="status" aria-live="polite" data-parc-avancement></span>
+</div>
+]
 <table class="spip liste dashboard-parc">
 	<caption><:dashboard:parc_caption:></caption>
 	<thead>
 		<tr>
+			[(#AUTORISER{synchroniser,dashboard_site})
+			<th scope="col" class="dashboard-parc-cocher">
+				<input type="checkbox" data-parc-tout title="<:dashboard:parc_cocher_page:>"
+				       aria-label="<:dashboard:parc_cocher_page:>" />
+			</th>
+			]
 			<th scope="col"><:dashboard:col_site:></th>
 			<th scope="col"><:dashboard:col_etat:></th>
 			<th scope="col"><:dashboard:col_spip:></th>
@@ -105,6 +176,12 @@
 	<tbody>
 	<BOUCLE_sites(DASHBOARD_SITES){statut != poubelle}{par groupe, titre}{pagination 25}>
 		<tr class="[(#COMPTEUR_BOUCLE|alterner{odd,even})] [(#ETAT|dashboard_classe_etat)]">
+			[(#AUTORISER{synchroniser,dashboard_site})
+			<td class="dashboard-parc-cocher">
+				<input type="checkbox" data-parc-site="#ID_DASHBOARD_SITE"
+				       aria-label="[(#TITRE|attribut_html)]" />
+			</td>
+			]
 			<th scope="row">
 				<a href="[(#URL_ECRIRE{dashboard_site,id_dashboard_site=#ID_DASHBOARD_SITE})]">#TITRE</a>
 				[<br /><span class="dashboard-groupe">(#GROUPE)</span>]
@@ -181,82 +258,77 @@
 <p class="petition"><:dashboard:parc_vide:></p>
 <//B_sites>
 
+[(#REM)
+	Les files d'adresses, en clair dans la page : le pilote y lit ce qu'un site
+	peut recevoir. Chaque adresse est signée pour son site **et pour son
+	opération**, comme n'importe quelle action — aucune n'est fabriquée en
+	JavaScript, et cocher une case ne saurait en inventer une.
+
+	D'où une file par opération, et non une file de sites : la signature porte
+	sur l'argument entier, `operation/id_site`.
+
+	Les sites en pause n'y figurent pas — `statut = publie`. Un site qu'on a
+	mis de côté ne se réveille pas parce qu'il est resté coché.
+]
+[(#AUTORISER{synchroniser,dashboard_site})
+<ul class="dashboard-parc-file" data-parc-file="sync" hidden>
+	<BOUCLE_file_sync(DASHBOARD_SITES){statut = publie}{par titre}>
+		[(#AUTORISER{synchroniser,dashboard_site,#ID_DASHBOARD_SITE})
+		<li data-site="#ID_DASHBOARD_SITE"><a href="[(#URL_ACTION_AUTEUR{dashboard_parc,sync/#ID_DASHBOARD_SITE})]">#TITRE</a></li>
+		]
+	</BOUCLE_file_sync>
+</ul>
+]
+
+[(#AUTORISER{operer,dashboard_site})
+<ul class="dashboard-parc-file" data-parc-file="purger" hidden>
+	<BOUCLE_file_purger(DASHBOARD_SITES){statut = publie}{par titre}>
+		[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+		<li data-site="#ID_DASHBOARD_SITE"><a href="[(#URL_ACTION_AUTEUR{dashboard_parc,purger/#ID_DASHBOARD_SITE})]">#TITRE</a></li>
+		]
+	</BOUCLE_file_purger>
+</ul>
+
+<ul class="dashboard-parc-file" data-parc-file="depots" hidden>
+	<BOUCLE_file_depots(DASHBOARD_SITES){statut = publie}{par titre}>
+		[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+		<li data-site="#ID_DASHBOARD_SITE"><a href="[(#URL_ACTION_AUTEUR{dashboard_parc,depots/#ID_DASHBOARD_SITE})]">#TITRE</a></li>
+		]
+	</BOUCLE_file_depots>
+</ul>
+
+[(#REM)
+	La file de l'agent liste tout le parc, sans présélection : le décompte
+	affiché date du dernier inventaire de chaque site, quand l'action, elle,
+	revérifie au moment d'agir. Un site déjà à jour répond « rien à faire » en
+	un aller-retour et sans ouvrir de chantier — donc sans sauvegarde.
+
+	Se fier au décompte pour bâtir la file reviendrait à sauter un site dont
+	l'agent a vieilli depuis, et à en visiter un autre pour rien.
+]
+<ul class="dashboard-parc-file" data-parc-file="agent_maj" hidden>
+	<BOUCLE_file_agent(DASHBOARD_SITES){statut = publie}{par titre}>
+		[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+		<li data-site="#ID_DASHBOARD_SITE"><a href="[(#URL_ACTION_AUTEUR{dashboard_parc,agent_maj/#ID_DASHBOARD_SITE})]">#TITRE</a></li>
+		]
+	</BOUCLE_file_agent>
+</ul>
+]
+
+</div>
+
 [(#AUTORISER{creer,dashboard_site})
 <p class="boutons">
 	<a class="btn" href="[(#URL_ECRIRE{dashboard_site,new=oui})]"><:dashboard:icone_creer_site:></a>
 </p>
 ]
 
-<script type="text/javascript">
-/* Relecture des catalogues de tout le parc, un site à la fois.
-   Sans JavaScript, le bouton ne fait rien et rien n'est perdu : la
-   synchronisation de fond relit les catalogues trop anciens d'elle-même. */
-(function () {
-	var bouton = document.querySelector('[data-dashboard-depots-parc]');
-	var file = document.querySelector('.dashboard-parc-file');
-	if (!bouton || !file) { return; }
 
-	var etapes = Array.prototype.map.call(file.querySelectorAll('a'), function (a) {
-		return { url: a.getAttribute('href'), titre: a.textContent.trim() };
-	});
-	var avancement = document.querySelector('.dashboard-depots-avancement');
-	if (!etapes.length) { bouton.disabled = true; return; }
-
-	function dire(texte) {
-		if (avancement) { avancement.textContent = texte; }
-	}
-
-	// Un site ne peut pas retenir le tour indéfiniment. Le compte des dépôts à
-	// relire vient du site géré ; si l'un d'eux reste annoncé « à relire » après
-	// l'avoir été — une date que la base n'a pas bougée, un catalogue illisible —
-	// la boucle tournerait sans fin sur le même site, et le parc ne serait jamais
-	// parcouru. Passé ce nombre de tours, on le laisse et on continue.
-	var TOURS_MAX = 20;
-	var tours = 0;
-
-	function relire(rang) {
-		if (rang >= etapes.length) {
-			dire('Terminé, actualisation…');
-			window.location.reload();
-			return;
-		}
-		if (tours > TOURS_MAX) {
-			dire('(' + (rang + 1) + '/' + etapes.length + ') ' + etapes[rang].titre
-				+ ' : trop de dépôts à relire, on passe au site suivant');
-			tours = 0;
-			window.setTimeout(function () { relire(rang + 1); }, 800);
-			return;
-		}
-		tours++;
-		dire('(' + (rang + 1) + '/' + etapes.length + ') ' + etapes[rang].titre + '…');
-		fetch(etapes[rang].url, {
-			credentials: 'same-origin',
-			headers: { 'X-Requested-With': 'XMLHttpRequest' }
-		})
-			.then(function (r) {
-				if (!r.ok) { throw new Error('HTTP ' + r.status); }
-				return r.json();
-			})
-			.then(function (etat) {
-				if (etat.message) { dire('(' + (rang + 1) + '/' + etapes.length + ') ' + etat.message); }
-				// Un site qui reste sur le même rang a encore des dépôts à relire.
-				if (etat.termine) { tours = 0; }
-				relire(etat.termine ? rang + 1 : rang);
-			})
-			.catch(function () {
-				// Un site injoignable n'arrête pas le tour : on passe au suivant.
-				dire('(' + (rang + 1) + '/' + etapes.length + ') ' + etapes[rang].titre + ' : sans réponse');
-				tours = 0;
-				window.setTimeout(function () { relire(rang + 1); }, 800);
-			});
-	}
-
-	bouton.addEventListener('click', function () {
-		bouton.disabled = true;
-		relire(0);
-	});
-})();
-</script>
+[(#REM)
+	Le pilote des opérations de parc : il ne lit que ce que cette page lui
+	donne — des boutons, des cases, et des files d'adresses déjà signées.
+]
+<script src="[(#CHEMIN{javascript/dashboard_parc.js}|timestamp)]"></script>
 
 [(#REM)
 	Chart.js est embarqué dans le plugin, jamais appelé sur un CDN.

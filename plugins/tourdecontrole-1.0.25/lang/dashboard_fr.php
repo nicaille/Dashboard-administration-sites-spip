@@ -12,7 +12,10 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'action_base_maj' => 'Migrer la base maintenant',
 	'action_core_maj'          => 'Mettre à jour SPIP maintenant',
 	'action_depots_maj' => 'Relire les dépôts',
+	'action_agent_parc' => 'Mettre à jour l’agent (@nb@ site(s))',
 	'action_depots_parc' => 'Relire les dépôts de tout le parc',
+	'action_purger_selection' => 'Vider les caches de la sélection',
+	'action_sync_selection' => 'Synchroniser la sélection',
 	'action_loader_etat' => 'Voir l’état sur le site',
 	'action_loader_maj' => 'Déposer un spip_loader.php neuf',
 	'action_loader_ouvrir' => 'Ouvrir le spip_loader du site',
@@ -71,6 +74,8 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'depots_minutes' => 'il y a @n@ minute(s)',
 	'depots_parc_perimes' => '@nb@ site(s) lisent un catalogue périmé',
 	'depots_parc_relus' => 'Catalogues des dépôts relus, au plus ancien,',
+	'confirmer_agent_parc' => 'Mettre à jour l’agent sur @nb@ site(s) ? Chaque site sera d’abord sauvegardé, puis son agent remplacé — il se taira quelques instants pendant l’opération.',
+	'explication_agent_parc' => 'Des sites font tourner une version ancienne de l’agent.',
 	'depots_relus' => 'Catalogue des dépôts relu',
 	'derniere_erreur' => 'Dernière erreur :',
 
@@ -181,6 +186,8 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'operation_sync'            => 'Synchronisation',
 
 	// P
+	'parc_cocher_page' => 'Cocher tous les sites de cette page',
+	'parc_selection' => '@nb@ site(s) sélectionné(s)',
 	'parc_caption'      => 'Sites du parc, regroupés puis triés par nom.',
 	'parc_vide'         => 'Aucun site dans le parc pour l’instant.',
 	'plugin_distribue'  => 'livré avec SPIP',

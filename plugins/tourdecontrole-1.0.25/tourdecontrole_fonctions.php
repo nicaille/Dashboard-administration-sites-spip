@@ -872,3 +872,107 @@ function dashboard_waf_json($points) {
 function dashboard_waf_parc_present() {
 	return (bool) sql_countsel('spip_dashboard_waf_jours');
 }
+
+/**
+ * Le préfixe du plugin agent, tel que les sites gérés le déclarent.
+ *
+ * Écrit ici et nulle part ailleurs. C'est une constante fragile par nature : le
+ * jour où l'agent changera de préfixe — ce qui est déjà arrivé une fois —, rien
+ * ici ne lèvera d'erreur. La requête ne trouverait simplement aucun site à
+ * mettre à jour, et la vue d'ensemble n'afficherait plus le bouton : exactement
+ * la faute qui a laissé « Version de l'agent : 0 » à l'écran pendant des
+ * semaines.
+ *
+ * `tests/test_structure.php` relit donc cette valeur dans le `paquet.xml` de
+ * l'agent et refuse qu'elles divergent.
+ *
+ * Les préfixes sont mis en capitales par l'agent avant d'être rendus
+ * (`dashagent_plugins()`), et rangés tels quels.
+ *
+ * @return string
+ */
+function dashboard_prefixe_agent() {
+	return 'TOURDECONTROLE_AGENT';
+}
+
+/**
+ * Ce site attend-il une mise à jour de son agent ?
+ *
+ * Le critère est celui du décompte affiché par le parc : une mise à jour
+ * annoncée, et un plugin qui n'est pas livré avec SPIP. L'agent ne l'est jamais,
+ * mais la condition ne coûte rien et garde les deux lectures accordées.
+ *
+ * @param int $id_dashboard_site
+ * @return bool
+ */
+function dashboard_agent_maj_attendue($id_dashboard_site) {
+	return (bool) sql_countsel('spip_dashboard_plugins', [
+		'id_dashboard_site = ' . (int) $id_dashboard_site,
+		'prefixe = ' . sql_quote(dashboard_prefixe_agent()),
+		'maj_disponible = ' . sql_quote('oui'),
+		'distribue = ' . sql_quote('non'),
+	]);
+}
+
+/**
+ * Les sites supervisés dont l'agent attend une mise à jour.
+ *
+ * Seuls les sites publiés : un site en pause ne se touche pas, et un site à la
+ * poubelle encore moins.
+ *
+ * @return array Identifiants, dans l'ordre du titre
+ */
+function dashboard_agent_maj_sites() {
+	if (!dashboard_tables_presentes()) {
+		return [];
+	}
+
+	$lignes = sql_allfetsel(
+		'p.id_dashboard_site AS id',
+		'spip_dashboard_plugins AS p INNER JOIN spip_dashboard_sites AS s ON s.id_dashboard_site = p.id_dashboard_site',
+		[
+			'p.prefixe = ' . sql_quote(dashboard_prefixe_agent()),
+			'p.maj_disponible = ' . sql_quote('oui'),
+			'p.distribue = ' . sql_quote('non'),
+			's.statut = ' . sql_quote('publie'),
+		],
+		'',
+		's.titre'
+	);
+
+	return array_map('intval', array_column($lignes, 'id'));
+}
+
+/**
+ * Combien de sites attendent une mise à jour de leur agent ?
+ *
+ * @return int
+ */
+function dashboard_agent_maj_parc() {
+	return count(dashboard_agent_maj_sites());
+}
+
+/**
+ * Le libellé du bouton de mise à jour de l'agent, décompte compris.
+ *
+ * Pourquoi un filtre plutôt qu'un `#SET` dans le squelette : la forme
+ * `#VAL{clef}|_T{#ARRAY{nb,#BALISE}}` veut une balise **simple** à la place du
+ * nombre. Y glisser un `#GET{…}` y ajoute des accolades imbriquées, que
+ * l'analyse ne suit plus — « Argument manquant dans la balise SET », et la page
+ * entière tombe. Le décompte venant d'une fonction et non d'un champ de boucle,
+ * autant faire la chaîne de langue ici.
+ *
+ * @return string
+ */
+function dashboard_agent_maj_libelle() {
+	return _T('dashboard:action_agent_parc', ['nb' => dashboard_agent_maj_parc()]);
+}
+
+/**
+ * La demande de confirmation qui va avec, même raison.
+ *
+ * @return string
+ */
+function dashboard_agent_maj_confirmation() {
+	return _T('dashboard:confirmer_agent_parc', ['nb' => dashboard_agent_maj_parc()]);
+}
