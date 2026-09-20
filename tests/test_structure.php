@@ -12,7 +12,7 @@
 $racine = dirname(__DIR__);
 
 /**
- * Les dossiers de plugins portent leur version (`tourdecontrole-1.0.25`), pour qu'une
+ * Les dossiers de plugins portent leur version (`tourdecontrole-1.0.26`), pour qu'une
  * mise en ligne n'écrase pas la version précédente. On les retrouve donc par
  * préfixe, sans quoi ce fichier serait à retoucher à chaque montée de version.
  *
@@ -901,6 +901,59 @@ verifier('chaque API SPIP est appelée avec son include_spip', !$defauts);
 foreach (array_keys($defauts) as $defaut) {
 	echo "         $defaut\n";
 }
+
+echo "\n== Les filtres appelés sans argument ==\n";
+
+/*
+ * `#VAL|mon_filtre` ne transmet pas « rien » : SPIP compile cet appel en
+ * `mon_filtre('')`. Une valeur par défaut déclarée dans la signature ne joue
+ * donc pas — l'argument est bel et bien passé —, et la chaîne vide atterrit
+ * dans le premier paramètre.
+ *
+ * C'est ce qui est arrivé à `dashboard_waf_serie_parc($jours = 90)` : le `''`
+ * valait zéro, la fenêtre se réduisait au jour même, et la tendance du parc
+ * traçait deux courbes vides. L'encadré était là, son JSON aussi, et seules
+ * les courbes manquaient — rien, sur la page, ne le disait.
+ *
+ * D'où la convention, que le reste du code suivait déjà : un filtre appelé
+ * `#VAL|nom` ne prend pas de paramètre, ou en prend un nommé `$rien`. Ce nom
+ * est le seul moyen de dire « je sais que SPIP me passe une chaîne vide, et je
+ * n'en fais rien ».
+ */
+$sans_argument = [];
+foreach ($plugins as $plugin) {
+	foreach (fichiers($plugin, ['html']) as $fichier) {
+		preg_match_all('/#VAL\|([a-z0-9_]+)/', file_get_contents($fichier), $t);
+		$sans_argument = array_merge($sans_argument, $t[1]);
+	}
+}
+$sans_argument = array_unique($sans_argument);
+
+$fautifs = [];
+foreach ($plugins as $plugin) {
+	foreach (fichiers($plugin, ['php']) as $fichier) {
+		$source = file_get_contents($fichier);
+		foreach ($sans_argument as $nom) {
+			if (!preg_match('/function\s+' . preg_quote($nom, '/') . '\s*\(([^)]*)\)/', $source, $signature)) {
+				continue;
+			}
+			$premier = trim(explode(',', $signature[1])[0]);
+			if ($premier === '' || strncmp($premier, '$rien', 5) === 0) {
+				continue;
+			}
+			$fautifs[$nom . '() : premier paramètre ' . $premier . ', qui recevra la chaîne vide'] = true;
+		}
+	}
+}
+
+verifier(
+	count($sans_argument) . ' filtres appelés #VAL|… ne reçoivent la chaîne vide nulle part de sensible',
+	!$fautifs
+);
+foreach (array_keys($fautifs) as $fautif) {
+	echo "         $fautif\n";
+}
+
 
 echo "\n== Opérations de parc : boutons, files et action ==\n";
 

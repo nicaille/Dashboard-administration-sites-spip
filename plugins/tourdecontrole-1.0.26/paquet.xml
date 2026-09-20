@@ -1,7 +1,7 @@
 <paquet
 	prefix="tourdecontrole"
 	categorie="maintenance"
-	version="1.0.25"
+	version="1.0.26"
 	etat="test"
 	compatibilite="[4.1.0;4.*]"
 	schema="1.0.7"

@@ -1186,6 +1186,34 @@ if (!wafInstalle) {
 	dit('la vue d’ensemble porte la tendance du parc', (await grapheParc.count()) === 1);
 	if (await grapheParc.count()) {
 		dit('elle aussi en deux graphiques', (await grapheParc.locator('canvas').count()) === 2);
+
+		/* Les mêmes contrôles que sur la fiche d'un site, et pour cause : ce
+		   graphique-ci n'avait que sa présence de vérifiée, et il a tracé deux
+		   courbes vides pendant une version entière. La cause était dans la
+		   fenêtre — `#VAL|dashboard_waf_serie_parc` compile en
+		   `dashboard_waf_serie_parc('')`, la chaîne vide valait zéro, et la
+		   série se réduisait au jour même. Un encadré présent, un JSON présent,
+		   et rien à voir. */
+		const pointsParc = await page.evaluate(() => {
+			const j = document.querySelector('#waf [data-dashboard-waf-graphe] script[type="application/json"]');
+			return j ? JSON.parse(j.textContent).points.length : 0;
+		});
+		dit('la tendance du parc porte la fenêtre entière', pointsParc === 90, `${pointsParc} points`);
+
+		const nonNulsParc = await page.evaluate(() => {
+			const j = document.querySelector('#waf [data-dashboard-waf-graphe] script[type="application/json"]');
+			return j ? JSON.parse(j.textContent).points.filter((p) => p.requetes > 0).length : 0;
+		});
+		dit('elle porte des chiffres, pas seulement des zéros', nonNulsParc > 0, `${nonNulsParc} journée(s)`);
+
+		const peintParc = await page.evaluate(() => {
+			const c = document.querySelector('#waf [data-dashboard-waf-graphe] canvas');
+			if (!c || !c.width) { return false; }
+			const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+			for (let i = 3; i < d.length; i += 4) { if (d[i] !== 0) { return true; } }
+			return false;
+		});
+		dit('les courbes du parc sont effectivement tracées', peintParc);
 	}
 
 	// Chart.js est servi par le plugin, jamais par un CDN.

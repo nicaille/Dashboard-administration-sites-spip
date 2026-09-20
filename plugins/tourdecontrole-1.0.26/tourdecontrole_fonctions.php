@@ -759,6 +759,32 @@ if (!defined('_DASHBOARD_WAF_FENETRE')) {
 }
 
 /**
+ * La fenêtre de jours à tracer, bornée — et jamais vide.
+ *
+ * `#VAL|dashboard_waf_serie_parc` ne transmet pas « rien » : SPIP compile cet
+ * appel en `dashboard_waf_serie_parc('')`, et une valeur par défaut déclarée
+ * dans la signature ne sert alors à rien, puisque l'argument est bel et bien
+ * passé. La chaîne vide valait zéro, ramené à un par le plancher : la tendance
+ * du parc ne traçait qu'**un seul point**, celui du jour, et deux courbes
+ * vides s'affichaient sans que rien ne signale l'erreur.
+ *
+ * On traite donc l'absence de valeur ici plutôt que dans la signature.
+ * `dashboard_synthese($rien = '')` prend la même précaution pour la même
+ * raison.
+ *
+ * @param int|string $jours
+ * @return int
+ */
+function dashboard_waf_fenetre($jours) {
+	$jours = (int) $jours;
+	if ($jours <= 0) {
+		$jours = _DASHBOARD_WAF_FENETRE;
+	}
+
+	return max(1, min(365, $jours));
+}
+
+/**
  * Complète une série quotidienne, jour par jour, sans trou.
  *
  * Les jours sans événement n'existent pas en base : les inventer ici est
@@ -771,7 +797,7 @@ if (!defined('_DASHBOARD_WAF_FENETRE')) {
  * @return array Liste de points, du plus ancien au plus récent
  */
 function dashboard_waf_completer($connus, $jours) {
-	$jours   = max(1, min(365, (int) $jours));
+	$jours   = dashboard_waf_fenetre($jours);
 	$premier = date('Y-m-d', time() - ($jours - 1) * 86400);
 	$points  = [];
 
@@ -795,7 +821,8 @@ function dashboard_waf_completer($connus, $jours) {
  * @return array
  */
 function dashboard_waf_serie($id_dashboard_site, $jours = _DASHBOARD_WAF_FENETRE) {
-	$depuis = date('Y-m-d', time() - (max(1, (int) $jours) - 1) * 86400);
+	$jours  = dashboard_waf_fenetre($jours);
+	$depuis = date('Y-m-d', time() - ($jours - 1) * 86400);
 
 	$lignes = sql_allfetsel(
 		['jour', 'requetes', 'ips'],
@@ -822,11 +849,21 @@ function dashboard_waf_serie($id_dashboard_site, $jours = _DASHBOARD_WAF_FENETRE
  * pression subie par le parc, pas la population qui l'exerce, et il faudrait
  * remonter les adresses elles-mêmes pour dire l'autre. La légende le dit.
  *
- * @param int $jours
+ * Le paramètre s'appelle `$rien` et ne sert à rien, comme dans les autres
+ * filtres appelés `#VAL|nom` : SPIP compile cet appel en passant la chaîne
+ * vide, et un premier paramètre qui aurait un sens la recevrait. C'est ce qui
+ * est arrivé — un `$jours` valant `''`, donc zéro, donc une fenêtre d'un seul
+ * jour, et deux courbes vides sur la vue d'ensemble.
+ *
+ * La fenêtre est toujours la plus large : c'est le sélecteur, dans la page,
+ * qui y découpe sept ou trente jours sans rien redemander.
+ *
+ * @param string $rien Ignoré (voir ci-dessus)
  * @return array
  */
-function dashboard_waf_serie_parc($jours = _DASHBOARD_WAF_FENETRE) {
-	$depuis = date('Y-m-d', time() - (max(1, (int) $jours) - 1) * 86400);
+function dashboard_waf_serie_parc($rien = '') {
+	$jours  = dashboard_waf_fenetre(0);
+	$depuis = date('Y-m-d', time() - ($jours - 1) * 86400);
 
 	$lignes = sql_allfetsel(
 		['jour', 'SUM(requetes) AS requetes', 'SUM(ips) AS ips'],
