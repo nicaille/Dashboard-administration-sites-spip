@@ -141,10 +141,25 @@ rm -rf "$TRAVAIL/paquet"; mkdir -p "$TRAVAIL/paquet/zzztest"
 sed 's/version="1.0.0"/version="1.0.1"/' "$SITE/plugins/zzztest/paquet.xml" > "$TRAVAIL/paquet/zzztest/paquet.xml"
 echo 'VERSION 1.0.1' > "$TRAVAIL/paquet/zzztest/marqueur.txt"
 (cd "$TRAVAIL/paquet" && zip -qr "$SITE/zzztest-archives/zzztest.zip" zzztest)
+# Une version de l'agent plus récente d'un cran, pour la mise à jour de l'agent
+# sur tout le parc. Le code est celui du dépôt, à l'identique : seule la version
+# du paquet.xml change. L'agent déployé est donc fonctionnellement le même — ce
+# qu'on veut éprouver ici, c'est qu'un plugin puisse se remplacer lui-même
+# pendant qu'il répond, pas qu'un nouveau code fonctionne.
+dossier_agent="$(basename "$(ls -d "$RACINE"/plugins/tourdecontrole_agent-* | sort -V | tail -1)")"
+version_agent="${dossier_agent#tourdecontrole_agent-}"
+version_agent_suivante="$(echo "$version_agent" | awk -F. '{print $1"."$2"."$3+1}')"
+rm -rf "$TRAVAIL/agent"; mkdir -p "$TRAVAIL/agent"
+cp -r "$RACINE/plugins/$dossier_agent" "$TRAVAIL/agent/tourdecontrole_agent"
+sed -i "s/version=\"$version_agent\"/version=\"$version_agent_suivante\"/" \
+	"$TRAVAIL/agent/tourdecontrole_agent/paquet.xml"
+(cd "$TRAVAIL/agent" && zip -qr "$SITE/zzztest-archives/tourdecontrole_agent.zip" tourdecontrole_agent)
+
 # Le catalogue du dépôt, au format que SVP sait lire : c'est lui qu'il relira, et
 # c'est de lui qu'il tirera la version disponible. L'écrire à la main en base
 # aurait testé notre SQL, pas la chaîne réelle.
 taille_zip="$(stat -c%s "$SITE/zzztest-archives/zzztest.zip")"
+taille_zip_agent="$(stat -c%s "$SITE/zzztest-archives/tourdecontrole_agent.zip")"
 cat > "$SITE/zzztest-archives/paquets.xml" <<XMLEOF
 <?xml version="1.0" encoding="utf-8"?>
 <depot>
@@ -163,6 +178,30 @@ cat > "$SITE/zzztest-archives/paquets.xml" <<XMLEOF
 		</zip>
 		<paquet prefix="zzztest" categorie="outil" version="1.0.1" etat="test" compatibilite="[4.1.0;4.*]">
 			<nom>Plugin de test</nom>
+			<auteur>Test</auteur>
+			<licence>GPL 3</licence>
+		</paquet>
+	</archive>
+</archives>
+XMLEOF
+
+# Un second catalogue, celui-là annonçant aussi l'agent. Il n'est pas servi tout
+# de suite : le parcours vérifie d'abord qu'un parc entièrement à jour n'affiche
+# plus rien à mettre à jour, ce qu'une version d'agent en attente démentirait.
+# Le scénario le mettra en place au moment voulu, et fera relire le dépôt — soit
+# exactement ce qui se passe quand une nouvelle version paraît.
+head -n -1 "$SITE/zzztest-archives/paquets.xml" > "$SITE/zzztest-archives/paquets-agent.xml"
+cat >> "$SITE/zzztest-archives/paquets-agent.xml" <<XMLEOF
+	<archive dtd="paquet">
+		<zip>
+			<file>tourdecontrole_agent.zip</file>
+			<size>$taille_zip_agent</size>
+			<date>$(date '+%s')</date>
+			<last_commit>$(date '+%Y-%m-%d %H:%M:%S')</last_commit>
+			<source>auto/tourdecontrole_agent/v$version_agent_suivante/</source>
+		</zip>
+		<paquet prefix="tourdecontrole_agent" categorie="outil" version="$version_agent_suivante" etat="stable" compatibilite="[4.1.0;4.*]">
+			<nom>Agent du tableau de bord</nom>
 			<auteur>Test</auteur>
 			<licence>GPL 3</licence>
 		</paquet>
@@ -296,7 +335,7 @@ PHPEOF
 fi
 
 echo "== Parcours fonctionnel"
-BASE_URL="$BASE" SITE_DIR="$SITE" TRAVAIL_DIR="$TRAVAIL" CORE_CIBLE="$CORE_CIBLE" BASE_CIBLE="$BASE_CIBLE" node "$TRAVAIL/scenario.mjs"
+BASE_URL="$BASE" SITE_DIR="$SITE" TRAVAIL_DIR="$TRAVAIL" CORE_CIBLE="$CORE_CIBLE" BASE_CIBLE="$BASE_CIBLE" AGENT_CIBLE="$version_agent_suivante" node "$TRAVAIL/scenario.mjs"
 CODE=$?
 
 echo

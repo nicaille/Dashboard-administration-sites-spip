@@ -255,10 +255,10 @@ dit('le compte du parc est celui des sites',
 	(await page.locator('.dashboard-synthese li').last().innerText()).replace(/\s+/g, ' ').trim());
 
 // Le tour du parc, un site à la fois : c'est ce qui rend le compte réel.
-const relire = page.locator('[data-dashboard-depots-parc]');
+const relire = page.locator('[data-parc-action="depots"]');
 dit('un bouton relit les dépôts de tout le parc', (await relire.count()) === 1);
 await relire.click();
-await page.waitForFunction(() => !document.querySelector('[data-dashboard-depots-parc]')
+await page.waitForFunction(() => !document.querySelector('[data-parc-action="depots"]')
 	|| !document.querySelector('.dashboard-depots-perimes'), null, { timeout: 60000 }).catch(() => {});
 await page.waitForTimeout(2500);
 
@@ -282,7 +282,7 @@ dit('plus de catalogue périmé après le tour du parc',
 sqlEcrire("UPDATE spip_depots SET maj = datetime('now', '-2 days')");
 await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
 const avantSecondTour = JSON.parse(sql('SELECT maj FROM spip_depots ORDER BY id_depot LIMIT 1'))[0].maj;
-await page.locator('[data-dashboard-depots-parc]').click();
+await page.locator('[data-parc-action="depots"]').click();
 await page.waitForFunction(() => /Termin|suivant/.test(
 	(document.querySelector('.dashboard-depots-avancement') || {}).textContent || ''), null, { timeout: 60000 }).catch(() => {});
 await page.waitForTimeout(2500);
@@ -1194,6 +1194,175 @@ if (!wafInstalle) {
 	dit('aucun script n’est chargé depuis un hôte extérieur',
 		!sources.some((u) => /^https?:\/\//.test(u) && !u.includes('127.0.0.1')),
 		sources.filter((u) => /^https?:/.test(u)).join(' ') || 'tous locaux');
+}
+
+console.log('\n### Actions groupées sur la vue d’ensemble');
+
+await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+
+const cases = page.locator('[data-parc-site]');
+dit('chaque site du tableau porte une case à cocher', (await cases.count()) >= 1,
+	`${await cases.count()} case(s)`);
+
+// La case ne fait que désigner : c'est la file d'adresses signées qui dit ce
+// qu'un site peut recevoir. Lui coller l'adresse aurait fait de la case un
+// droit.
+const portee = await page.evaluate(() => {
+	const c = document.querySelector('[data-parc-site]');
+	return c ? Array.from(c.attributes).map((a) => a.name).join(' ') : '';
+});
+dit('une case ne porte aucune adresse d’action', !/url|href|action=/.test(portee), portee);
+
+const filesVues = await page.evaluate(() =>
+	Array.from(document.querySelectorAll('[data-parc-file]'))
+		.map((u) => u.getAttribute('data-parc-file')).sort().join(','));
+dit('les files d’adresses sont présentes', filesVues === 'agent_maj,depots,purger,sync', filesVues);
+
+const signees = await page.evaluate(() => {
+	const liens = Array.from(document.querySelectorAll('[data-parc-file] a'));
+	return liens.length && liens.every((a) => /action=dashboard_parc/.test(a.getAttribute('href'))
+		&& /hash=/.test(a.getAttribute('href')));
+});
+dit('chaque adresse de file est signée pour son action', signees);
+
+// Le décompte suit la sélection, et « tout cocher » ne coche que la page.
+dit('rien n’est sélectionné au départ',
+	/^0 /.test((await page.locator('[data-parc-compte]').innerText()).trim()),
+	(await page.locator('[data-parc-compte]').innerText()).trim());
+dit('les boutons de sélection sont inertes sans sélection',
+	await page.locator('[data-parc-action="sync"][data-parc-selection]').isDisabled());
+
+await page.locator('[data-parc-tout]').check();
+await page.waitForTimeout(200);
+const nbCases = await cases.count();
+dit('« tout cocher » coche la page affichée',
+	(await page.locator('[data-parc-compte]').innerText()).trim().startsWith(String(nbCases)),
+	(await page.locator('[data-parc-compte]').innerText()).trim());
+dit('les boutons de sélection s’activent',
+	!(await page.locator('[data-parc-action="sync"][data-parc-selection]').isDisabled()));
+
+// Synchroniser la sélection : ce qui prouve que l'opération a bien atteint le
+// site géré, c'est la date d'inventaire qui bouge.
+sqlEcrire("UPDATE spip_dashboard_sites SET date_sync_ok = '2020-01-01 00:00:00'");
+await page.locator('[data-parc-action="sync"]').click();
+await page.waitForFunction(() => /Termin/.test(
+	(document.querySelector('.dashboard-parc-groupe [data-parc-avancement]') || {}).textContent || ''),
+	null, { timeout: 120000 }).catch(() => {});
+await page.waitForTimeout(3000);
+const syncApres = JSON.parse(sql('SELECT date_sync_ok FROM spip_dashboard_sites WHERE id_dashboard_site = 1'))[0].date_sync_ok;
+dit('la synchronisation groupée a bien atteint le site', syncApres > '2020-01-01 00:00:00', syncApres);
+
+// Vider les caches de la sélection : on pose un fichier de cache et on regarde
+// s'il disparaît. Le même contrôle que la purge d'un seul site, en groupe.
+const temoinCache = site + '/tmp/cache/zz-parc-temoin.txt';
+writeFileSync(temoinCache, 'temoin');
+await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+await page.locator('[data-parc-tout]').check();
+await page.waitForTimeout(200);
+await page.locator('[data-parc-action="purger"]').click();
+await page.waitForFunction(() => /Termin/.test(
+	(document.querySelector('.dashboard-parc-groupe [data-parc-avancement]') || {}).textContent || ''),
+	null, { timeout: 120000 }).catch(() => {});
+await page.waitForTimeout(3000);
+dit('la purge groupée a bien vidé le cache du site', !existsSync(temoinCache));
+
+console.log('\n### Mise à jour de l’agent sur tout le parc');
+
+/* Le dépôt local publie une version de l'agent supérieure d'un cran. Le code
+   est le même à l'identique : ce qu'on éprouve ici, c'est qu'un plugin puisse
+   se remplacer lui-même pendant qu'il répond — le site se tait alors au beau
+   milieu de l'opération, et ce silence ne prouve rien. */
+const agentCible = process.env.AGENT_CIBLE || '';
+
+/* La nouvelle version paraît maintenant : on sert le catalogue qui l'annonce,
+   on vieillit le dépôt, et on fait relire le parc. C'est la chaîne réelle —
+   SVP relit le catalogue, l'inventaire le reprend, et la vue d'ensemble s'en
+   aperçoit. Publier dès le départ aurait faussé tout ce qui précède, où le
+   parcours vérifie qu'un parc à jour n'annonce plus rien. */
+writeFileSync(site + '/zzztest-archives/paquets.xml',
+	readFileSync(site + '/zzztest-archives/paquets-agent.xml', 'utf8'));
+sqlEcrire("UPDATE spip_depots SET maj = datetime('now', '-3 days')");
+await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+await page.locator('[data-parc-action="depots"]').click();
+await page.waitForFunction(() => /Termin|suivant/.test(
+	(document.querySelector('#depots [data-parc-avancement]') || {}).textContent || ''),
+	null, { timeout: 120000 }).catch(() => {});
+await page.waitForTimeout(3000);
+
+const agentAvant = JSON.parse(sql(
+	"SELECT version, version_disponible FROM spip_dashboard_plugins"
+	+ " WHERE prefixe = 'TOURDECONTROLE_AGENT'"))[0] || {};
+dit('la parution est arrivée jusqu’à l’inventaire',
+	agentAvant.version_disponible === agentCible,
+	`${agentAvant.version || '?'} → ${agentAvant.version_disponible || '(aucune)'}`);
+
+await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+const boutonAgent = page.locator('[data-parc-action="agent_maj"]');
+dit('un bouton propose de mettre à jour l’agent du parc', (await boutonAgent.count()) === 1);
+
+if (await boutonAgent.count()) {
+	dit('le bouton porte le nombre de sites concernés',
+		/\(1 site/.test(await boutonAgent.innerText()), (await boutonAgent.innerText()).trim());
+
+	// Remplacer les fichiers d'un site sans prévenir n'est pas une interface :
+	// la confirmation dit ce qui va se passer, sauvegarde comprise.
+	const confirmation = await boutonAgent.getAttribute('data-parc-confirmer');
+	dit('la confirmation annonce la sauvegarde et le silence',
+		/sauvegard/i.test(confirmation) && /tair/i.test(confirmation), confirmation);
+
+	const sauvegardesAvant = Number(JSON.parse(sql('SELECT COUNT(*) AS n FROM spip_dashboard_sauvegardes'))[0].n);
+
+	// `once` et non `on` : un écouteur laissé en place répondrait aussi aux
+	// confirmations des sections suivantes, qui ont les leurs — et Playwright
+	// refuse qu'une même boîte soit acceptée deux fois.
+	page.once('dialog', (d) => d.accept());
+	await boutonAgent.click();
+	// Le chantier fait bien plus d'allers-retours qu'une relecture de dépôts :
+	// cinq étapes, dont une qui rejoue tant que SVP n'a pas fini.
+	await page.waitForFunction(() => /Termin|suivant/.test(
+		(document.querySelector('.dashboard-agent-parc [data-parc-avancement]') || {}).textContent || ''),
+		null, { timeout: 600000 }).catch(() => {});
+	await page.waitForTimeout(4000);
+
+	const chantier = JSON.parse(sql(
+		"SELECT operation, cible, statut, message FROM spip_dashboard_chantiers"
+		+ " ORDER BY id_dashboard_chantier DESC LIMIT 1"))[0] || {};
+	dit('un chantier de mise à jour a visé l’agent',
+		chantier.operation === 'plugin_maj' && chantier.cible === 'TOURDECONTROLE_AGENT',
+		`${chantier.operation || '?'} / ${chantier.cible || '?'}`);
+	dit('le chantier est allé à son terme', chantier.statut === 'ok',
+		`${chantier.statut || '?'} — ${(chantier.message || '').slice(0, 90)}`);
+
+	// Toute mise à jour commence par une sauvegarde : celle de l'agent n'y
+	// échappe pas, et c'est le seul filet quand le plugin qui répond est celui
+	// qu'on remplace.
+	dit('une sauvegarde a précédé le remplacement',
+		Number(JSON.parse(sql('SELECT COUNT(*) AS n FROM spip_dashboard_sauvegardes'))[0].n) > sauvegardesAvant);
+
+	// Sur le disque : SVP range le plugin sous plugins/auto/<prefixe>/v<version>,
+	// à côté de l'ancien plutôt que par-dessus.
+	dit('la nouvelle version est déployée à côté de l’ancienne',
+		existsSync(`${site}/plugins/auto/tourdecontrole_agent/v${agentCible}`),
+		`plugins/auto/tourdecontrole_agent/v${agentCible}`);
+	dit('l’ancien dossier de l’agent est intact',
+		readdirSync(`${site}/plugins`).some((d) => /^tourdecontrole_agent-/.test(d)),
+		readdirSync(`${site}/plugins`).filter((d) => /^tourdecontrole_agent/.test(d)).join(' '));
+
+	// Et surtout : l'agent répond encore. Un plugin qui se remplace lui-même
+	// peut très bien avoir laissé le site sur le carreau.
+	await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+	await bouton(page, 'Synchroniser');
+	const apres = JSON.parse(sql(
+		'SELECT etat, agent_version FROM spip_dashboard_sites WHERE id_dashboard_site = 1'))[0];
+	dit('l’agent répond encore après s’être remplacé', apres.etat === 'ok', apres.etat);
+	dit('le parc enregistre la nouvelle version de l’agent',
+		apres.agent_version === agentCible, `${apres.agent_version} (attendu ${agentCible})`);
+
+	// Un second passage ne doit rien refaire : plus de version supérieure, donc
+	// plus de chantier — et surtout plus de sauvegarde sur chaque site du parc.
+	await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+	dit('le bouton disparaît une fois le parc à jour',
+		(await page.locator('[data-parc-action="agent_maj"]').count()) === 0);
 }
 
 console.log('\n### Script d’installation (spip_loader.php)');

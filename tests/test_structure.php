@@ -12,7 +12,7 @@
 $racine = dirname(__DIR__);
 
 /**
- * Les dossiers de plugins portent leur version (`tourdecontrole-1.0.24`), pour qu'une
+ * Les dossiers de plugins portent leur version (`tourdecontrole-1.0.25`), pour qu'une
  * mise en ligne n'écrase pas la version précédente. On les retrouve donc par
  * préfixe, sans quoi ce fichier serait à retoucher à chaque montée de version.
  *
@@ -396,6 +396,21 @@ $version = file_get_contents($agent . '/inc/dashagent.php');
 verifier('l’agent lit sa version sous son préfixe courant',
 	strpos($version, 'TOURDECONTROLE_AGENT') !== false);
 
+/* La tour de contrôle, elle, nomme le préfixe de l'agent pour savoir quels
+   sites ont un agent à mettre à jour. Cette lecture-là souffre du même mal :
+   un préfixe périmé ne lève aucune erreur, il ne trouve simplement aucun site.
+   Le bouton disparaîtrait de la vue d'ensemble, et personne ne saurait dire
+   depuis quand. On relit donc la valeur dans le paquet.xml de l'agent. */
+$parc = chemin_plugin('tourdecontrole');
+$fonctions = file_get_contents($parc . '/tourdecontrole_fonctions.php');
+$prefixe_agent = strtoupper((string) simplexml_load_file($agent . '/paquet.xml')['prefix']);
+preg_match('/function\s+dashboard_prefixe_agent\s*\(\)\s*\{\s*return\s+\x27([^\x27]+)\x27/', $fonctions, $declare);
+verifier(
+	'le parc nomme l’agent par son préfixe courant',
+	($declare[1] ?? '') === $prefixe_agent,
+	($declare[1] ?? '(absent)') . ' vs ' . $prefixe_agent
+);
+
 echo "\n== Autorisations ==\n";
 
 foreach ($plugins as $plugin) {
@@ -597,6 +612,20 @@ foreach ($plugins as $plugin) {
 			"$affiche : pas de balise à accolades dans un argument composite",
 			!preg_match($compose, $source),
 			premiere_occurrence($compose, $source)
+		);
+
+		// Le même défaut sous une autre forme : une balise à accolades
+		// *imbriquée* dans l'argument d'un filtre à accolades. La chaîne de
+		// langue à décompte s'écrit `#VAL{clef}|_T{#ARRAY{nb,#BALISE}}`, et il
+		// y faut une balise simple : `#ARRAY{nb,#GET{x}}` ajoute un niveau
+		// d'accolades que l'analyse ne suit plus. Le message ne désigne pas le
+		// coupable — « Argument manquant dans la balise SET » — et c'est la
+		// page entière qui tombe.
+		$imbrique = '/#ARRAY\\{[^{}]*#(GET|ENV|VAL)\\{/';
+		verifier(
+			"$affiche : pas de balise à accolades dans un #ARRAY",
+			!preg_match($imbrique, $source),
+			premiere_occurrence($imbrique, $source)
 		);
 
 		// SPIP compile les balises jusque dans les commentaires : une syntaxe
@@ -872,6 +901,62 @@ verifier('chaque API SPIP est appelée avec son include_spip', !$defauts);
 foreach (array_keys($defauts) as $defaut) {
 	echo "         $defaut\n";
 }
+
+echo "\n== Opérations de parc : boutons, files et action ==\n";
+
+/*
+ * Trois écritures doivent s'accorder, et rien ne les relie à l'exécution :
+ *
+ * - le bouton nomme une opération (`data-parc-action="sync"`) ;
+ * - une file d'adresses signées porte le même nom (`data-parc-file="sync"`) ;
+ * - l'action sait la traiter (`case 'sync':`).
+ *
+ * Qu'une seule manque et le bouton ne fait rien — sans erreur, sans message.
+ * Le pilote cherche une file qu'il ne trouve pas et s'arrête sur « Rien à
+ * faire », ou bien l'action répond « opération inconnue » à chaque site.
+ */
+$parc_squelette = chemin_plugin('tourdecontrole') . '/prive/squelettes/contenu/dashboard.html';
+$parc_action    = chemin_plugin('tourdecontrole') . '/action/dashboard_parc.php';
+$html = file_get_contents($parc_squelette);
+$php  = file_get_contents($parc_action);
+
+preg_match_all('/data-parc-action="([a-z_]+)"/', $html, $t);
+$boutons = array_unique($t[1]);
+preg_match_all('/data-parc-file="([a-z_]+)"/', $html, $t);
+$files = array_unique($t[1]);
+preg_match_all("/case '([a-z_]+)':/", $php, $t);
+$connues = array_unique($t[1]);
+
+verifier('des opérations de parc sont proposées', count($boutons) >= 2, implode(', ', $boutons));
+
+$sans_file = array_diff($boutons, $files);
+verifier('chaque bouton de parc a sa file d’adresses signées', !$sans_file, implode(', ', $sans_file));
+
+$sans_action = array_diff($boutons, $connues);
+verifier('chaque bouton de parc est traité par l’action', !$sans_action, implode(', ', $sans_action));
+
+$file_orpheline = array_diff($files, $connues);
+verifier('aucune file ne vise une opération inconnue de l’action', !$file_orpheline, implode(', ', $file_orpheline));
+
+/*
+ * Et la règle qui tient tout : une adresse d'action se signe côté serveur. Le
+ * pilote ne doit jamais en fabriquer une — sans quoi cocher une case
+ * reviendrait à s'accorder un droit.
+ */
+$pilote = file_get_contents(chemin_plugin('tourdecontrole') . '/javascript/dashboard_parc.js');
+verifier('le pilote ne fabrique aucune adresse d’action',
+	!preg_match('{[\x27"`][^\x27"`]*action=[a-z_]+}i', $pilote)
+	&& strpos($pilote, 'generer_action') === false);
+
+/*
+ * Les cases à cocher ne portent qu'un identifiant. Leur donner l'adresse
+ * directement marcherait — mais alors la page en contiendrait une par site et
+ * par opération, et il deviendrait tentant d'en composer une.
+ */
+verifier('une case à cocher ne porte qu’un identifiant de site',
+	preg_match('/data-parc-site="#ID_DASHBOARD_SITE"/', $html)
+	&& !preg_match('/data-parc-site[^>]*data-url/', $html));
+
 
 echo "\n== La branche « sinon » d'une boucle ==\n";
 

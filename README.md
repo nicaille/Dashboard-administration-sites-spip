@@ -83,6 +83,24 @@ l'index du dépôt**, casse comprise, et à défaut d'index les noms d'usage son
 essayés auprès du serveur avant qu'une mise à jour ne s'engage. Voir
 [docs/exploitation.md](docs/exploitation.md#doù-vient-ladresse-de-larchive).
 
+## Agir sur plusieurs sites à la fois
+
+La vue d'ensemble ne sert pas qu'à regarder. Des cases à cocher désignent une
+partie du parc, et deux boutons la **synchronisent** ou **vident ses caches** ;
+deux autres relisent les catalogues de dépôts de tout le parc et **mettent à
+jour l'agent** partout où il a vieilli. Chaque tour se déroule un site par
+requête, en affichant où il en est : faire le tour d'un parc en une requête,
+c'est la coupure assurée et l'impossibilité de dire où elle a eu lieu.
+
+Une case à cocher **désigne**, elle n'autorise pas : les adresses d'action sont
+signées par le serveur, une par site et par opération, et la page ne contient
+que celles qu'on a le droit d'employer.
+
+La mise à jour de l'agent est un cas à part, parce que le plugin remplacé est
+celui qui répond : le site se tait au beau milieu de l'opération. Le chantier
+va donc constater plutôt que conclure — et, comme toute mise à jour, il
+commence par sauvegarder la base.
+
 ## Deux lectures de plus, chacune sous son autorisation
 
 **L'onglet SPIP WAF** apparaît sur la fiche d'un site qui a le plugin, et
@@ -202,7 +220,7 @@ Le détail est dans [docs/installation.md](docs/installation.md).
 php tests/test_protocole.php   # 337 vérifications : signature partagée, filtrage IP,
                                # validation des archives, masquage des identifiants,
                                # enchaînement des étapes d'un chantier
-php tests/test_structure.php   # 289 vérifications : manifestes, tables, autorisations,
+php tests/test_structure.php   # 307 vérifications : manifestes, tables, autorisations,
                                # API SPIP appelée, pièges de squelette, langue
 php tests/test_depot.php       # 36 vérifications : catalogue SVP, archives publiées
 ```
@@ -219,12 +237,16 @@ de casser l'espace privé. La même liste est contrôlée à l'exécution :
 *Configuration → Dashboard : configuration* signale les fonctions attendues qui
 manqueraient sur l'installation réelle.
 
-Elle tient aussi trois pièges de squelette qui échouent **sans rien dire** : une
-balise à accolades placée dans un argument composite, de la syntaxe de balise
-écrite dans un commentaire HTML — que SPIP compile quand même, une balise
-invalide emportant alors le bloc entier —, et un `<script src>` rangé après
-`</BOUCLE_x>`, c'est-à-dire dans la branche que SPIP ne rend **que si la boucle
-n'a rien trouvé**.
+Elle tient aussi quatre pièges de squelette qui échouent **sans rien dire** : une
+balise à accolades placée dans un argument composite ou imbriquée dans un
+`#ARRAY`, de la syntaxe de balise écrite dans un commentaire HTML — que SPIP
+compile quand même, une balise invalide emportant alors le bloc entier —, et un
+`<script src>` rangé après `</BOUCLE_x>`, c'est-à-dire dans la branche que SPIP
+ne rend **que si la boucle n'a rien trouvé**.
+
+Et elle confronte les trois écritures d'une action de parc — le bouton, la file
+d'adresses signées et le `case` de l'action —, qu'aucun lien à l'exécution ne
+rapproche : qu'une seule manque et le bouton ne fait rien, sans erreur.
 
 Le premier fichier couvre le masquage des identifiants dans les deux sens : rien
 de sensible ne passe (`pass`, `AWS_ACCESS_KEY_ID`, `low_sec`, les aléas de
