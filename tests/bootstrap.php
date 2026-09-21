@@ -27,12 +27,24 @@ function dashagent_config($clef, $defaut = null) {
 	return ($valeur === null || $valeur === '') ? $defaut : $valeur;
 }
 
-/** `dashboard_config()` est fourni par le plugin lui-même : on ne stube que sa source. */
+/**
+ * `dashboard_config()` est fourni par le plugin lui-même : on ne stube que sa
+ * source.
+ *
+ * Le repli sur le défaut porte sur `null` et **pas** sur la chaîne vide, comme
+ * dans le vrai `lire_config()` de SPIP, qui ne rend son défaut que sur une
+ * valeur absente. La distinction compte : `dashboard_url_check_source()` s'en
+ * sert pour séparer « jamais réglé » de « vidé exprès ». Ce stub les confondait,
+ * et un test de cette fonction y aurait passé au vert sans rien prouver.
+ *
+ * `dashboard_config()` ajoute son propre repli sur le vide par-dessus : rien ne
+ * change pour ses appelants.
+ */
 function lire_config($chemin, $defaut = null) {
 	$clef = preg_replace('#^dashboard/#', '', (string) $chemin);
 	$valeur = $GLOBALS['dashboard_config_test'][$clef] ?? null;
 
-	return ($valeur === null || $valeur === '') ? $defaut : $valeur;
+	return ($valeur === null) ? $defaut : $valeur;
 }
 
 function include_spip($chemin) {
@@ -119,6 +131,8 @@ function url_de_base() {
 
 require_once chemin_plugin('tourdecontrole') . '/inc/dashboard_client.php';
 require_once chemin_plugin('tourdecontrole') . '/inc/dashboard_operations.php';
+/* Les filtres de squelette : lecture d'adresses, fenêtres, décomptes. */
+require_once chemin_plugin('tourdecontrole') . '/tourdecontrole_fonctions.php';
 /* La synchronisation touche à la base, mais ses règles de décompte sont pures. */
 require_once chemin_plugin('tourdecontrole') . '/inc/dashboard_sync.php';
 /* Le moteur de chantiers ne touche à la base que dans ses fonctions d'accès :

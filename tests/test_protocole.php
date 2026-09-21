@@ -109,6 +109,39 @@ verifier('la requête et l’ancre sont écartées',
 verifier('une adresse vide ne donne pas de lien', dashboard_url_check('') === '');
 verifier('javascript: est refusé', dashboard_url_check('javascript:alert(1)') === '');
 
+echo "\n== D’où vient l’adresse de SPIP Check ==\n";
+
+/* Le seul réglage du parc qui distingue « jamais réglé » de « vidé exprès ».
+
+   `dashboard_config()` traite une valeur vide comme absente et rend le défaut —
+   le bon comportement partout ailleurs, un délai vide n'étant pas un délai de
+   zéro. Mais ici il rendrait le champ impossible à vider, alors que l'encadré
+   promet qu'un champ vide ne propose aucun dépôt. */
+$GLOBALS['dashboard_config_test'] = [];
+verifier('sans réglage, c’est l’adresse par défaut',
+	dashboard_url_check_source() === _DASHBOARD_CHECK_URL, dashboard_url_check_source());
+
+$GLOBALS['dashboard_config_test'] = ['url_spip_check' => 'https://miroir.interne/spip_check.php'];
+verifier('un miroir déclaré l’emporte',
+	dashboard_url_check_source() === 'https://miroir.interne/spip_check.php',
+	dashboard_url_check_source());
+
+$GLOBALS['dashboard_config_test'] = ['url_spip_check' => ''];
+verifier('un champ vidé éteint la fonction', dashboard_url_check_source() === '',
+	dashboard_url_check_source() === '' ? 'éteint' : dashboard_url_check_source());
+
+$GLOBALS['dashboard_config_test'] = ['url_spip_check' => '  https://miroir.interne/x.php  '];
+verifier('les espaces autour de l’adresse sont retirés',
+	dashboard_url_check_source() === 'https://miroir.interne/x.php', dashboard_url_check_source());
+
+/* Le défaut pointe la forge, en https, sur le livrable — pas sur le dépôt. */
+verifier('le défaut est une adresse https', strncmp(_DASHBOARD_CHECK_URL, 'https://', 8) === 0);
+verifier('le défaut désigne un fichier PHP, pas un dépôt git',
+	strpos(_DASHBOARD_CHECK_URL, '.php') !== false && substr(_DASHBOARD_CHECK_URL, -4) !== '.git',
+	_DASHBOARD_CHECK_URL);
+$GLOBALS['dashboard_config_test'] = [];
+
+
 echo "\n== Ce qu’on accepte de déposer comme spip_check ==\n";
 
 /* Le livrable est engendré depuis un gabarit qui pose la version et l'édition

@@ -398,11 +398,11 @@ un clic pour rien.
 Autorisation : `op_check`. Télécharge un `spip_check.php` et le dépose à la
 racine.
 
-Argument : `url` — https obligatoire, **sans valeur par défaut**. SPIP Check est
-une contribution tierce qui ne publie pas d'adresse stable comparable au
-`get.spip.net/spip_loader.php` du core ; en inscrire une devinée reviendrait à
-livrer une fonction qui échoue en silence. Sans adresse réglée, l'opération
-refuse.
+Argument : `url` — https obligatoire, pris dans la configuration du tableau de
+bord ; l'agent n'a pas de valeur de repli et refuse si rien n'est transmis. Le
+défaut côté parc désigne le livrable publié sur la forge communautaire, sur une
+**branche** : chaque dépôt sert donc ce qui y a été poussé. Pointer une release
+figerait la version déposée.
 
 Le contenu est contrôlé avant écriture : du PHP, moins de huit méga-octets, et
 portant la fonction que son gabarit engendre — un spip_loader n'y passe pas,

@@ -1510,8 +1510,20 @@ writeFileSync(checkSource,
 
 await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
 dit('l’encadré de SPIP Check est présent', (await page.locator('#check').count()) === 1);
-// Sans adresse réglée, aucun bouton de dépôt : une fonction qui échouerait en
-// silence ne se propose pas.
+
+/* Le réglage porte une adresse par défaut, celle de la forge. On la vide le
+   temps de vérifier le cas contraire : sans adresse, aucun bouton de dépôt —
+   une fonction qui échouerait ne se propose pas. Ce cas se produit pour de bon
+   dès qu'un parc préfère un miroir et efface la valeur avant de la remplacer. */
+await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
+dit('le réglage porte l’adresse de la forge par défaut',
+	/git\.spip\.net/.test(await page.inputValue('[name="url_spip_check"]')),
+	await page.inputValue('[name="url_spip_check"]'));
+await page.fill('[name="url_spip_check"]', '');
+await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').first().click()]);
+await page.waitForTimeout(600);
+
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
 dit('sans adresse réglée, aucun dépôt n’est proposé',
 	(await page.locator('#check form.bouton_action_post').count()) === 0
 		&& /adresse de téléchargement/i.test(await page.locator('#check').innerText()),

@@ -25,18 +25,22 @@ if (!defined('_DASHBOARD_LOADER_URL')) {
 /**
  * Adresse de téléchargement de SPIP Check.
  *
- * Vide par défaut, et c'est délibéré. SPIP Check est une contribution tierce
- * (git.spip.net/technova69/spip-check, GPL 3) qui ne publie pas d'adresse
- * stable comparable au `get.spip.net/spip_loader.php` du core. Inscrire ici une
- * adresse devinée reviendrait à livrer une fonction qui échoue en silence chez
- * tout le monde ; tant que le réglage est vide, l'encadré le dit et ne propose
- * rien.
+ * Le livrable est publié sur la forge communautaire, à la racine du dépôt.
+ * L'adresse désigne une **branche**, pas une étiquette : chaque dépôt sert donc
+ * ce qui y a été poussé, y compris un commit de développement. Pointer une
+ * release figerait la version déposée ; c'est un réglage, et il se change.
+ *
+ * Le fichier distant porte un tiret, celui qu'on dépose un souligné : les deux
+ * livrables sont strictement identiques, et l'auteur publie la variante à
+ * souligné pour les hébergements qui réécrivent les noms à tiret. Autant
+ * déposer d'emblée celui qui passe partout, quel que soit le nom de la source.
  *
  * Se règle dans *Configuration du tableau de bord*. Rien n'oblige à pointer le
- * dépôt d'origine : un miroir interne convient, et se contrôle.
+ * dépôt d'origine : un miroir interne convient, et se contrôle. Vidé, l'encadré
+ * le dit et ne propose aucun dépôt.
  */
 if (!defined('_DASHBOARD_CHECK_URL')) {
-	define('_DASHBOARD_CHECK_URL', '');
+	define('_DASHBOARD_CHECK_URL', 'https://git.spip.net/technova69/spip-check/-/raw/2.x/spip-check.php?ref_type=heads');
 }
 
 /**
@@ -975,7 +979,10 @@ function dashboard_operation_check_maj($id_dashboard_site) {
 		return ['ok' => false, 'message' => 'Site inconnu', 'data' => []];
 	}
 
-	$url = trim((string) dashboard_config('url_spip_check', _DASHBOARD_CHECK_URL));
+	// La même lecture que l'encadré, sans quoi le bouton et l'action pourraient
+	// diverger : voir dashboard_url_check_source() pour le cas du champ vidé.
+	include_spip('tourdecontrole_fonctions');
+	$url = dashboard_url_check_source();
 	if ($url === '') {
 		return [
 			'ok'      => false,

@@ -385,9 +385,16 @@ Trois différences avec le `spip_loader.php`, dont tout le reste est copié :
 - **sa version se lit dans la queue du fichier**, pas dans l'en-tête : les
   bibliothèques embarquées occupent tout le début du livrable. On relit
   `_DASHAGENT_CHECK_QUEUE` octets à la fin, pas le mégaoctet entier ;
-- **son adresse de téléchargement n'a pas de défaut.** Aucune adresse stable
-  n'existe pour ce projet ; en deviner une reviendrait à livrer une fonction qui
-  échoue en silence. Vide, l'encadré le dit et ne propose rien.
+- **son adresse de téléchargement désigne une branche d'un dépôt tiers**, pas
+  une archive officielle versionnée comme celle du core. Chaque dépôt sert donc
+  ce qui a été poussé sur cette branche ; c'est un réglage, et un parc de
+  production préférera une release ou un miroir interne. Vidée, l'encadré le dit
+  et ne propose rien.
+
+Et une asymétrie voulue : le fichier distant porte un **tiret**, celui qu'on
+dépose un **souligné**. Les deux livrables sont identiques ; l'auteur publie la
+variante à souligné pour les hébergements qui réécrivent les noms à tiret. Le
+nom de la source et celui de la destination sont indépendants.
 
 L'autorisation `op_check` lui est propre : `op_loader` ne l'ouvre pas, et
 réciproquement.

@@ -519,18 +519,31 @@ function dashboard_url_check($url) {
 }
 
 /**
- * L'adresse d'où SPIP Check est téléchargé, si elle est réglée.
+ * L'adresse d'où SPIP Check est téléchargé, ou la chaîne vide s'il est éteint.
  *
- * Sans elle, rien à proposer : l'encadré le dit plutôt que d'offrir un bouton
- * qui échouerait. Sans paramètre, parce que `#VAL|nom` passe la chaîne vide.
+ * Seul réglage du parc qui ne passe pas par `dashboard_config()`, et pour une
+ * raison précise : celle-ci traite une valeur vide comme « non réglée » et rend
+ * le défaut. C'est le bon comportement partout ailleurs — un délai vide n'est
+ * pas un délai de zéro —, mais il rendrait ce champ-ci impossible à vider,
+ * alors que l'encadré promet qu'un champ vide ne propose aucun dépôt.
+ *
+ * On distingue donc les deux : clé absente, c'est le défaut ; clé présente et
+ * vide, c'est un refus délibéré. Le vrai interrupteur reste ailleurs et par
+ * site — l'autorisation `op_check` chez le site géré —, mais un parc qui ne veut
+ * pas du tout de cette fonction doit pouvoir la faire taire d'un geste.
+ *
+ * Sans paramètre, parce que `#VAL|nom` passe la chaîne vide.
  *
  * @filtre
  * @return string
  */
 function dashboard_url_check_source() {
+	include_spip('inc/config');
 	include_spip('inc/dashboard_operations');
 
-	return trim((string) dashboard_config('url_spip_check', _DASHBOARD_CHECK_URL));
+	$reglee = lire_config('dashboard/url_spip_check', null);
+
+	return trim((string) ($reglee === null ? _DASHBOARD_CHECK_URL : $reglee));
 }
 
 /**
