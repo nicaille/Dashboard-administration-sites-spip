@@ -575,6 +575,14 @@ function dashagent_sauvegarde_etat_effacer($identifiant) {
 /**
  * L'export en cours qu'une demande peut reprendre à son compte, s'il y en a un.
  *
+ * Deux demandes lancées en même temps adoptent le même export, et se marchent
+ * dessus. L'issue n'est pas une archive fausse : chaque tranche ramène le
+ * fichier à *son* point de contrôle avant d'écrire, si bien que l'une des deux
+ * finit par trouver un fichier plus court que le sien — refus net — ou par
+ * produire un membre gzip que la vérification au rapatriement rejette. Un
+ * verrou serait plus élégant ; l'absence de verrou ne coûte ici qu'un export à
+ * refaire, jamais une sauvegarde qu'on croirait bonne.
+ *
  * @param array $exclure Tables écartées par la demande
  * @param int $age_max Âge au-delà duquel un export en plan n'est plus repris
  * @return array|null

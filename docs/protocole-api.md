@@ -194,6 +194,13 @@ adopte l'export déjà en chantier s'il porte les mêmes options et date de moin
 d'une heure : c'est ce qui sauve le travail quand c'est la réponse de la
 première tranche qui s'est perdue.
 
+Il n'y a pas de verrou : deux demandes lancées en même temps adoptent le même
+export et se marchent dessus. L'issue n'est pas une archive fausse — chaque
+tranche ramène le fichier à *son* point de contrôle avant d'écrire, si bien que
+l'une des deux se heurte à un fichier plus court que le sien, ou produit un
+membre que la vérification au rapatriement rejette. Le coût est un export à
+refaire, jamais une sauvegarde qu'on croirait bonne.
+
 ### `sauvegarde_lister`, `sauvegarde_supprimer`
 
 Listage et suppression, par `identifiant`.

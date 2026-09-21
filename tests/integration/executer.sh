@@ -28,7 +28,7 @@ fi
 # l'installation semble réussir sans rien écrire sur le disque. D'où ce
 # drapeau, pour préparer le site d'abord et ne démarrer le serveur qu'ensuite :
 #   DASHBOARD_TEST_PREPARATION_SEULE=1 tests/integration/executer.sh <zip> <port>
-#   cd <site> && php -S 127.0.0.1:<port> -t <site> &
+#   cd <site> && php -d opcache.revalidate_freq=0 -S 127.0.0.1:<port> -t <site> &
 #   DASHBOARD_TEST_SANS_PREPARATION=1 tests/integration/executer.sh <zip> <port>
 if [ -z "${DASHBOARD_TEST_SANS_PREPARATION:-}" ]; then
 echo "== Préparation du site dans $SITE"
@@ -54,12 +54,18 @@ fi
 # Un serveur déjà en écoute est réutilisé tel quel : c'est plus rapide à
 # relancer, et certains environnements n'autorisent pas un démon lancé depuis
 # un script. Dans ce cas, démarrez-le vous-même avant :
-#   cd <site> && php -S 127.0.0.1:<port> -t <site>
+#   cd <site> && php -d opcache.revalidate_freq=0 -S 127.0.0.1:<port> -t <site>
 if curl -s --noproxy '*' -o /dev/null --max-time 2 "$BASE/spip.php"; then
 	echo "== Serveur déjà en écoute sur $BASE"
 else
 	echo "== Démarrage du serveur sur $BASE"
-	cd "$SITE" && PHP_CLI_SERVER_WORKERS=4 php -S "127.0.0.1:$PORT" -t "$SITE" > "$TRAVAIL/serveur.log" 2>&1 &
+	# `-d opcache.revalidate_freq=0` : le serveur intégré tourne sous le SAPI
+	# « cli-server », pour lequel c'est `opcache.enable` qui décide — et non
+	# `opcache.enable_cli`, qu'on croit à tort seul en cause. Avec le réglage
+	# par défaut, un fichier réécrit en cours de parcours peut rester invisible
+	# deux secondes : le parcours modifie `config/mes_options.php` à la volée,
+	# et son changement passait alors purement et simplement à la trappe.
+	cd "$SITE" && PHP_CLI_SERVER_WORKERS=4 php -d opcache.revalidate_freq=0 -S "127.0.0.1:$PORT" -t "$SITE" > "$TRAVAIL/serveur.log" 2>&1 &
 	SERVEUR=$!
 	cd "$RACINE"
 	sleep 2

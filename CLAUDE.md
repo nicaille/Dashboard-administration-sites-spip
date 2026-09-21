@@ -164,6 +164,14 @@ est abîmé, `complet` à faux dit seulement que la marque n'a pas été vue. Le
 sauvegardes d'avant l'agent 1.0.16 n'en portent pas, et les refuser reviendrait
 à jeter des sauvegardes valides.
 
+Corollaire à ne pas oublier en écrivant un outil de restauration :
+**`gzdecode()` ne rend que le premier membre**, sans erreur ni avertissement.
+Sur une sauvegarde découpée il rendrait une poignée de tables au lieu de la base
+entière, et le script de restauration n'aurait rien à signaler. `gunzip`, `zcat`
+et `gzip -t` les lisent tous ; en PHP, il faut la boucle `inflate_add()` /
+`inflate_get_read_len()`. `tests/integration/scenario.mjs` en porte une, sur
+les deux relectures qu'il fait de l'archive.
+
 ## Le préfixe d'un plugin n'est pas le préfixe de ses fonctions
 
 Les deux plugins ont changé de préfixe en 1.0.19 et 1.0.15 — `dashboard` était
@@ -490,6 +498,26 @@ Deux règles qui tiennent à la fuite d'identifiants :
 Tout ce qui part vers un agent passe par `dashboard_http_post()` — l'appel signé
 et le rapatriement de sauvegarde. Un nouveau chemin vers un site géré se range
 derrière elle, pas à côté, sans quoi il ignorera le htpasswd.
+
+## Le serveur intégré de PHP n'est pas exempt d'opcache
+
+`php -S` tourne sous le SAPI **`cli-server`**, pas `cli` : c'est donc
+`opcache.enable` qui décide de l'activation, et non `opcache.enable_cli` qu'on
+croit seul en cause. Là où opcache est actif par défaut,
+`opcache.revalidate_freq` vaut deux secondes.
+
+Conséquence pour le parcours d'intégration, qui modifie des fichiers du site
+pendant qu'il tourne : **un fichier réécrit peut rester invisible deux
+secondes**, l'ancien code continuant d'être exécuté. Un fichier créé pour
+l'occasion ne pose pas ce problème — c'est la réécriture qui mord.
+
+`tests/integration/scenario.mjs` ramène le budget d'une tranche de sauvegarde à
+zéro en réécrivant `config/mes_options.php`. Une fois sur deux, l'export se
+faisait d'un seul tenant et le contrôle échouait sans que rien, ni dans le
+journal ni sur la page, ne désigne opcache. Deux parades, parce que le serveur
+peut aussi être lancé à la main : `-d opcache.revalidate_freq=0` au démarrage
+dans `executer.sh`, et un battement de deux secondes et demie après chaque
+réécriture.
 
 ## Tests à passer avant tout commit
 

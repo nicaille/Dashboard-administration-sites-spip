@@ -17,7 +17,8 @@ pouvait pas voir.
 - Node et Playwright avec Chromium ;
 - un serveur PHP **multi-processus** : le tableau de bord et l'agent étant ici
   sur le même site, un serveur mono-processus se bloquerait à se répondre à
-  lui-même. Le script lance `php -S` avec `PHP_CLI_SERVER_WORKERS=4` ;
+  lui-même. Le script lance `php -S` avec `PHP_CLI_SERVER_WORKERS=4` et
+  `-d opcache.revalidate_freq=0` — voir plus bas ;
 - une archive SPIP 4.4 (`SPIP-vX.Y.Z.zip`).
 
 ## Exécution
@@ -42,7 +43,7 @@ n'autorise pas un démon lancé depuis un script, démarrez le serveur à part �
 le script détecte un serveur déjà en écoute et le réutilise :
 
 ```bash
-cd <repertoire>/site && PHP_CLI_SERVER_WORKERS=4 php -S 127.0.0.1:8321 -t . &
+cd <repertoire>/site && PHP_CLI_SERVER_WORKERS=4 php -d opcache.revalidate_freq=0 -S 127.0.0.1:8321 -t . &
 ```
 
 Attention : `php -S` retient le répertoire racine résolu à son démarrage.
@@ -52,9 +53,24 @@ laisserait servir l'arbre effacé, et l'installation semblerait réussir sans ri
 
 ```bash
 DASHBOARD_TEST_PREPARATION_SEULE=1 tests/integration/executer.sh <zip> 8321
-cd <repertoire>/site && PHP_CLI_SERVER_WORKERS=4 php -S 127.0.0.1:8321 -t . &
+cd <repertoire>/site && PHP_CLI_SERVER_WORKERS=4 php -d opcache.revalidate_freq=0 -S 127.0.0.1:8321 -t . &
 DASHBOARD_TEST_SANS_PREPARATION=1 tests/integration/executer.sh <zip> 8321
 ```
+
+### Le serveur intégré n'est pas exempt d'opcache
+
+`php -S` tourne sous le SAPI **`cli-server`**, et non `cli` : c'est donc
+`opcache.enable` qui décide, pas `opcache.enable_cli` qu'on croit seul en
+cause. Là où opcache est actif par défaut, `opcache.revalidate_freq` vaut deux
+secondes — un fichier **réécrit** en cours de parcours peut donc rester
+invisible ce laps de temps, en servant l'ancien code.
+
+Le parcours réécrit `config/mes_options.php` pour ramener à zéro le budget
+d'une tranche de sauvegarde. Sans ce réglage, la réécriture passait une fois
+sur deux à la trappe : l'export se faisait d'un seul tenant, et le contrôle
+échouait sans que rien ne désigne opcache. D'où le `-d opcache.revalidate_freq=0`
+au démarrage, **et** une seconde de battement dans le parcours : la ceinture
+et les bretelles, le serveur pouvant avoir été lancé à la main.
 
 ## Ce qui est vérifié
 

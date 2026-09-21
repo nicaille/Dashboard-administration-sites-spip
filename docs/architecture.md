@@ -31,7 +31,7 @@ travail réel est réparti :
 | `inc/dashagent.php` | configuration, chiffrement du secret, journal, réponses JSON |
 | `inc/dashagent_infos.php` | inventaire : core, PHP/SQL, plugins, caches, capacités |
 | `inc/dashagent_cache.php` | purge des caches, cible par cible |
-| `inc/dashagent_sauvegarde.php` | export SQL gzip streamé, rétention, diffusion |
+| `inc/dashagent_sauvegarde.php` | export SQL gzip streamé, par tranches reprenables, rétention, diffusion |
 | `inc/dashagent_maj.php` | mise à jour des plugins et du core, avec rollback |
 | `inc/dashagent_base.php` | migration du schéma de base du core, par tranches reprenables |
 | `inc/dashagent_serveur.php` | consultation en lecture seule : phpinfo, tables, fichiers de réglage, avec masquage |

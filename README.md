@@ -13,7 +13,8 @@ Depuis une seule interface :
 - mise à jour à distance du core SPIP, avec retour arrière possible, **et
   migration de son schéma de base** dans la foulée — l'étape que SPIP réclamait
   jusque-là à la main, site par site ;
-- sauvegarde de la base de données, rapatriée et téléchargeable ;
+- sauvegarde de la base de données, rapatriée et téléchargeable — exportée
+  **par tranches**, pour passer sous la patience d'un cache en frontal ;
 - purge sélective des caches : pages, squelettes, images calculées, CSS/JS, sessions ;
 - consultation de l'état d'un serveur : `phpinfo()`, contenu des tables,
   fichiers de réglage — refusée par défaut, voir plus bas.
