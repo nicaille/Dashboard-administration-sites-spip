@@ -220,6 +220,73 @@ dit('la suppression est annoncée',
 dit('la suppression est inscrite au journal du site',
 	/sauvegarde_supprimer/.test(await page.locator('body').innerText()));
 
+console.log('\n### Une sauvegarde qui se découpe en tranches');
+
+/*
+ * L'export se fait par tranches bornées en temps, pour passer sous la patience
+ * d'un cache en frontal. Sur une base de test, la première tranche suffirait —
+ * on ramène donc le budget à zéro le temps de ce passage, ce qui force une
+ * tranche par lot de lignes et exerce pour de bon la reprise : troncature au
+ * dernier point de contrôle, structure non réécrite, rang repris là où il en
+ * était.
+ */
+const optionsChemin = site + '/config/mes_options.php';
+const optionsAvant = readFileSync(optionsChemin, 'utf8');
+writeFileSync(optionsChemin, optionsAvant + "\ndefine('_DASHAGENT_SAUVEGARDE_BUDGET', 0);\n");
+/* Le serveur intégré tourne sous le SAPI « cli-server », pour lequel opcache
+   est gouverné par `opcache.enable` — et non par `opcache.enable_cli`, qu'on
+   croit seul en cause. Un fichier réécrit peut donc rester invisible le temps
+   de `opcache.revalidate_freq`, deux secondes par défaut : le parcours ne
+   voyait alors aucun découpage, sans que rien ne désigne le coupable. Le
+   lanceur met ce délai à zéro ; ce battement couvre le serveur lancé à la
+   main. */
+await page.waitForTimeout(2500);
+
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+const apresDecoupee = await bouton(page, 'Sauvegarder la base');
+// Le libellé du bouton commence lui aussi par « Sauvegarde… » : c'est la ligne
+// du compte rendu qu'on veut, celle qui porte le poids entre parenthèses.
+const compteRendu = (apresDecoupee.match(/Sauvegarde (?:créée|retrouvée)[^\n]{0,160}/) || [''])[0];
+dit('un export découpé aboutit et se rapatrie', /rapatri/i.test(apresDecoupee), compteRendu);
+dit('et il a réellement pris plusieurs tranches',
+	/\b([2-9]|\d{2,}) tranches/.test(apresDecoupee), compteRendu || apresDecoupee.slice(0, 160));
+
+writeFileSync(optionsChemin, optionsAvant);
+await page.waitForTimeout(2500);
+
+/*
+ * Le fichier produit porte un membre gzip par tranche. Le contrôle au
+ * rapatriement l'a déjà accepté — c'est ce que dit « rapatri » ci-dessus ; on
+ * le relit ici d'une autre main, pour voir les membres et retrouver la marque
+ * de fin. Piège à retenir : `gzdecode()` ne rend que le **premier** membre.
+ */
+try {
+	const verdict = execFileSync('php', ['-r', `
+		$dir = getenv('SITE') . '/tmp/dashboard/sauvegardes';
+		$f = null;
+		foreach (glob($dir . '/*/*.sql.gz') ?: [] as $c) { $f = $c; }
+		if (!$f) { echo 'AUCUN_FICHIER'; exit; }
+		$brut = file_get_contents($f);
+		$sql = ''; $depart = 0; $membres = 0;
+		while ($depart < strlen($brut)) {
+			$ctx = inflate_init(ZLIB_ENCODING_GZIP);
+			$morceau = @inflate_add($ctx, substr($brut, $depart));
+			if ($morceau === false) { echo 'REFUS_ZLIB'; exit; }
+			$sql .= $morceau;
+			$lu = (int) inflate_get_read_len($ctx);
+			if ($lu <= 0) { echo 'MEMBRE_VIDE'; exit; }
+			$depart += $lu; $membres++;
+		}
+		if (strpos($sql, '-- fin de sauvegarde') === false) { echo 'SANS_MARQUE:' . $membres; exit; }
+		if (strlen($sql) <= strlen((string) gzdecode($brut))) { echo 'UN_SEUL_MEMBRE:' . $membres; exit; }
+		echo 'OK:' . $membres . ' membres, ' . strlen($sql) . ' octets';
+	`], { env: { ...process.env, SITE: site } }).toString();
+	dit('l’archive rapatriée porte plusieurs membres et se relit en entier',
+		verdict.startsWith('OK:'), verdict);
+} catch (e) {
+	dit('l’archive rapatriée porte plusieurs membres et se relit en entier', false, e.message.slice(0, 160));
+}
+
 console.log('\n### Mise à jour d’un plugin');
 await page.goto(base + '/ecrire/?exec=configurer_dashagent', { waitUntil: 'domcontentloaded' });
 await page.check('[name="op_plugin_maj"]').catch(() => {});
@@ -1798,7 +1865,20 @@ try {
 		$f = null;
 		foreach (glob($dir . '/*/*.sql.gz') ?: [] as $c) { $f = $c; }
 		if (!$f) { echo 'AUCUN_FICHIER'; exit; }
-		$sql = gzdecode(file_get_contents($f));
+		/* Pas gzdecode() : il ne rend que le premier membre, et une sauvegarde
+		   découpée en porte un par tranche. La base restaurée serait amputée
+		   sans qu'aucune erreur ne le dise. */
+		$brut = file_get_contents($f);
+		$sql = ''; $depart = 0;
+		while ($depart < strlen($brut)) {
+			$ctx = inflate_init(ZLIB_ENCODING_GZIP);
+			$morceau = @inflate_add($ctx, substr($brut, $depart));
+			if ($morceau === false) { echo 'REFUS_ZLIB'; exit; }
+			$sql .= $morceau;
+			$lu = (int) inflate_get_read_len($ctx);
+			if ($lu <= 0) { break; }
+			$depart += $lu;
+		}
 		$cible = getenv('TRAVAIL') . '/restauration.sqlite';
 		@unlink($cible);
 		$db = new SQLite3($cible);

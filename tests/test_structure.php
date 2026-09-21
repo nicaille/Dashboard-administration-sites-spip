@@ -12,7 +12,7 @@
 $racine = dirname(__DIR__);
 
 /**
- * Les dossiers de plugins portent leur version (`tourdecontrole-1.0.28`), pour qu'une
+ * Les dossiers de plugins portent leur version (`tourdecontrole-1.0.29`), pour qu'une
  * mise en ligne n'écrase pas la version précédente. On les retrouve donc par
  * préfixe, sans quoi ce fichier serait à retoucher à chaque montée de version.
  *
@@ -66,6 +66,40 @@ $total  = 0;
  * @param bool $condition
  * @return void
  */
+/**
+ * Le corps d'une fonction PHP, pris dans un fichier source.
+ *
+ * De quoi confronter deux écritures sans relire tout un fichier : ce qu'une
+ * fonction envoie d'un côté, ce qu'une autre lit de l'autre.
+ *
+ * @param string $source
+ * @param string $nom
+ * @return string Chaîne vide si la fonction est introuvable
+ */
+function fonction_php($source, $nom) {
+	$debut = strpos($source, 'function ' . $nom . '(');
+	if ($debut === false) {
+		return '';
+	}
+	$ouvrante = strpos($source, '{', $debut);
+	if ($ouvrante === false) {
+		return '';
+	}
+	$niveau = 0;
+	for ($i = $ouvrante, $n = strlen($source); $i < $n; $i++) {
+		if ($source[$i] === '{') {
+			$niveau++;
+		} elseif ($source[$i] === '}') {
+			$niveau--;
+			if ($niveau === 0) {
+				return substr($source, $ouvrante, $i - $ouvrante + 1);
+			}
+		}
+	}
+
+	return '';
+}
+
 function verifier($titre, $condition) {
 	global $echecs, $total;
 	$total++;
@@ -1009,6 +1043,78 @@ verifier('le pilote ne fabrique aucune adresse d’action',
 verifier('une case à cocher ne porte qu’un identifiant de site',
 	preg_match('/data-parc-site="#ID_DASHBOARD_SITE"/', $html)
 	&& !preg_match('/data-parc-site[^>]*data-url/', $html));
+
+
+echo "\n== Sauvegarde découpée : les deux bouts du contrat ==\n";
+
+/*
+ * Un export découpé tient à quatre mots, et rien ne les relie à l'exécution :
+ *
+ * - la tour envoie `decoupee`, sans quoi l'agent exporte d'un seul tenant —
+ *   exactement ce qu'on cherchait à éviter, et sans aucune erreur ;
+ * - elle envoie `reprendre` pour la suite, sans quoi chaque tranche repart de
+ *   zéro et l'export ne finit jamais ;
+ * - l'agent répond `termine`, sans quoi la tour croit l'export achevé à la
+ *   première tranche et publie une sauvegarde amputée ;
+ * - il répond `reprendre`, sans quoi la tour ne sait pas quoi redemander.
+ *
+ * Renommer l'un des quatre d'un seul côté ne lève rien : l'export redevient
+ * silencieusement celui d'avant, ou s'arrête sur une archive partielle qu'un
+ * contrôle d'empreinte déclarera parfaitement valide.
+ */
+$tour_ops = file_get_contents(chemin_plugin('tourdecontrole') . '/inc/dashboard_operations.php');
+$agent_sv = file_get_contents(chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_sauvegarde.php');
+
+$envoi = fonction_php($tour_ops, 'dashboard_sauvegarde_exporter');
+$lecture = fonction_php($tour_ops, 'dashboard_sauvegarde_suite');
+/* Les trois fonctions par lesquelles les arguments de la demande entrent
+   dans l'agent : l'aiguillage, la tranche, et le calcul des exclusions. */
+$recu = fonction_php($agent_sv, 'dashagent_sauvegarde_creer')
+	. fonction_php($agent_sv, 'dashagent_sauvegarde_tranche')
+	. fonction_php($agent_sv, 'dashagent_sauvegarde_exclusions');
+
+verifier('les trois fonctions du découpage sont retrouvées',
+	$envoi !== '' && $lecture !== '' && $recu !== '');
+
+/* Ce que la tour met dans `$args`, et rien d'autre : la fonction rend aussi des
+   tableaux, dont les clefs ne sont pas des arguments d'opération. */
+preg_match('/\$args\s*=\s*\[(.*?)\];/s', $envoi, $litteral);
+preg_match_all("/'([a-z0-9_]+)'\s*=>/", (string) ($litteral[1] ?? ''), $t);
+preg_match_all("/\\\$args\[\s*'([a-z0-9_]+)'\s*\]\s*=[^=]/", $envoi, $u);
+$sortants = array_values(array_unique(array_merge($t[1], $u[1])));
+
+preg_match_all("/\\\$args\[\s*'([a-z0-9_]+)'\s*\]/", $recu, $t);
+$entrants = array_unique($t[1]);
+
+$ignores = array_diff($sortants, $entrants);
+verifier('chaque argument envoyé par la tour est lu par l’agent',
+	!$ignores, 'jamais lus : ' . implode(', ', $ignores));
+
+foreach (['decoupee', 'reprendre', 'sans_statistiques'] as $clef) {
+	verifier('l’argument « ' . $clef . ' » va d’un bout à l’autre',
+		in_array($clef, $sortants, true) && in_array($clef, $entrants, true));
+}
+
+foreach (['termine', 'reprendre'] as $clef) {
+	verifier('la réponse « ' . $clef . ' » est écrite par l’agent et lue par la tour',
+		strpos($recu, "'" . $clef . "'") !== false
+		&& preg_match("/\\\$data\[\s*'" . $clef . "'\s*\]/", $lecture));
+}
+
+/* Et les deux issues, pas seulement l'une : un agent qui ne sait plus dire
+   « pas fini » publie sa première tranche comme une sauvegarde entière. */
+foreach (['false', 'true'] as $issue) {
+	verifier('l’agent sait répondre « termine » à ' . $issue,
+		(bool) preg_match("/'termine'\\s*=>\\s*" . $issue . "/", $recu));
+}
+
+/*
+ * Et le garde-fou qui tient la compatibilité : un agent d'avant le découpage ne
+ * dit rien de `termine`. Prendre son silence pour un « pas fini » ferait boucler
+ * la tour sur un export déjà publié, jusqu'au plafond de tranches.
+ */
+verifier('l’absence de « termine » est traitée explicitement',
+	strpos($lecture, "array_key_exists('termine'") !== false);
 
 
 echo "\n== La branche « sinon » d'une boucle ==\n";

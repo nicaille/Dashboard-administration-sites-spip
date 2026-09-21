@@ -197,6 +197,46 @@ verifier('le défaut prend la variante à souligné',
 	_DASHBOARD_CHECK_URL);
 $GLOBALS['dashboard_config_test'] = [];
 
+echo "\n== L'empreinte épinglée du livrable de SPIP Check ==\n";
+
+/* L'adresse par défaut désigne une branche : son contenu change à chaque
+   poussée amont, et le https n'atteste que du transport. Épingler une empreinte
+   est le seul moyen de déployer sur tout un parc un mégaoctet de code qu'on a
+   relu une fois. Facultatif, donc, et vide par défaut — une épingle posée
+   d'office sur une branche bloquerait le dépôt au premier commit venu. */
+$GLOBALS['dashboard_config_test'] = [];
+verifier('aucune épingle par défaut', dashboard_empreinte_check() === '');
+
+$livrable = "<?php\n// un spip_check\n";
+$vraie    = hash('sha256', $livrable);
+
+$GLOBALS['dashboard_config_test'] = ['sha256_spip_check' => '  ' . strtoupper($vraie) . '  '];
+verifier('une épingle réglée est lue, espaces et casse compris',
+	dashboard_empreinte_check() === $vraie, dashboard_empreinte_check());
+$GLOBALS['dashboard_config_test'] = [];
+
+verifier('sans épingle, rien n’est vérifié',
+	dashagent_check_epingle($livrable, '')['ok'] === true);
+verifier('un livrable conforme passe',
+	dashagent_check_epingle($livrable, $vraie)['ok'] === true);
+verifier('la casse de l’épingle n’y change rien',
+	dashagent_check_epingle($livrable, strtoupper($vraie))['ok'] === true);
+
+/* Un octet de plus, et c'est un autre fichier. */
+$refus = dashagent_check_epingle($livrable . ' ', $vraie);
+verifier('un livrable qui a changé est refusé', $refus['ok'] === false);
+verifier('l’empreinte reçue est rendue avec le refus',
+	$refus['obtenue'] === hash('sha256', $livrable . ' ') && $refus['obtenue'] !== $vraie);
+verifier('et elle figure dans le message, pour mettre l’épingle à jour',
+	strpos($refus['erreur'], $refus['obtenue']) !== false
+		&& strpos($refus['erreur'], $vraie) !== false, $refus['erreur']);
+
+/* Une épingle mal recopiée est pire que pas d'épingle : elle bloque tout dépôt
+   en accusant la forge. L'agent refuse — c'est le formulaire du parc qui exige
+   soixante-quatre caractères hexadécimaux avant d'en arriver là. */
+verifier('une épingle tronquée ne laisse rien passer',
+	dashagent_check_epingle($livrable, substr($vraie, 0, 32))['ok'] === false);
+
 
 echo "\n== Ce qu’on accepte de déposer comme spip_check ==\n";
 
@@ -1048,6 +1088,73 @@ verifier('une archive de plusieurs blocs est vérifiée sans perdre sa marque de
 	$grosse['ok'] === true && $grosse['complet'] === true,
 	$grosse['octets'] . ' octets décompressés');
 
+
+/* Une sauvegarde découpée s'écrit en plusieurs fois, et chaque tranche ajoute
+   un membre gzip au fichier. C'est valide — un gzip est une suite de membres
+   (RFC 1952), et `gunzip` les relit à la file. Le contrôle d'avant ne lisait
+   que les huit derniers octets, c'est-à-dire le pied du *dernier* membre, et
+   les comparait au flux tout entier : il déclarait tronquée une archive
+   parfaitement saine. */
+$morceaux = [
+	"-- Sauvegarde SPIP\n",
+	str_repeat("INSERT INTO spip_articles VALUES (1);\n", 2000),
+	str_repeat("INSERT INTO spip_auteurs VALUES (2);\n", 2000) . "-- fin de sauvegarde 2026-09-21T10:00:00+02:00\n",
+];
+$multi = $bac . 'decoupee.sql.gz';
+@unlink($multi);
+foreach ($morceaux as $morceau) {
+	$gz = gzopen($multi, 'ab6');
+	gzwrite($gz, $morceau);
+	gzclose($gz);
+}
+$attendu = strlen(implode('', $morceaux));
+
+/* Le test dit bien ce qu'il prétend : le pied du dernier membre n'annonce que
+   sa propre tranche. Sans cette assertion, le cas passerait aussi sur une
+   archive à un seul membre, et ne vérifierait plus rien. */
+$fin = fopen($multi, 'rb');
+fseek($fin, -8, SEEK_END);
+$pied = unpack('Vcrc/Vtaille', fread($fin, 8));
+fclose($fin);
+verifier('le pied du dernier membre n’annonce que sa tranche',
+	(int) $pied['taille'] !== $attendu && (int) $pied['taille'] === strlen(end($morceaux)),
+	$pied['taille'] . ' annoncés pour ' . $attendu . ' au total');
+
+$decoupee = dashboard_sauvegarde_verifier($multi);
+verifier('une archive écrite en plusieurs tranches est reconnue saine',
+	$decoupee['ok'] === true, $decoupee['raison']);
+verifier('ses trois membres sont comptés', ($decoupee['membres'] ?? 0) === 3);
+verifier('le flux décompressé est celui des trois tranches réunies',
+	$decoupee['octets'] === $attendu, $decoupee['octets'] . ' au lieu de ' . $attendu);
+verifier('la marque de fin de la dernière tranche est vue', $decoupee['complet'] === true);
+
+/* La tranche tuée en cours d'écriture : le dernier membre ne se termine pas. */
+$entier = file_get_contents($multi);
+file_put_contents($bac . 'decoupee-tronquee.sql.gz', substr($entier, 0, strlen($entier) - 12));
+$coupee = dashboard_sauvegarde_verifier($bac . 'decoupee-tronquee.sql.gz');
+verifier('une archive découpée tronquée dans sa dernière tranche est refusée',
+	$coupee['ok'] === false, $coupee['raison']);
+
+/* Un octet retourné dans le premier membre : le parcours mord dès celui-là, et
+   ne va pas chercher plus loin une validité que les suivants lui donneraient. */
+$abimee_multi = $entier;
+$abimee_multi[30] = chr(ord($abimee_multi[30]) ^ 0x01);
+file_put_contents($bac . 'decoupee-abimee.sql.gz', $abimee_multi);
+$abimee_v = dashboard_sauvegarde_verifier($bac . 'decoupee-abimee.sql.gz');
+verifier('une tranche corrompue condamne l’archive entière', $abimee_v['ok'] === false);
+verifier('et aucune tranche n’est comptée comme valide au-delà',
+	($abimee_v['membres'] ?? 0) === 0, 'membres : ' . ($abimee_v['membres'] ?? 0));
+
+/* Des octets étrangers derrière un membre complet : ce n'est pas une archive
+   corrompue, c'est un fichier qui continue là où il n'a rien à dire. Le dire
+   séparément, parce que le geste qui répare n'est pas le même. */
+file_put_contents($bac . 'queue.sql.gz', $entier . str_repeat("\0", 32));
+$queue_v = dashboard_sauvegarde_verifier($bac . 'queue.sql.gz');
+verifier('des octets étrangers derrière la dernière tranche sont refusés',
+	$queue_v['ok'] === false);
+verifier('et signalés comme tels, non comme une corruption',
+	strpos($queue_v['raison'], 'étrangers') !== false, $queue_v['raison']);
+
 foreach (glob($bac . '*') as $f) {
 	@unlink($f);
 }
@@ -1083,9 +1190,150 @@ verifier('un site qui répond sans rien de neuf est distingué',
 	strpos($rien, 'aucune sauvegarde nouvelle') !== false, $rien);
 verifier('le total connu du site est rappelé', strpos($rien, '3 au total') !== false, $rien);
 
-/* Les trois constats doivent être distincts : c'est toute leur raison d'être. */
-verifier('les trois diagnostics diffèrent',
-	count(array_unique([$injoignable, $tue, $rien])) === 3);
+/* Un export découpé en cours n'est pas un export tué : il attend sa tranche
+   suivante, son point de reprise posé à côté de lui. Les confondre enverrait
+   chercher une panne de max_execution_time là où il n'y en a pas. */
+$chantier = dashboard_sauvegarde_diagnostic(
+	['sauvegarde' => null, 'joignable' => true, 'sauvegardes' => 1, 'inacheves' => 1,
+		'octets_inacheve' => 1048576, 'reprise' => true]
+);
+verifier('un export découpé en cours est distingué d’un export tué',
+	strpos($chantier, 'découpé') !== false && strpos($chantier, 'reprendra') !== false, $chantier);
+verifier('et il n’accuse pas les limites du site',
+	strpos($chantier, 'max_execution_time') === false, $chantier);
+
+/* Les quatre constats doivent être distincts : c'est toute leur raison d'être. */
+verifier('les quatre diagnostics diffèrent',
+	count(array_unique([$injoignable, $tue, $rien, $chantier])) === 4);
+
+echo "\n== Une sauvegarde qui se découpe en tranches ==\n";
+
+/* L'export d'un seul tenant a un adversaire qui n'est ni PHP ni la base : le
+   frontal du site géré, dont le `first_byte_timeout` vaut soixante secondes là
+   où un export en prend davantage. Le rattrapage sait constater après coup ; le
+   découpage, lui, évite le silence — chaque tranche rend la main avant la
+   patience du frontal. Reste à conduire la suite, et c'est là qu'est la règle. */
+
+$fini = dashboard_sauvegarde_suite(['ok' => true, 'data' => ['termine' => true, 'sauvegarde' => ['octets' => 12]]]);
+verifier('une tranche qui dit avoir fini termine l’export', $fini['suite'] === 'fini');
+
+$encore = dashboard_sauvegarde_suite(['ok' => true, 'data' => ['termine' => false, 'reprendre' => '20260921-101500-a1b2c3d4']]);
+verifier('une tranche inachevée demande la suivante', $encore['suite'] === 'continuer');
+verifier('et transmet l’identifiant à reprendre',
+	$encore['reprendre'] === '20260921-101500-a1b2c3d4');
+
+/* Le cas qui tient toute la compatibilité : un agent d'avant la 1.0.21 ignore
+   le drapeau `decoupee` et rend l'export entier, sans rien dire de `termine`.
+   Prendre son silence pour un « pas fini » ferait boucler la tour de contrôle
+   sur un export déjà publié. */
+$ancien = dashboard_sauvegarde_suite(['ok' => true, 'data' => ['sauvegarde' => ['identifiant' => '20260921-101500-a1b2c3d4']]]);
+verifier('un agent qui ignore le découpage est réputé avoir fini', $ancien['suite'] === 'fini');
+
+/* Et l'inverse : une tranche inachevée qui ne dit pas comment la reprendre
+   n'est pas rattrapable. Mieux vaut le dire que boucler. */
+$muette = dashboard_sauvegarde_suite(['ok' => true, 'data' => ['termine' => false]]);
+verifier('une tranche inachevée sans identifiant est un échec', $muette['suite'] === 'echec');
+verifier('et le dit en clair', strpos($muette['raison'], 'reprendre') !== false, $muette['raison']);
+
+/* Un silence n'est toujours pas une réponse. Mais ici, et seulement ici, il se
+   retente : la reprise est idempotente, l'agent ramenant son fichier au dernier
+   point de contrôle avant d'y toucher. */
+$silence = ['ok' => false, 'erreur' => ['code' => 'transport', 'message' => 'timeout']];
+verifier('un silence fait retenter la même tranche',
+	dashboard_sauvegarde_suite($silence, 0)['suite'] === 'retenter');
+verifier('un second silence aussi',
+	dashboard_sauvegarde_suite($silence, 1)['suite'] === 'retenter');
+verifier('mais pas indéfiniment',
+	dashboard_sauvegarde_suite($silence, _DASHBOARD_SAUVEGARDE_SILENCES_MAX)['suite'] === 'echec');
+
+/* Une réponse, elle, se respecte : l'agent a dit non, on n'insiste pas. */
+verifier('une réponse d’échec ne se retente pas',
+	dashboard_sauvegarde_suite(
+		['ok' => false, 'erreur' => ['code' => 'operation_echouee', 'message' => 'Base illisible']],
+		0
+	)['suite'] === 'echec');
+
+echo "\n== L'état de reprise d'un export découpé ==\n";
+
+/* Ce qui tient le fil d'une tranche à l'autre. Un état relu à moitié — clef
+   manquante, identifiant fabriqué — ne doit jamais servir de point de reprise :
+   il ferait écrire au mauvais endroit dans une archive qui, ensuite, n'aurait
+   plus rien pour se signaler. */
+$etat_sain = [
+	'identifiant' => '20260921-101500-a1b2c3d4',
+	'empreinte_options' => 'abcdef0123456789',
+	'tables' => ['spip_articles', 'spip_auteurs'],
+	'index' => 1, 'offset' => 400, 'octets_bruts' => 8192,
+];
+verifier('un état complet est accepté', dashagent_sauvegarde_etat_valide($etat_sain) !== null);
+verifier('un identifiant fabriqué est refusé',
+	dashagent_sauvegarde_etat_valide(['identifiant' => '../../etc/passwd'] + $etat_sain) === null);
+foreach (['identifiant', 'empreinte_options', 'tables', 'index', 'offset', 'octets_bruts'] as $clef) {
+	$ampute = $etat_sain;
+	unset($ampute[$clef]);
+	verifier('un état sans « ' . $clef . ' » est refusé', dashagent_sauvegarde_etat_valide($ampute) === null);
+}
+verifier('ce qui n’est pas un tableau n’est pas un état',
+	dashagent_sauvegarde_etat_valide('20260921-101500-a1b2c3d4') === null);
+$negatif = dashagent_sauvegarde_etat_valide(['index' => -3, 'offset' => -1, 'octets_bruts' => -9] + $etat_sain);
+verifier('les rangs négatifs sont ramenés à zéro',
+	$negatif['index'] === 0 && $negatif['offset'] === 0 && $negatif['octets_bruts'] === 0);
+
+/* Deux demandes qui n'exportent pas la même chose ne se reprennent pas l'une
+   l'autre : adopter un export allégé pour une demande complète rendrait une
+   sauvegarde amputée sous le nom d'une sauvegarde entière. */
+verifier('deux demandes identiques ont la même empreinte',
+	dashagent_sauvegarde_empreinte_options(['spip_visites', 'spip_referers'])
+	=== dashagent_sauvegarde_empreinte_options(['spip_referers', 'spip_visites']));
+verifier('un export allégé ne se confond pas avec un export complet',
+	dashagent_sauvegarde_empreinte_options(['spip_visites']) !== dashagent_sauvegarde_empreinte_options([]));
+
+verifier('un identifiant fabriqué ne désigne aucun fichier d’état',
+	dashagent_sauvegarde_etat_chemin('../../mes_options') === ''
+	&& dashagent_sauvegarde_partiel_chemin('20260921') === '');
+
+echo "\n== Reprendre sans jamais écrire deux fois ==\n";
+
+/* Le point de contrôle est une taille de fichier, et c'est ce qui rend la
+   reprise sûre : un processus tué en plein milieu d'une tranche laisse derrière
+   lui des octets que l'état ne mentionne pas. Les garder reviendrait à écrire à
+   la suite d'un membre gzip inachevé, ou à rejouer des lignes déjà exportées —
+   une archive plausible, et fausse. */
+$atelier = _DIR_TMP . 'sauvegardes-reprise/';
+if (!is_dir($atelier)) {
+	mkdir($atelier, 0777, true);
+}
+$partiel = $atelier . 'export.sql.gz.partiel';
+
+file_put_contents($partiel, str_repeat('x', 1000) . str_repeat('!', 250));
+verifier('le recalage ne se plaint pas', dashagent_sauvegarde_recaler($partiel, 1000) === '');
+clearstatcache();
+verifier('les octets écrits après le point de contrôle sont coupés', filesize($partiel) === 1000);
+verifier('et ceux d’avant sont intacts',
+	file_get_contents($partiel) === str_repeat('x', 1000));
+
+verifier('un fichier déjà à la bonne taille n’est pas touché',
+	dashagent_sauvegarde_recaler($partiel, 1000) === '' && filesize($partiel) === 1000);
+
+/* Plus court que son point de reprise : le fichier a été rogné par quelqu'un
+   d'autre. Reprendre là-dessus ferait un trou au milieu de l'archive. */
+file_put_contents($partiel, str_repeat('x', 400));
+$court = dashagent_sauvegarde_recaler($partiel, 1000);
+verifier('un fichier plus court que son point de reprise est refusé', $court !== '', $court);
+
+/* Première tranche : rien n'est acquis, et un fichier qui traîne sous ce nom
+   vient forcément d'un export abandonné. */
+file_put_contents($partiel, 'des restes');
+verifier('la première tranche repart d’un fichier neuf',
+	dashagent_sauvegarde_recaler($partiel, 0) === '' && !file_exists($partiel));
+
+$disparu = dashagent_sauvegarde_recaler($atelier . 'jamais-vu.sql.gz.partiel', 4096);
+verifier('un export en cours disparu du disque est signalé', $disparu !== '', $disparu);
+
+foreach (glob($atelier . '*') as $f) {
+	@unlink($f);
+}
+@rmdir($atelier);
 
 echo "\n== Mesurer un cache sans y laisser la synchronisation ==\n";
 
