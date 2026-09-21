@@ -211,10 +211,50 @@ function dashagent_check_conforme($source) {
 }
 
 /**
+ * Le livrable téléchargé répond-il à l'empreinte qu'on attendait ?
+ *
+ * L'adresse de téléchargement désigne une **branche** d'une forge tierce : ce
+ * qu'elle sert aujourd'hui n'est pas ce qu'elle servira demain, et le https
+ * n'atteste que du transport, jamais du contenu. Épingler une empreinte, c'est
+ * dire « ce fichier-là, et pas un autre » — le seul moyen de déployer sur tout
+ * un parc un mégaoctet de code qu'on a relu une fois.
+ *
+ * Facultatif, et vide par défaut : sur une adresse de branche, une épingle
+ * posée d'office bloquerait le dépôt à la première poussée amont.
+ *
+ * L'empreinte réellement obtenue est rendue avec le refus. Sans elle, mettre
+ * l'épingle à jour après une publication amont demanderait d'aller télécharger
+ * le fichier à la main pour le hacher.
+ *
+ * @param string $source Contenu téléchargé
+ * @param string $attendue Empreinte SHA-256 attendue, vide si aucune
+ * @return array{ok: bool, erreur: string, attendue: string, obtenue: string}
+ */
+function dashagent_check_epingle($source, $attendue) {
+	$attendue = strtolower(trim((string) $attendue));
+	if ($attendue === '') {
+		return ['ok' => true, 'erreur' => '', 'attendue' => '', 'obtenue' => ''];
+	}
+
+	$obtenue = hash('sha256', (string) $source);
+	if ($attendue === $obtenue) {
+		return ['ok' => true, 'erreur' => '', 'attendue' => $attendue, 'obtenue' => $obtenue];
+	}
+
+	return [
+		'ok'       => false,
+		'erreur'   => 'Empreinte du livrable non conforme : ' . $obtenue . ' au lieu de ' . $attendue,
+		'attendue' => $attendue,
+		'obtenue'  => $obtenue,
+	];
+}
+
+/**
  * Télécharge et dépose un spip_check neuf à la racine du site.
  *
  * @param array $args
  *     - string `url` : adresse du livrable, https obligatoire
+ *     - string `sha256` : empreinte attendue du livrable, facultative
  * @return array
  */
 function dashagent_check_maj($args = []) {
@@ -254,6 +294,19 @@ function dashagent_check_maj($args = []) {
 		@unlink($provisoire);
 
 		return ['ok' => false, 'erreur' => $controle['erreur'], 'etat' => $etat];
+	}
+
+	$epingle = dashagent_check_epingle($source, (string) ($args['sha256'] ?? ''));
+	if (!$epingle['ok']) {
+		@unlink($provisoire);
+
+		return [
+			'ok'             => false,
+			'erreur'         => $epingle['erreur'],
+			'sha256_attendu' => $epingle['attendue'],
+			'sha256_obtenu'  => $epingle['obtenue'],
+			'etat'           => $etat,
+		];
 	}
 
 	$chemin = dashagent_check_chemin();

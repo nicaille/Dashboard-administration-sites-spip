@@ -97,7 +97,7 @@ function spip_version_compare($v1, $v2, $op = null) {
 /**
  * Chemin d'un plugin, retrouvé par son préfixe.
  *
- * Les dossiers de plugins portent leur version (`tourdecontrole-1.0.28`), pour qu'une
+ * Les dossiers de plugins portent leur version (`tourdecontrole-1.0.29`), pour qu'une
  * mise en ligne n'écrase pas la version précédente. Les retrouver par préfixe
  * évite d'avoir à toucher ce fichier à chaque montée de version.
  *
@@ -128,6 +128,9 @@ require_once chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_serveur.php
 require_once chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_loader.php';
 /* Idem pour SPIP Check : lecture de version, d'édition et contrôle de conformité. */
 require_once chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_check.php';
+/* La sauvegarde a besoin de la base pour exporter, mais son état de reprise et
+   son recalage sur le dernier point de contrôle ne touchent qu'au disque. */
+require_once chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_sauvegarde.php';
 /* La délégation à SVP : seules ses fonctions pures sont chargeables hors SPIP,
    les autres ont besoin de SVP lui-même. */
 require_once chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_svp.php';

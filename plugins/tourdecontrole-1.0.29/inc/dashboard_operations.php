@@ -98,6 +98,150 @@ function dashboard_operation_purger($id_dashboard_site, $cibles = ['tout']) {
 }
 
 /**
+ * Nombre de tranches qu'un export s'autorise avant qu'on le déclare sans fin.
+ *
+ * Vingt secondes par tranche : deux cents tranches, c'est plus d'une heure
+ * d'export. Au-delà, ce n'est plus une base volumineuse, c'est une boucle.
+ */
+if (!defined('_DASHBOARD_SAUVEGARDE_TRANCHES_MAX')) {
+	define('_DASHBOARD_SAUVEGARDE_TRANCHES_MAX', 200);
+}
+
+/**
+ * Nombre de silences consécutifs qu'on retente avant de renoncer.
+ */
+if (!defined('_DASHBOARD_SAUVEGARDE_SILENCES_MAX')) {
+	define('_DASHBOARD_SAUVEGARDE_SILENCES_MAX', 3);
+}
+
+/**
+ * Conduit l'export de bout en bout, une tranche après l'autre.
+ *
+ * L'export d'un seul tenant a un adversaire qui n'est ni PHP ni la base : le
+ * frontal du site géré, dont la patience est plus courte que la nôtre. On lui
+ * demande donc des tranches, chacune bien en deçà de ses soixante secondes, et
+ * on rappelle la même opération tant que l'agent dit ne pas avoir fini — c'est
+ * le contrat qui gouverne déjà les chantiers et les actions de parc.
+ *
+ * Deux compatibilités à tenir, et elles vont dans les deux sens :
+ *
+ * - **un agent d'avant la 1.0.21** ignore le drapeau `decoupee` et rend
+ *   l'export entier, sans clef `termine`. Son absence vaut donc « c'est fini » :
+ *   le comportement d'avant, à l'identique. D'où le long délai sur le premier
+ *   appel, seul moment où l'on ignore à qui l'on parle ;
+ * - **un silence sur une tranche** ne dit rien de l'issue, comme toujours. Mais
+ *   ici, contrairement à l'export d'un seul tenant, la reprise est idempotente :
+ *   l'agent ramène son fichier au dernier point de contrôle et refait la
+ *   tranche. Retenter est donc sans danger, et c'est la seule réponse utile à
+ *   un 503 de frontal. Les silences consécutifs sont comptés — un site
+ *   réellement tombé ne doit pas nous retenir indéfiniment.
+ *
+ * @param array $site Ligne de spip_dashboard_sites
+ * @param array $options Options de la demande de sauvegarde
+ * @return array{reponse: array, tranches: int}
+ */
+function dashboard_sauvegarde_exporter($site, $options = []) {
+	$args = [
+		'sans_statistiques' => !empty($options['sans_statistiques']),
+		'decoupee'          => true,
+	];
+
+	$long  = (int) dashboard_config('timeout_long', 300);
+	$court = min($long, 90);
+
+	$tranches = 0;
+	$silences = 0;
+	$reponse  = [];
+
+	for ($tour = 0; $tour < _DASHBOARD_SAUVEGARDE_TRANCHES_MAX; $tour++) {
+		$reponse = dashboard_appeler(
+			$site,
+			'sauvegarde_creer',
+			$args,
+			['timeout' => $tour ? $court : $long]
+		);
+
+		$suite = dashboard_sauvegarde_suite($reponse, $silences);
+
+		if ($suite['suite'] === 'retenter') {
+			$silences++;
+			continue;
+		}
+		if ($suite['suite'] === 'echec') {
+			if ($suite['raison'] !== '' && !empty($reponse['ok'])) {
+				$reponse = dashboard_reponse_erreur('protocole', $suite['raison'], microtime(true));
+			}
+
+			return ['reponse' => $reponse, 'tranches' => $tranches];
+		}
+
+		$silences = 0;
+		$tranches++;
+
+		if ($suite['suite'] === 'fini') {
+			return ['reponse' => $reponse, 'tranches' => $tranches];
+		}
+
+		$args['reprendre'] = $suite['reprendre'];
+	}
+
+	return [
+		'reponse' => dashboard_reponse_erreur(
+			'export_sans_fin',
+			'L’export n’en finit pas : ' . _DASHBOARD_SAUVEGARDE_TRANCHES_MAX . ' tranches sans aboutir.',
+			microtime(true)
+		),
+		'tranches' => $tranches,
+	];
+}
+
+/**
+ * Ce que la réponse d'une tranche commande de faire ensuite.
+ *
+ * Séparé de la boucle parce que c'est là qu'est la règle, et qu'une règle se
+ * vérifie : quatre issues, dont deux se ressemblent à s'y méprendre. Un agent
+ * qui ne connaît pas le découpage et un agent qui vient de finir répondent tous
+ * deux « c'est fini », mais pour des raisons opposées — l'un parce qu'il a tout
+ * exporté d'un coup, l'autre parce qu'il a exporté la dernière tranche.
+ *
+ * Et un silence n'est toujours pas une réponse : ici, et **seulement** ici, il
+ * se retente, parce que la reprise est idempotente — l'agent ramène son fichier
+ * au dernier point de contrôle avant d'y toucher. Rien de tel dans l'export
+ * d'un seul tenant, où retenter voudrait dire tout refaire.
+ *
+ * @param array $reponse Ce que dashboard_appeler() a rendu
+ * @param int $silences Nombre de silences déjà essuyés d'affilée
+ * @return array{suite: string, reprendre: string, raison: string}
+ *     `suite` vaut « fini », « continuer », « retenter » ou « echec »
+ */
+function dashboard_sauvegarde_suite($reponse, $silences = 0) {
+	if (empty($reponse['ok'])) {
+		$code = (string) ($reponse['erreur']['code'] ?? '');
+		if (dashboard_silence($code) && (int) $silences < _DASHBOARD_SAUVEGARDE_SILENCES_MAX) {
+			return ['suite' => 'retenter', 'reprendre' => '', 'raison' => ''];
+		}
+
+		return ['suite' => 'echec', 'reprendre' => '', 'raison' => ''];
+	}
+
+	$data = (array) ($reponse['data'] ?? []);
+
+	/* Un agent d'avant la 1.0.21 ignore le découpage et n'en dit donc rien.
+	   L'absence de la clef vaut « c'est fini » : le comportement d'avant. */
+	if (!array_key_exists('termine', $data) || !empty($data['termine'])) {
+		return ['suite' => 'fini', 'reprendre' => '', 'raison' => ''];
+	}
+
+	$suivant = (string) ($data['reprendre'] ?? '');
+	if ($suivant === '') {
+		return ['suite' => 'echec', 'reprendre' => '',
+			'raison' => 'L’agent annonce un export inachevé sans dire comment le reprendre.'];
+	}
+
+	return ['suite' => 'continuer', 'reprendre' => $suivant, 'raison' => ''];
+}
+
+/**
  * Demande une sauvegarde de la base et, par défaut, la rapatrie.
  *
  * Une sauvegarde qui reste sur le serveur du site ne protège de rien si c'est
@@ -122,12 +266,9 @@ function dashboard_operation_sauvegarder($id_dashboard_site, $options = []) {
 	// produit — et non ce qui traînait déjà sur le site.
 	$depart = time();
 
-	$reponse = dashboard_appeler(
-		$site,
-		'sauvegarde_creer',
-		['sans_statistiques' => !empty($options['sans_statistiques'])],
-		['timeout' => dashboard_config('timeout_long', 300)]
-	);
+	$export   = dashboard_sauvegarde_exporter($site, $options);
+	$reponse  = $export['reponse'];
+	$tranches = (int) $export['tranches'];
 
 	$adoptee = false;
 
@@ -182,7 +323,8 @@ function dashboard_operation_sauvegarder($id_dashboard_site, $options = []) {
 	$message = ($adoptee
 		? 'Sauvegarde retrouvée sur le site, la réponse s’étant perdue ('
 		: 'Sauvegarde créée sur le site (')
-		. dashboard_octets((int) ($sauvegarde['octets'] ?? 0)) . ')';
+		. dashboard_octets((int) ($sauvegarde['octets'] ?? 0))
+		. ($tranches > 1 ? ', ' . $tranches . ' tranches' : '') . ')';
 
 	if (!isset($options['rapatrier']) || $options['rapatrier']) {
 		$rapatriement = dashboard_rapatrier_sauvegarde($id_dashboard_site, $id_sauvegarde);
@@ -312,11 +454,17 @@ if (!defined('_DASHBOARD_SAUVEGARDE_FIN')) {
  * présence rassure à tort. Restaurer une base à partir d'un fichier pareil se
  * découvre le jour où l'on en a besoin, c'est-à-dire le pire.
  *
- * Le contrôle s'appuie sur le pied de page du format gzip : quatre octets de
- * CRC32 et quatre de taille décompressée, en petit-boutiste, tout à la fin du
- * fichier. Tronquer une archive mutile toujours ce pied, et recalculer les deux
- * valeurs en relisant le flux les prend en défaut à coup sûr. C'est ce que fait
- * `gzip -t` en ligne de commande.
+ * Le contrôle relit l'archive membre par membre, comme le fait `gzip -t` :
+ * chacun doit se terminer proprement — zlib vérifie lui-même son CRC32 et sa
+ * taille décompressée —, et le fichier doit s'achever sur une frontière de
+ * membre.
+ *
+ * **Un gzip n'a pas forcément un seul membre** (RFC 1952), et une sauvegarde
+ * découpée en a un par tranche d'export. Le contrôle d'avant ne lisait que les
+ * huit derniers octets du fichier, c'est-à-dire le pied du *dernier* membre : il
+ * les comparait au flux décompressé tout entier, et déclarait tronquée une
+ * archive parfaitement valide. D'où ce parcours, qui ne suppose plus rien du
+ * nombre de membres et vaut pour l'archive d'un seul tenant comme pour l'autre.
  *
  * Deux verdicts distincts, et les confondre serait une faute :
  *
@@ -326,70 +474,101 @@ if (!defined('_DASHBOARD_SAUVEGARDE_FIN')) {
  *   refuser sa confiance reviendrait à jeter des sauvegardes valides.
  *
  * @param string $chemin
- * @return array{ok: bool, complet: bool, octets: int, raison: string}
+ * @return array{ok: bool, complet: bool, octets: int, membres: int, raison: string}
  */
 function dashboard_sauvegarde_verifier($chemin) {
-	$verdict = ['ok' => false, 'complet' => false, 'octets' => 0, 'raison' => ''];
+	$verdict = ['ok' => false, 'complet' => false, 'octets' => 0, 'membres' => 0, 'raison' => ''];
 
 	if (!is_file($chemin) || !filesize($chemin)) {
 		return ['raison' => 'fichier absent ou vide'] + $verdict;
 	}
+	if (!function_exists('inflate_init')) {
+		return ['raison' => 'extension zlib absente : archive non vérifiable'] + $verdict;
+	}
 
-	// Le pied de page, lu dans le fichier brut : c'est lui qui porte la preuve.
 	$brut = @fopen($chemin, 'rb');
 	if (!$brut) {
 		return ['raison' => 'fichier illisible'] + $verdict;
 	}
-	fseek($brut, -8, SEEK_END);
-	$pied = (string) fread($brut, 8);
+	clearstatcache(true, $chemin);
+	$taille = (int) filesize($chemin);
+
+	$depart  = 0;
+	$octets  = 0;
+	$membres = 0;
+	$queue   = '';
+
+	while ($depart < $taille) {
+		if (fseek($brut, $depart) !== 0) {
+			fclose($brut);
+
+			return ['raison' => 'archive illisible à l’octet ' . $depart] + $verdict;
+		}
+
+		// Un membre commence par la signature de gzip. Le dire ici distingue
+		// « des octets étrangers suivent l'archive » d'« archive corrompue ».
+		if ((string) fread($brut, 2) !== "\x1f\x8b") {
+			fclose($brut);
+
+			return ['ok' => false, 'complet' => false, 'octets' => $octets, 'membres' => $membres,
+				'raison' => 'des octets étrangers suivent l’archive, à partir de l’octet ' . $depart];
+		}
+		fseek($brut, $depart);
+
+		$contexte = inflate_init(ZLIB_ENCODING_GZIP);
+		$acheve   = false;
+
+		while (!feof($brut)) {
+			$bloc = fread($brut, 262144);
+			if ($bloc === false || $bloc === '') {
+				break;
+			}
+			$sortie = @inflate_add($contexte, $bloc);
+			if ($sortie === false) {
+				fclose($brut);
+
+				return ['ok' => false, 'complet' => false, 'octets' => $octets, 'membres' => $membres,
+					'raison' => 'archive corrompue : zlib refuse le flux'];
+			}
+			$octets += strlen($sortie);
+			// De quoi retrouver la marque de fin sans garder tout le dump en mémoire.
+			$queue = substr($queue . $sortie, -512);
+
+			if (inflate_get_status($contexte) === ZLIB_STREAM_END) {
+				$acheve = true;
+				break;
+			}
+		}
+
+		if (!$acheve) {
+			fclose($brut);
+
+			return ['ok' => false, 'complet' => false, 'octets' => $octets, 'membres' => $membres,
+				'raison' => 'archive tronquée : le flux gzip ne se termine pas'];
+		}
+
+		$lu = (int) inflate_get_read_len($contexte);
+		if ($lu <= 0) {
+			fclose($brut);
+
+			return ['ok' => false, 'complet' => false, 'octets' => $octets, 'membres' => $membres,
+				'raison' => 'archive illisible : membre gzip de longueur nulle'];
+		}
+		$depart += $lu;
+		$membres++;
+	}
+
 	fclose($brut);
 
-	if (strlen($pied) !== 8) {
-		return ['raison' => 'archive trop courte pour être un gzip'] + $verdict;
-	}
-	$annonce = unpack('Vcrc/Vtaille', $pied);
-
-	$gz = @gzopen($chemin, 'rb');
-	if (!$gz) {
-		return ['raison' => 'archive gzip illisible'] + $verdict;
-	}
-
-	$crc    = hash_init('crc32b');
-	$octets = 0;
-	$queue  = '';
-
-	while (!gzeof($gz)) {
-		$bloc = @gzread($gz, 262144);
-		if ($bloc === false) {
-			gzclose($gz);
-
-			return ['raison' => 'flux gzip interrompu'] + $verdict;
-		}
-		if ($bloc === '') {
-			break;
-		}
-		hash_update($crc, $bloc);
-		$octets += strlen($bloc);
-		// De quoi retrouver la marque de fin sans garder tout le dump en mémoire.
-		$queue = substr($queue . $bloc, -512);
-	}
-	gzclose($gz);
-
-	// La taille du pied de page est prise modulo 2^32 : au-delà de quatre
-	// gigaoctets décompressés, la comparer telle quelle serait un faux échec.
-	if (($octets % 4294967296) !== (int) $annonce['taille']) {
-		return ['ok' => false, 'complet' => false, 'octets' => $octets,
-			'raison' => 'archive tronquée : ' . $octets . ' octets lus, ' . (int) $annonce['taille'] . ' annoncés'];
-	}
-	if (hexdec(hash_final($crc)) !== (int) $annonce['crc']) {
-		return ['ok' => false, 'complet' => false, 'octets' => $octets,
-			'raison' => 'archive corrompue : empreinte CRC32 non conforme'];
+	if (!$membres) {
+		return ['raison' => 'archive vide'] + $verdict;
 	}
 
 	return [
 		'ok'      => true,
 		'complet' => strpos($queue, _DASHBOARD_SAUVEGARDE_FIN) !== false,
 		'octets'  => $octets,
+		'membres' => $membres,
 		'raison'  => '',
 	];
 }
@@ -409,7 +588,8 @@ function dashboard_sauvegarde_verifier($chemin) {
 function dashboard_sauvegarde_rattraper($id_dashboard_site, $depart) {
 	$inventaire = dashboard_operation_sauvegardes_lister($id_dashboard_site);
 	if (empty($inventaire['ok'])) {
-		return ['sauvegarde' => null, 'joignable' => false, 'sauvegardes' => 0, 'inacheves' => 0, 'octets_inacheve' => 0];
+		return ['sauvegarde' => null, 'joignable' => false, 'sauvegardes' => 0, 'inacheves' => 0,
+			'octets_inacheve' => 0, 'reprise' => false];
 	}
 
 	$connus = array_column(
@@ -425,6 +605,9 @@ function dashboard_sauvegarde_rattraper($id_dashboard_site, $depart) {
 		'sauvegardes'     => count((array) $inventaire['data']),
 		'inacheves'       => count($inacheves),
 		'octets_inacheve' => (int) ($inacheves[0]['octets'] ?? 0),
+		// Un export découpé en cours n'est pas un export tué : il attend sa
+		// tranche suivante. Les agents d'avant la 1.0.21 ne le disent pas.
+		'reprise'         => !empty($inacheves[0]['reprise']),
 	];
 }
 
@@ -453,6 +636,15 @@ function dashboard_sauvegarde_diagnostic($constat) {
 	}
 
 	if (!empty($constat['inacheves'])) {
+		if (!empty($constat['reprise'])) {
+			/* Celui-là n'a pas été tué : il est en chantier, son point de reprise
+			   à côté de lui. Accuser ici max_execution_time enverrait chercher
+			   une panne là où il n'y en a pas. */
+			return 'un export découpé de ' . dashboard_octets((int) $constat['octets_inacheve'])
+				. ' est en cours sur le site : il reprendra là où il s’est arrêté'
+				. ' à la prochaine demande de sauvegarde';
+		}
+
 		return 'un export inachevé de ' . dashboard_octets((int) $constat['octets_inacheve'])
 			. ' traîne sur le site : PHP a été interrompu en cours d’écriture.'
 			. ' Regarder max_execution_time et memory_limit du site géré, plutôt que le cache en frontal';
@@ -994,7 +1186,9 @@ function dashboard_operation_check_maj($id_dashboard_site) {
 	$reponse = dashboard_appeler(
 		$site,
 		'check_maj',
-		['url' => $url],
+		// L'épingle, quand il y en a une : c'est l'agent qui hache le fichier
+		// qu'il a réellement reçu, nous ne faisons que dire ce qu'on attend.
+		['url' => $url, 'sha256' => dashboard_empreinte_check()],
 		['timeout' => dashboard_config('timeout_long', 300)]
 	);
 

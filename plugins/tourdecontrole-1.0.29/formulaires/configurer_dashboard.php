@@ -25,6 +25,7 @@ function formulaires_configurer_dashboard_charger_dist() {
 		'url_archives_spip'     => dashboard_config('url_archives_spip', 'https://files.spip.net/spip/archives/'),
 		'url_spip_loader'       => dashboard_config('url_spip_loader', _DASHBOARD_LOADER_URL),
 		'url_spip_check'        => dashboard_config('url_spip_check', _DASHBOARD_CHECK_URL),
+		'sha256_spip_check'     => dashboard_config('sha256_spip_check', ''),
 		'versions_manuelles'    => dashboard_config('versions_manuelles', ''),
 		'fraicheur_sauvegarde'  => dashboard_config('fraicheur_sauvegarde', 900),
 		'fraicheur_depots'      => dashboard_config('fraicheur_depots', 86400),
@@ -64,6 +65,21 @@ function formulaires_configurer_dashboard_verifier_dist() {
 		$erreurs['url_spip_loader'] = _T('dashboard:erreur_url_loader');
 	}
 
+	// Et pour SPIP Check, qui est du même bois : un fichier PHP déposé à la
+	// racine web d'un site géré.
+	$check = trim((string) _request('url_spip_check'));
+	if ($check !== '' && !preg_match($schemas, $check)) {
+		$erreurs['url_spip_check'] = _T('dashboard:erreur_url_check');
+	}
+
+	/* L'épingle est facultative, mais une épingle mal recopiée serait pire que
+	   pas d'épingle du tout : elle bloquerait tout dépôt en accusant la forge.
+	   Soixante-quatre caractères hexadécimaux, ou rien. */
+	$empreinte = trim((string) _request('sha256_spip_check'));
+	if ($empreinte !== '' && !preg_match('/^[a-f0-9]{64}$/i', $empreinte)) {
+		$erreurs['sha256_spip_check'] = _T('dashboard:erreur_sha256_check');
+	}
+
 	foreach (preg_split('/[\r\n]+/', (string) _request('versions_manuelles')) as $ligne) {
 		$ligne = trim($ligne);
 		if ($ligne === '') {
@@ -97,6 +113,7 @@ function formulaires_configurer_dashboard_traiter_dist() {
 	$config['url_archives_spip']     = trim((string) _request('url_archives_spip'));
 	$config['url_spip_loader']       = trim((string) _request('url_spip_loader'));
 	$config['url_spip_check']        = trim((string) _request('url_spip_check'));
+	$config['sha256_spip_check']     = strtolower(trim((string) _request('sha256_spip_check')));
 	$config['versions_manuelles']    = trim((string) _request('versions_manuelles'));
 	$config['retention_journal']     = max(1, (int) _request('retention_journal'));
 	$config['retention_sauvegardes'] = max(1, (int) _request('retention_sauvegardes'));

@@ -149,11 +149,50 @@ Retour : `purge` avec le nombre de fichiers supprimés par cible.
 
 ### `sauvegarde_creer`
 
-Arguments : `sans_statistiques` (booléen), `exclure` (tableau de tables).
+Arguments : `sans_statistiques` (booléen), `exclure` (tableau de tables),
+`decoupee` (booléen), `reprendre` (identifiant d'un export en cours).
 
 Produit un export SQL gzip dans `tmp/dashagent/sauvegardes/`. Retour :
 `sauvegarde` avec `identifiant`, `fichier`, `octets`, `sha256`, `date`,
-`tables`, `duree_ms`.
+`tables`, `tranches`, `duree_ms`.
+
+**Sans `decoupee`, l'export se fait d'un seul tenant**, comme avant la 1.0.21 de
+l'agent : c'est ce qu'attend une tour de contrôle ancienne, à qui une tranche et
+un `termine` à faux qu'elle ne sait pas lire feraient croire la sauvegarde
+faite.
+
+**Avec `decoupee`**, l'agent exporte pendant `_DASHAGENT_SAUVEGARDE_BUDGET`
+secondes (vingt par défaut) et rend la main. La réponse porte alors :
+
+| Clef | Sens |
+| --- | --- |
+| `termine` | faux tant qu'il reste des tables à exporter |
+| `reprendre` | identifiant à renvoyer dans l'appel suivant |
+| `avancement` | `tables`, `tables_total`, `table`, `lignes`, `octets`, `tranches` |
+
+Le contrat est celui des chantiers et des actions de parc : tant que `termine`
+est faux, on rappelle **la même opération**, en ajoutant `reprendre`.
+
+Le budget n'est pas calé sur ce que PHP tient, mais sur ce qu'un frontal
+supporte : le `first_byte_timeout` d'un Varnish vaut soixante secondes par
+défaut, et un CDN d'hébergeur ne l'expose nulle part.
+
+Entre deux tranches, l'agent garde un état à côté du fichier partiel
+(`sauvegarde-<identifiant>.etat.json`) : table en cours, rang atteint, et
+**taille du fichier au dernier point de contrôle**. C'est cette taille qui rend
+la reprise sûre — un processus tué en plein milieu d'une tranche laisse des
+octets que l'état ne mentionne pas, et ils sont tronqués avant qu'on reprenne.
+Sans cela, la reprise écrirait à la suite d'un membre gzip inachevé, ou
+rejouerait des lignes déjà exportées : une archive plausible, et fausse.
+
+Chaque tranche ajoute **un membre gzip** au fichier. Un gzip est une suite de
+membres (RFC 1952) et `gunzip` les relit à la file ; côté tour de contrôle,
+`dashboard_sauvegarde_verifier()` les parcourt un par un.
+
+Un `reprendre` inconnu est refusé. Un appel `decoupee` **sans** `reprendre`
+adopte l'export déjà en chantier s'il porte les mêmes options et date de moins
+d'une heure : c'est ce qui sauve le travail quand c'est la réponse de la
+première tranche qui s'est perdue.
 
 ### `sauvegarde_lister`, `sauvegarde_supprimer`
 
@@ -165,6 +204,10 @@ restaurent. Ils ne valent rien comme sauvegarde et beaucoup comme indice —
 leur présence prouve que PHP a été interrompu en cours d'écriture, ce qui
 désigne une limite du site géré plutôt que le cache en frontal. Les agents
 d'avant la 1.0.17 n'en rendent pas.
+
+Chaque entrée porte depuis la 1.0.21 un booléen `reprise` : un export découpé
+**en cours** n'a pas été tué, il attend sa tranche suivante. Les confondre
+enverrait chercher une panne de `max_execution_time` là où il n'y en a pas.
 
 ### `sauvegarde_telecharger`
 
@@ -414,6 +457,15 @@ bord ; l'agent n'a pas de valeur de repli et refuse si rien n'est transmis. Le
 défaut côté parc désigne le livrable publié sur la forge communautaire, sur une
 **branche** : chaque dépôt sert donc ce qui y a été poussé. Pointer une release
 figerait la version déposée.
+
+Argument facultatif `sha256` : l'empreinte à laquelle le fichier téléchargé doit
+répondre. Vide, rien n'est vérifié — c'est le réglage qui convient à une adresse
+de branche, dont le contenu change à chaque poussée amont. Renseignée, l'agent
+refuse tout fichier qui n'y répond pas **et rend l'empreinte qu'il a reçue**
+(`sha256_obtenu`), sans quoi mettre l'épingle à jour demanderait d'aller
+télécharger le livrable à la main pour le hacher. Le https atteste du transport,
+jamais du contenu : l'épingle est le seul moyen de déployer sur tout un parc un
+mégaoctet de code qu'on a relu une fois.
 
 Le contenu est contrôlé avant écriture : du PHP, moins de huit méga-octets, et
 portant la fonction que son gabarit engendre — un spip_loader n'y passe pas,

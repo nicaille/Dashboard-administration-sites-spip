@@ -473,6 +473,7 @@
 ]
 #SET{retour_check,#SELF|ancre_url{check}}
 #SET{url_check_source,#VAL|dashboard_url_check_source}
+#SET{empreinte_check,#VAL|dashboard_empreinte_check}
 [(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
 <div class="dashboard-fiche" id="check"
      data-dashboard-check="[(#URL_ACTION_AUTEUR{dashboard_serveur,#ID_DASHBOARD_SITE})]">
@@ -486,6 +487,9 @@
 		]
 	</p>
 	<div data-check-bloc="etat"></div>
+	[(#GET{empreinte_check}|oui)
+	<p class="explication"><:dashboard:check_epingle:> : <code>[(#GET{empreinte_check}|entites_html)]</code></p>
+	]
 	[(#GET{url_check_source}|oui)
 	<p class="boutons">
 		[(#BOUTON_ACTION{<:dashboard:action_check_maj:>,#URL_ACTION_AUTEUR{dashboard_operation,check_maj/#ID_DASHBOARD_SITE,#GET{retour_check}},btn btn_danger,<:dashboard:check_confirmation:>})]

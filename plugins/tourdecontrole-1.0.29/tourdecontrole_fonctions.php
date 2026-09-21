@@ -547,6 +547,25 @@ function dashboard_url_check_source() {
 }
 
 /**
+ * L'empreinte SHA-256 à laquelle le livrable de SPIP Check doit répondre.
+ *
+ * Facultative, et vide par défaut : l'adresse par défaut désigne une branche,
+ * dont le contenu change à chaque poussée amont, et une épingle posée d'office
+ * bloquerait le dépôt au premier commit venu. Elle a son emploi là où le parc
+ * décide ce qu'il déploie : un miroir interne, une release, une version relue.
+ *
+ * Aucun paramètre, parce que SPIP l'appelle en `#VAL|dashboard_empreinte_check`
+ * et lui passe donc une chaîne vide.
+ *
+ * @return string Chaîne vide si aucune épingle n'est posée
+ */
+function dashboard_empreinte_check() {
+	include_spip('inc/config');
+
+	return strtolower(trim((string) lire_config('dashboard/sha256_spip_check', '')));
+}
+
+/**
  * Ce site a-t-il tel plugin actif ?
  *
  * Sert à n'afficher un onglet que là où il a un sens : proposer le tableau de

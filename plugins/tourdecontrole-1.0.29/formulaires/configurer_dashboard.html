@@ -70,6 +70,12 @@
 					<input type="url" class="text" name="url_spip_check" id="url_spip_check" value="[(#ENV{url_spip_check}|entites_html)]" />
 					<p class="explication"><:dashboard:explication_url_spip_check:></p>
 				</li>
+				<li class="editer editer_sha256_spip_check[ (#ENV**{erreurs}|table_valeur{sha256_spip_check}|oui)erreur]">
+					<label for="sha256_spip_check"><:dashboard:label_sha256_spip_check:></label>
+					[<span class="erreur_message">(#ENV**{erreurs}|table_valeur{sha256_spip_check})</span>]
+					<input type="text" class="text" name="sha256_spip_check" id="sha256_spip_check" value="[(#ENV{sha256_spip_check}|entites_html)]" />
+					<p class="explication"><:dashboard:explication_sha256_spip_check:></p>
+				</li>
 				<li class="editer editer_versions_manuelles[ (#ENV**{erreurs}|table_valeur{versions_manuelles}|oui)erreur]">
 					<label for="versions_manuelles"><:dashboard:label_versions_manuelles:></label>
 					[<span class="erreur_message">(#ENV**{erreurs}|table_valeur{versions_manuelles})</span>]

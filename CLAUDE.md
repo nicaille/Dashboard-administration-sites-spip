@@ -2,8 +2,8 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.28`,
-`plugins/tourdecontrole_agent-1.0.20`.
+`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.29`,
+`plugins/tourdecontrole_agent-1.0.21`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
 dans le même commit que le changement de `version=` dans son `paquet.xml`. Un
@@ -108,6 +108,36 @@ tolérance d'horloge, la date venant du site géré et non de nous.
 Une sauvegarde adoptée n'a pas d'empreinte : l'inventaire n'en publie pas. Le
 rapatriement contrôle alors la taille annoncée, faute de SHA-256.
 
+### Mieux que constater : ne pas s'exposer au silence
+
+Le rattrapage sait dire ce qui s'est passé ; il ne sait pas l'empêcher. Depuis
+l'agent 1.0.21, la sauvegarde **se découpe** : l'agent exporte pendant
+`_DASHAGENT_SAUVEGARDE_BUDGET` — vingt secondes, choisies sur la patience du
+frontal et non sur ce que PHP tient — puis rend la main, et la tour rappelle la
+même opération tant que `termine` est faux. Le contrat est celui des chantiers
+et des actions de parc.
+
+Ce qui tient le fil d'une tranche à l'autre est un état à côté du `.partiel` :
+table en cours, rang atteint, et **taille du fichier au dernier point de
+contrôle**. Cette dernière est tout : un processus tué en plein milieu d'une
+tranche laisse des octets que l'état ne mentionne pas, et
+`dashagent_sauvegarde_recaler()` les tronque avant de reprendre. Sans elle, la
+reprise écrirait à la suite d'un membre gzip inachevé, ou rejouerait des lignes
+déjà exportées — une archive plausible, que rien ensuite ne signalerait comme
+fausse.
+
+Le découpage renverse la règle du silence sur un point, et sur un seul : ici
+**un silence se retente**, parce que la reprise est idempotente. Rien de tel
+dans l'export d'un seul tenant, où retenter voudrait dire tout refaire.
+`dashboard_sauvegarde_suite()` porte cette décision, et se vérifie donc sans
+réseau.
+
+Deux compatibilités, dans les deux sens, et c'est là qu'est le piège : un agent
+d'avant la 1.0.21 ignore `decoupee` et **ne dit rien de `termine`**. Son silence
+sur cette clef vaut « c'est fini » — le prendre pour un « pas fini » ferait
+boucler la tour sur un export déjà publié. Réciproquement, une tour ancienne
+n'envoie pas `decoupee`, et l'agent lui doit alors l'export d'un seul tenant.
+
 **Présente ne veut pas dire valide.** Empreinte et taille attestent le transfert,
 jamais le contenu : un export interrompu sur le site géré voyage parfaitement.
 Trois protections, à trois endroits :
@@ -117,9 +147,17 @@ Trois protections, à trois endroits :
 - chaque dump se termine par `_DASHAGENT_SAUVEGARDE_FIN`. Le pied de page du gzip
   prouve qu'aucun octet n'a été perdu ; il ne dit rien de ce que le script avait
   encore à écrire quand il a été tué entre deux tables ;
-- `dashboard_sauvegarde_verifier()` relit l'archive au rapatriement : CRC32 et
-  taille décompressée du pied de page, recalculés sur le flux — ce que fait
-  `gzip -t`.
+- `dashboard_sauvegarde_verifier()` relit l'archive au rapatriement, membre par
+  membre : chacun doit se terminer proprement — zlib vérifie lui-même son CRC32
+  et sa taille décompressée —, et le fichier doit s'achever sur une frontière de
+  membre. C'est ce que fait `gzip -t`.
+
+**Un gzip n'a pas forcément un seul membre** (RFC 1952), et une sauvegarde
+découpée en a un par tranche. Le contrôle d'avant ne lisait que les huit derniers
+octets, c'est-à-dire le pied du *dernier* membre, et les comparait au flux tout
+entier : il aurait déclaré tronquée toute archive découpée. Le parcours passe par
+`inflate_add()`, dont `inflate_get_read_len()` donne la frontière exacte de
+chaque membre — la seule façon de savoir où l'un finit sans deviner.
 
 Ses deux verdicts ne se confondent pas : `ok` à faux **prouve** que le fichier
 est abîmé, `complet` à faux dit seulement que la marque n'a pas été vue. Les
@@ -419,6 +457,14 @@ tiret, et c'est celle de son voisin de palier, `spip_loader.php`.
 
 L'autorisation `op_check` lui est propre : `op_loader` ne l'ouvre pas, et
 réciproquement.
+
+Son adresse désignant une branche, le parc peut **épingler une empreinte**
+(`sha256_spip_check`) : l'agent refuse alors tout fichier qui n'y répond pas, et
+rend celle qu'il a reçue — sans quoi mettre l'épingle à jour après une
+publication amont demanderait d'aller télécharger le mégaoctet à la main pour le
+hacher. Vide par défaut, parce qu'une épingle posée d'office sur une branche
+bloquerait le dépôt au premier commit venu. Le https atteste du transport,
+jamais du contenu.
 
 ## Franchir la porte n'est pas s'authentifier
 
