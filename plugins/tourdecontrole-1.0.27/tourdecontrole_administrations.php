@@ -103,6 +103,14 @@ function tourdecontrole_upgrade($nom_meta_base_version, $version_cible) {
 		['tourdecontrole_creer_tables'],
 	];
 
+	// 1.0.8 : un site gardé par un htpasswd renvoie un 401 avant que PHP ne
+	// s'exécute — la signature du protocole n'y peut rien, le code qui la
+	// vérifie n'est jamais atteint. D'où deux colonnes pour les identifiants
+	// HTTP du serveur.
+	$maj['1.0.8'] = [
+		['tourdecontrole_creer_tables'],
+	];
+
 	include_spip('base/upgrade');
 	maj_plugin($nom_meta_base_version, $version_cible, $maj);
 }

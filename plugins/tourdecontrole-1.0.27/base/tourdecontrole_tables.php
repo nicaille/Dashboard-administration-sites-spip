@@ -27,6 +27,13 @@ function dashboard_schema_sites() {
 			'url_site'          => "varchar(255) DEFAULT '' NOT NULL",
 			'url_agent'         => "varchar(255) DEFAULT '' NOT NULL",
 			'secret'            => "text DEFAULT '' NOT NULL",
+
+			// Authentification HTTP du serveur, quand un htpasswd garde le site.
+			// Le nom d'utilisateur n'est pas un secret et reste en clair — le
+			// voir en base aide à diagnostiquer ; le mot de passe est chiffré
+			// comme le secret partagé, et ne ressort jamais du formulaire.
+			'auth_user'         => "varchar(128) DEFAULT '' NOT NULL",
+			'auth_pass'         => "text DEFAULT '' NOT NULL",
 			'groupe'            => "varchar(64) DEFAULT '' NOT NULL",
 			'notes'             => "text DEFAULT '' NOT NULL",
 
@@ -85,7 +92,7 @@ function tourdecontrole_declarer_tables_objets_sql($tables) {
 		// « statut » n'y figure pas volontairement : objet_modifier() le routerait
 		// vers objet_instituer(), en plus de l'écrire lui-même. Le formulaire
 		// l'institue explicitement.
-		'champs_editables'  => ['titre', 'url_site', 'url_agent', 'groupe', 'notes'],
+		'champs_editables'  => ['titre', 'url_site', 'url_agent', 'auth_user', 'groupe', 'notes'],
 		'champs_versionnes' => [],
 		'rechercher_champs' => ['titre' => 8, 'url_site' => 4, 'notes' => 1],
 

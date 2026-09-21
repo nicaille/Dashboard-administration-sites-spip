@@ -28,6 +28,15 @@ function dashagent_config($clef, $defaut = null) {
 }
 
 /**
+ * Le journal du core. Muet ici, mais présent : `dashboard_chiffrer()` s'en sert
+ * pour signaler qu'un secret part en clair faute de chiffrement, et sans ce
+ * stub la fonction tombe au lieu de rendre sa valeur de repli.
+ */
+function spip_log($message, $nom = 'spip') {
+	$GLOBALS['spip_log_test'][] = [$nom, $message];
+}
+
+/**
  * `dashboard_config()` est fourni par le plugin lui-même : on ne stube que sa
  * source.
  *
