@@ -2,8 +2,8 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.30`,
-`plugins/tourdecontrole_agent-1.0.22`.
+`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.31`,
+`plugins/tourdecontrole_agent-1.0.23`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
 dans le même commit que le changement de `version=` dans son `paquet.xml`. Un
@@ -534,6 +534,50 @@ répondu. `dashagent_svp_relecture_constat()` porte cette règle, sans réseau n
 base, donc vérifiable. `dashboard_depots_constat()` la relit côté tour, et un
 agent d'avant la 1.0.22 qui ne rend aucun constat vaut « on ne sait pas », pas
 « c'est cassé ».
+
+## Un fichier de langue rend son tableau — et remplit encore la globale
+
+SPIP 4.4 déprécie `$GLOBALS[$GLOBALS['idx_lang']] = [ … ];` au profit d'un
+`return [ … ];`. `lire_fichier_langue()` fait `include $fichier`, prend le
+retour s'il est un tableau, et ne retombe sur la globale qu'en signalant la
+dépréciation — un avertissement par module et par langue, dans les journaux de
+chaque site du parc.
+
+**Mais s'en tenir au retour casserait les SPIP d'avant la 4.4**, dont le
+chargeur ne regarde que la globale : le module perdrait toutes ses chaînes, et
+l'espace privé afficherait ses clefs brutes. Nos paquets se déclarent
+`[4.1.0;4.*]`, donc les deux formes cohabitent, départagées par la fonction qui
+a apporté la nouvelle :
+
+```php
+$lang = [ … ];
+
+if (!function_exists('lire_fichier_langue') && isset($GLOBALS['idx_lang'])) {
+	$GLOBALS[$GLOBALS['idx_lang']] = $lang;
+}
+
+return $lang;
+```
+
+Sur 4.4, la condition est fausse et rien ne traîne — la clef que le chargeur
+pose dans `idx_lang` y est temporaire et n'est jamais relue. Sur 4.1 à 4.3, la
+globale est remplie comme avant. Les deux chemins sont éprouvés en dur, chacun
+dans son propre processus : PHP hisse les déclarations de fonction, si bien
+qu'un `function_exists()` testé après coup dans le même script répond déjà vrai
+— le premier essai s'y est laissé prendre.
+
+Le garde-fou `if (!defined('_ECRIRE_INC_VERSION')) { return; }` **n'a plus sa
+place ici** : un `return;` nu rend `null`, que SPIP refuse. Il journalise alors
+« Fichier de langue incorrect » et rend un tableau vide. Les fichiers de langue
+du core n'en portent aucun : ils ne font que rendre un tableau.
+
+`tests/test_structure.php` exige les trois : un `return $lang;`, jamais de
+`return;` nu, et toute écriture de globale gardée par le `function_exists()`.
+
+Ce que la conversion ne touche pas : le test lit les clefs **au texte**, par une
+expression régulière sur `^\t'clef' =>`, jamais par `include`. Le décompte des
+références résolues n'a donc pas bougé — c'est la première chose à regarder
+après un tel remaniement, un test qui perd son sujet ne le disant jamais.
 
 ## Le serveur intégré de PHP n'est pas exempt d'opcache
 

@@ -12,7 +12,7 @@
 $racine = dirname(__DIR__);
 
 /**
- * Les dossiers de plugins portent leur version (`tourdecontrole-1.0.30`), pour qu'une
+ * Les dossiers de plugins portent leur version (`tourdecontrole-1.0.31`), pour qu'une
  * mise en ligne n'écrase pas la version précédente. On les retrouve donc par
  * préfixe, sans quoi ce fichier serait à retoucher à chaque montée de version.
  *
@@ -262,6 +262,34 @@ foreach ($plugins as $plugin) {
 		"lang/paquet-$prefixe" . '_fr.php présent',
 		is_file($plugin . "/lang/paquet-$prefixe" . '_fr.php')
 	);
+	/*
+	 * SPIP 4.4 déprécie le fichier de langue qui remplit une globale : il doit
+	 * **rendre** son tableau. `lire_fichier_langue()` fait `include $fichier`,
+	 * prend le retour s'il est un tableau, et ne retombe sur
+	 * `$GLOBALS[$GLOBALS['idx_lang']]` qu'en signalant la dépréciation.
+	 *
+	 * Mais les paquets se déclarent compatibles depuis SPIP 4.1, dont le
+	 * chargeur ne regarde que la globale : s'en tenir au retour y effacerait
+	 * toutes les chaînes du module — bien pire que l'avertissement réparé. Les
+	 * deux formes cohabitent donc, départagées par la présence de la fonction
+	 * qui a apporté la nouvelle.
+	 *
+	 * Et le garde-fou `_ECRIRE_INC_VERSION` n'a plus sa place ici : un
+	 * `return;` nu rendrait `null`, que SPIP refuse — « Fichier de langue
+	 * incorrect », et le module perd tout. Les fichiers de langue du core n'en
+	 * portent aucun.
+	 */
+	foreach (glob($plugin . '/lang/*.php') as $fichier) {
+		$source = file_get_contents($fichier);
+		$nom    = basename($fichier);
+		verifier("$nom rend son tableau", (bool) preg_match('/^return \$lang;$/m', $source));
+		verifier("$nom ne rend jamais null", strpos($source, "\n	return;\n") === false);
+		if (strpos($source, 'idx_lang') !== false) {
+			verifier("$nom ne remplit la globale que pour les chargeurs d’avant 4.4",
+				strpos($source, "!function_exists('lire_fichier_langue')") !== false);
+		}
+	}
+
 	foreach (glob($plugin . '/lang/*_fr.php') as $reference) {
 		$module = basename($reference, '_fr.php');
 		$traduction = $plugin . "/lang/$module" . '_en.php';
