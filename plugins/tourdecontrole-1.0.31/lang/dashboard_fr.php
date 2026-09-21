@@ -1,11 +1,19 @@
 <?php
 // Fichier de langue du plugin « Tour de contrôle d'un parc de sites SPIP » — français
 
-if (!defined('_ECRIRE_INC_VERSION')) {
-	return;
-}
+/* SPIP 4.4 attend qu'un fichier de langue **rende** son tableau, et déprécie
+   le remplissage d'une globale — un avertissement par module et par langue dans
+   les journaux de chaque site.
 
-$GLOBALS[$GLOBALS['idx_lang']] = [
+   Mais le paquet se déclare compatible depuis SPIP 4.1, dont le chargeur ne
+   regarde que la globale : ne faire que rendre le tableau y effacerait toutes
+   les chaînes du module, ce qui est bien pire que l'avertissement qu'on répare.
+
+   On fait donc les deux, en choisissant sur la présence de la fonction qui a
+   apporté la nouvelle forme : `lire_fichier_langue()` prend notre retour, les
+   chargeurs plus anciens liront la globale. Rien ne traîne ainsi sur 4.4, où
+   la clef d'`idx_lang` est temporaire et n'est jamais relue. */
+$lang = [
 
 	// A
 	'a_mettre_a_jour'          => 'à mettre à jour',
@@ -288,3 +296,9 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'graphe_tableau' => 'Voir les chiffres',
 	'titre_waf_parc' => 'Tendance des attaques',
 ];
+
+if (!function_exists('lire_fichier_langue') && isset($GLOBALS['idx_lang'])) {
+	$GLOBALS[$GLOBALS['idx_lang']] = $lang;
+}
+
+return $lang;
