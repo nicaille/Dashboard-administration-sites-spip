@@ -2,7 +2,7 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.27`,
+`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.28`,
 `plugins/tourdecontrole_agent-1.0.20`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
@@ -20,6 +20,24 @@ la plus élevée quand deux dossiers déclarent le même (`ecrire/inc/plugin.php
 
 À ne pas confondre avec le déclenchement des migrations : `maj_plugin()` compare
 la version du `paquet.xml` à celle mémorisée en meta, jamais le nom du dossier.
+
+### Une version publiée est figée
+
+Corollaire, et la faute est arrivée : l'authentification HTTP a été livrée dans
+un dossier `1.0.27` **déjà publié au dépôt**, sans montée de version. Le dépôt
+s'est mis à servir un 1.0.27 dont le contenu différait de celui que les sites
+avaient installé — et SVP compare des numéros. Même numéro, aucune mise à jour
+proposée : la fonction était inatteignable, et la migration de schéma qui
+l'accompagnait ne pouvait pas se jouer.
+
+Rien ne le signale. Le dépôt publie sans broncher, les tests passent, et le parc
+affiche une version qui a l'air juste.
+
+**Dès qu'un `outils/generer-depot.php` a tourné sur une version, cette version
+est morte** : le moindre changement de code dans son dossier impose un
+numéro de plus, fût-ce dans la même session et pour trois lignes. Dans le doute,
+regarder les exécutions de `.github/workflows/depot.yml` : ce qui y est passé
+est dehors.
 
 **Sur les sites administrés, c'est SVP qui applique la règle** quand il est là :
 `inc/dashagent_svp.php` lui délègue la mise à jour, et il range les plugins dans
