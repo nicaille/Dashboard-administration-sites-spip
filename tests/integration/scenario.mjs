@@ -1714,10 +1714,15 @@ writeFileSync(site + '/gardien.php',
 const sansAuth = await page.evaluate(async (u) => {
 	const r = await fetch(u, { method: 'POST' });
 	return r.status;
-}, base + '/gardien.php');
+}, base + '/gardien.php?action=dashagent');
 dit('le gardien refuse une requête sans identifiants', sansAuth === 401, String(sansAuth));
 
-sqlEcrire("UPDATE spip_dashboard_sites SET url_agent = '" + base + "/gardien.php' WHERE id_dashboard_site = 1");
+/* L'adresse garde son `action=dashagent` : le formulaire de la fiche refuse une
+   url_agent qui ne le porte pas, et il a raison — c'est la garde qui attrape
+   l'erreur classique, coller l'adresse du site au lieu de celle de l'agent. Le
+   gardien, lui, ignore la requête et pose l'action lui-même. */
+const urlGardien = base + '/gardien.php?action=dashagent';
+sqlEcrire("UPDATE spip_dashboard_sites SET url_agent = '" + urlGardien + "' WHERE id_dashboard_site = 1");
 
 // Sans identifiants enregistrés, la synchronisation échoue — et le message le
 // dit, plutôt que de laisser croire à une panne de l'agent.
@@ -1729,6 +1734,9 @@ dit('le 401 est rapporté tel quel', /401/.test(apres401.erreur), (apres401.erre
 
 // On les renseigne par le formulaire, comme le ferait un humain.
 await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1&modifier=oui', { waitUntil: 'domcontentloaded' });
+dit('le formulaire garde l’adresse du gardien',
+	(await page.inputValue('[name="url_agent"]')) === urlGardien,
+	await page.inputValue('[name="url_agent"]'));
 await page.fill('[name="auth_user"]', 'jean');
 await page.fill('[name="auth_pass_clair"]', 'ouvre-toi');
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').last().click()]);
@@ -1770,7 +1778,14 @@ await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form
 await page.waitForTimeout(800);
 const retire = JSON.parse(sql('SELECT auth_user, auth_pass FROM spip_dashboard_sites WHERE id_dashboard_site = 1'))[0];
 dit('le retrait efface les deux champs',
-	(retire.auth_user || '') === '' && (retire.auth_pass || '') === '');
+	(retire.auth_user || '') === '' && (retire.auth_pass || '') === '',
+	`user=${retire.auth_user || '(vide)'} pass=${(retire.auth_pass || '(vide)').slice(0, 3)}`);
+// Et la porte se referme pour de bon : sans identifiants, le gardien refuse.
+sqlEcrire("UPDATE spip_dashboard_sites SET url_agent = '" + urlGardien + "' WHERE id_dashboard_site = 1");
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await bouton(page, 'Synchroniser');
+dit('après retrait, le site redevient injoignable',
+	JSON.parse(sql('SELECT etat FROM spip_dashboard_sites WHERE id_dashboard_site = 1'))[0].etat === 'erreur');
 
 // On remet le site sur son agent direct : la suite du parcours n'a pas à
 // traverser le gardien.
