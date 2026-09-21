@@ -2,8 +2,8 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.29`,
-`plugins/tourdecontrole_agent-1.0.21`.
+`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.30`,
+`plugins/tourdecontrole_agent-1.0.22`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
 dans le même commit que le changement de `version=` dans son `paquet.xml`. Un
@@ -498,6 +498,42 @@ Deux règles qui tiennent à la fuite d'identifiants :
 Tout ce qui part vers un agent passe par `dashboard_http_post()` — l'appel signé
 et le rapatriement de sauvegarde. Un nouveau chemin vers un site géré se range
 derrière elle, pas à côté, sans quoi il ignorera le htpasswd.
+
+## « Relire les dépôts » ne relisait rien
+
+SVP ne télécharge pas le catalogue d'un dépôt. Il appelle
+`copie_locale($url, 'modif')`, qui ne va le chercher **que si le serveur le dit
+plus récent que la copie locale** — rangée non pas sous `tmp/`, où on la
+cherche, mais sous **`IMG/distant/xml/<nom>-<hachage>.xml`**.
+
+Or cette copie voit sa date rafraîchie à chaque vérification, même quand rien
+n'est rapatrié. D'où un verrou qui se referme tout seul :
+
+1. une relecture tombe pendant qu'un cache en frontal sert encore l'ancien
+   fichier → 304, copie conservée, **date poussée à maintenant** ;
+2. la date de la copie dépasse désormais celle du catalogue réellement publié ;
+3. toute relecture ultérieure reçoit donc un 304, **pour toujours**.
+
+Rencontré en vrai sur un site du parc : six heures de relectures, une date de
+fraîcheur qui avançait à chaque fois, et un catalogue vieux d'une publication
+entière. Rien ne le signalait — ni SVP, qui rend `true`, ni le parc, qui
+comptait ses mises à jour sur un inventaire faux. Vider `tmp/`, supprimer et
+recréer le dépôt, changer son adresse : aucun de ces gestes n'y touche. Le
+changement d'adresse encore moins que les autres, puisque SVP n'utilise pas
+celle qu'on déclare — il en dérive des variantes (`…thin.spip-<branche>.xml`,
+`…thin.xml`, puis l'originale) et prend la première qui répond en HEAD.
+
+**Forcer veut dire forcer** : depuis l'agent 1.0.22, `age_max = 0` efface la
+copie locale de chaque variante et vide `sha_paquets` avant d'appeler SVP. Sans
+fichier local, `copie_locale()` n'a plus de date à comparer.
+
+Et comme partout ailleurs ici, on va **constater** plutôt que conclure : la
+copie ayant été effacée avant l'appel, une copie revenue prouve le
+téléchargement, et rien de revenu prouve le contraire — quoi que SVP ait
+répondu. `dashagent_svp_relecture_constat()` porte cette règle, sans réseau ni
+base, donc vérifiable. `dashboard_depots_constat()` la relit côté tour, et un
+agent d'avant la 1.0.22 qui ne rend aucun constat vaut « on ne sait pas », pas
+« c'est cassé ».
 
 ## Le serveur intégré de PHP n'est pas exempt d'opcache
 

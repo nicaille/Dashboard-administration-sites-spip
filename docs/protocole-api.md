@@ -221,6 +221,36 @@ enverrait chercher une panne de `max_execution_time` là où il n'y en a pas.
 Argument : `identifiant`. **Ne renvoie pas de JSON** mais le fichier lui-même,
 en `application/gzip`, avec l'empreinte dans l'en-tête `X-Dashagent-Sha256`.
 
+#### Le forçage, et ce qu'il permet d'affirmer
+
+`age_max = 0` ne veut pas seulement dire « quel que soit l'âge ». Depuis la
+1.0.22, l'agent **efface la copie locale du catalogue** — sous
+`IMG/distant/xml/`, une par variante d'adresse — et vide `sha_paquets` avant
+d'appeler SVP.
+
+Sans quoi le forçage ne force rien : SVP passe par `copie_locale($url, 'modif')`,
+qui ne télécharge que si le serveur annonce le fichier plus récent que la copie,
+et cette copie est redatée à chaque vérification même sans rapatriement. Une
+seule vérification faite pendant qu'un cache en frontal servait l'ancien fichier
+suffit à la rendre définitivement « plus récente » que le catalogue publié.
+
+La réponse porte alors une clef `relecture` :
+
+| Clef | Sens |
+| --- | --- |
+| `constat` | `lu` (sans forçage), `telecharge`, ou `sans_telechargement` |
+| `fiable` | faux quand la copie effacée n'est pas revenue |
+| `change` | l'empreinte du catalogue a changé |
+| `sha` | empreinte après relecture |
+| `message` | ce qu'il y a à dire, vide quand tout va bien |
+
+Un catalogue inchangé rend la même empreinte : `change` à faux n'est pas un
+échec. Ce qui l'est, c'est `fiable` à faux — la copie a été effacée, SVP a rendu
+la main, et rien n'a été rapatrié.
+
+Les agents d'avant la 1.0.22 ne rendent pas cette clef. Son absence vaut « on ne
+sait pas » : la tour se tait, comme avant.
+
 ### `plugin_maj_preflight`
 
 Argument : `prefixe`. Indique les stratégies utilisables (`git`, `zip`), si le

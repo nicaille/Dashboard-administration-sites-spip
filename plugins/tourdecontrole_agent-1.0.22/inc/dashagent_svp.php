@@ -119,9 +119,26 @@ function dashagent_svp_depots() {
  * et sa réindexation : de quoi dépasser le temps d'exécution d'un hébergement
  * mutualisé si on les enchaîne. Un par appel, donc, comme pour le reste.
  *
+ * **Forcer veut dire forcer.** SVP ne télécharge pas le catalogue : il appelle
+ * `copie_locale($url, 'modif')`, qui ne va le chercher que si le serveur le dit
+ * plus récent que la copie rangée sous `IMG/distant/`. Or cette copie voit sa
+ * date rafraîchie à chaque vérification, même quand rien n'est téléchargé. Il
+ * suffit donc d'un contrôle tombé pendant qu'un cache en frontal servait encore
+ * l'ancien fichier pour que la copie devienne « plus récente » que le catalogue
+ * publié — et plus aucun téléchargement ne peut alors se déclencher, jamais.
+ *
+ * Rencontré en vrai : un site du parc a relu son dépôt pendant six heures, avec
+ * une date de fraîcheur qui avançait à chaque fois, sur un catalogue vieux de la
+ * publication d'avant. Rien ne le signalait.
+ *
+ * Quand l'appelant force, on efface donc la copie locale de chaque variante
+ * d'adresse et l'empreinte du dépôt : sans copie, `copie_locale()` n'a plus
+ * d'échappatoire. Et on regarde ensuite si une copie est revenue — c'est la
+ * preuve qu'un téléchargement a bien eu lieu, et la seule dont on dispose.
+ *
  * @param array $args
  *     - int `age_max` : ne rafraîchir qu'au-delà de cet âge, en secondes.
- *       Zéro force le rafraîchissement de tous.
+ *       Zéro force le rafraîchissement de tous, copie locale effacée comprise.
  * @return array
  */
 function dashagent_svp_depots_actualiser($args = []) {
@@ -140,7 +157,18 @@ function dashagent_svp_depots_actualiser($args = []) {
 	@set_time_limit(300);
 	include_spip('inc/svp_depoter_distant');
 
-	$depot = reset($restants);
+	$depot  = reset($restants);
+	$forcer = ((int) ($args['age_max'] ?? 0) === 0);
+
+	$sha_avant = (string) sql_getfetsel('sha_paquets', 'spip_depots', 'id_depot = ' . (int) $depot['id']);
+	$effacees  = 0;
+	if ($forcer) {
+		$effacees = count(dashagent_svp_copies_effacer((string) $depot['source']));
+		// L'empreinte aussi : elle est l'autre moitié du garde-fou, et SVP
+		// s'arrête dessus avant même de regarder ce qu'il a téléchargé.
+		sql_updateq('spip_depots', ['sha_paquets' => ''], 'id_depot = ' . (int) $depot['id']);
+	}
+
 	$niveau = ob_get_level();
 	ob_start();
 	$echec = null;
@@ -176,10 +204,144 @@ function dashagent_svp_depots_actualiser($args = []) {
 	// la date doit le dire.
 	sql_updateq('spip_depots', ['maj' => date('Y-m-d H:i:s')], 'id_depot = ' . (int) $depot['id']);
 
+	$relecture = dashagent_svp_relecture_constat(
+		$forcer,
+		$effacees,
+		count(dashagent_svp_copies_presentes((string) $depot['source'])),
+		$sha_avant,
+		(string) sql_getfetsel('sha_paquets', 'spip_depots', 'id_depot = ' . (int) $depot['id'])
+	);
+
 	$reste = count(dashagent_svp_depots_a_rafraichir($age_max));
 
 	return dashagent_svp_depots_conclure(!$reste, $depot['titre'], $reste)
-		+ ['journal' => dashagent_svp_texte($sortie)];
+		+ ['journal' => dashagent_svp_texte($sortie), 'relecture' => $relecture];
+}
+
+/**
+ * Les copies locales du catalogue d'un dépôt, une par variante d'adresse.
+ *
+ * SVP ne télécharge pas l'adresse déclarée : il en dérive des variantes —
+ * `…thin.spip-<branche>.xml`, `…thin.xml`, puis l'originale — et prend la
+ * première qui répond. Chacune a sa propre copie sous `IMG/distant/`, nommée
+ * d'après l'adresse. Les chercher toutes, donc, et pas seulement celle de
+ * l'adresse qu'on croit utilisée.
+ *
+ * @param string $url Adresse déclarée du catalogue
+ * @return array Chemins, relatifs à la racine du site
+ */
+function dashagent_svp_copies($url) {
+	include_spip('inc/distant');
+	$url = trim((string) $url);
+	if ($url === '' || !function_exists('fichier_copie_locale')) {
+		return [];
+	}
+
+	$urls = [$url];
+	if (function_exists('svp_depoter_distant_variantes_url')) {
+		$version = (string) ($GLOBALS['spip_version_branche'] ?? '');
+		$bouts   = explode('.', $version);
+		$branche = isset($bouts[1]) ? $bouts[0] . '.' . $bouts[1] : $version;
+		$urls = array_merge($urls, array_values((array) svp_depoter_distant_variantes_url($url, $branche)));
+	}
+
+	$copies = [];
+	foreach (array_unique($urls) as $adresse) {
+		$copie = (string) fichier_copie_locale($adresse);
+		if ($copie !== '') {
+			$copies[$copie] = $copie;
+		}
+	}
+
+	return array_values($copies);
+}
+
+/**
+ * Celles de ces copies qui existent réellement sur le disque.
+ *
+ * @param string $url
+ * @return array
+ */
+function dashagent_svp_copies_presentes($url) {
+	$racine = defined('_DIR_RACINE') ? _DIR_RACINE : '';
+	$presentes = [];
+	foreach (dashagent_svp_copies($url) as $copie) {
+		if (is_file($racine . $copie)) {
+			$presentes[] = $copie;
+		}
+	}
+
+	return $presentes;
+}
+
+/**
+ * Efface les copies locales du catalogue d'un dépôt.
+ *
+ * C'est la seule façon d'obliger `copie_locale($url, 'modif')` à retélécharger :
+ * sans fichier local, elle n'a plus de date à comparer.
+ *
+ * @param string $url
+ * @return array Chemins réellement effacés
+ */
+function dashagent_svp_copies_effacer($url) {
+	$racine = defined('_DIR_RACINE') ? _DIR_RACINE : '';
+	$effacees = [];
+	foreach (dashagent_svp_copies_presentes($url) as $copie) {
+		if (@unlink($racine . $copie)) {
+			$effacees[] = $copie;
+		}
+	}
+
+	return $effacees;
+}
+
+/**
+ * Ce qu'on a le droit de conclure d'une relecture de dépôt.
+ *
+ * Trois constats, et ils ne se valent pas :
+ *
+ * - **`lu`** : relecture ordinaire, sans forçage. On ne sait pas si le
+ *   catalogue a été téléchargé, et on ne prétend pas le savoir ;
+ * - **`telecharge`** : on a effacé la copie locale, et une copie est revenue.
+ *   Le catalogue a donc bien été rapatrié. Que son empreinte ait changé ou non
+ *   ne dit rien de plus : un catalogue inchangé rend la même ;
+ * - **`sans_telechargement`** : on a effacé la copie, et rien n'est revenu.
+ *   SVP a pourtant répondu que tout allait bien. C'est le cas qu'il faut dire —
+ *   annoncer un dépôt relu alors que rien n'a été lu est exactement le silence
+ *   qu'on refuse ailleurs.
+ *
+ * Fonction pure : c'est la règle, elle se vérifie sans réseau ni base.
+ *
+ * @param bool $forcer
+ * @param int $effacees Copies locales supprimées avant l'appel
+ * @param int $retablies Copies locales retrouvées après
+ * @param string $sha_avant
+ * @param string $sha_apres
+ * @return array{constat: string, fiable: bool, change: bool, message: string, sha: string}
+ */
+function dashagent_svp_relecture_constat($forcer, $effacees, $retablies, $sha_avant, $sha_apres) {
+	$sha_avant = (string) $sha_avant;
+	$sha_apres = (string) $sha_apres;
+	$change    = ($sha_apres !== '' && $sha_apres !== $sha_avant);
+
+	if (!$forcer) {
+		return ['constat' => 'lu', 'fiable' => true, 'change' => $change,
+			'message' => '', 'sha' => $sha_apres];
+	}
+
+	if ((int) $retablies > 0) {
+		return ['constat' => 'telecharge', 'fiable' => true, 'change' => $change,
+			'message' => '', 'sha' => $sha_apres];
+	}
+
+	return [
+		'constat' => 'sans_telechargement',
+		'fiable'  => false,
+		'change'  => $change,
+		'message' => 'le catalogue n’a pas été téléchargé : SVP a rendu la main sans '
+			. 'rapatrier de fichier, la copie locale ayant été effacée avant l’appel',
+		'sha'     => $sha_apres,
+	];
 }
 
 /**
