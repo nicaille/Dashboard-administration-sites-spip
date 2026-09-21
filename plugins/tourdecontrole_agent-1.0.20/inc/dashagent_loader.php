@@ -270,3 +270,43 @@ function dashagent_loader_maj($args = []) {
 		'etat'           => $apres,
 	];
 }
+
+/**
+ * Retire le spip_loader de la racine du site.
+ *
+ * `spip_loader.php` est le fichier le plus dangereux d'un site SPIP : posé à la
+ * racine web, il installe ce qu'on lui dit d'installer, et n'importe qui peut
+ * l'appeler. Il n'a de raison d'être que le jour où l'on s'en sert — le reste du
+ * temps, c'est une porte laissée ouverte. Pouvoir le retirer à distance, sur
+ * tout un parc, vaut mieux que de compter sur le souvenir de l'avoir déposé.
+ *
+ * **Supprimé**, pas écarté sous un nom caché, pour les mêmes raisons que le
+ * spip_check : il se retélécharge d'un clic par `loader_maj`, et un script dont
+ * le nom commence par un point est exactement ce qu'un contrôle d'intégrité
+ * signale comme dissimulation.
+ *
+ * Le `spip_loader_config.php` éventuel n'est pas touché : il ne contient que des
+ * identifiants d'auteurs, il ne s'exécute pas tout seul, et il sert aussi à
+ * SPIP Check.
+ *
+ * @return array
+ */
+function dashagent_loader_retirer() {
+	$etat = dashagent_loader_etat();
+	if (!$etat['present']) {
+		return ['ok' => true, 'erreur' => '', 'retire' => '', 'etat' => $etat];
+	}
+
+	$chemin = dashagent_loader_chemin();
+	if (!@unlink($chemin) || @is_file($chemin)) {
+		return ['ok' => false, 'erreur' => 'Impossible de retirer spip_loader.php', 'etat' => $etat];
+	}
+
+	return [
+		'ok'      => true,
+		'erreur'  => '',
+		'retire'  => 'spip_loader.php',
+		'version' => $etat['version'],
+		'etat'    => dashagent_loader_etat(),
+	];
+}

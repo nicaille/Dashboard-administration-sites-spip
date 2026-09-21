@@ -139,6 +139,13 @@ verifier('le défaut est une adresse https', strncmp(_DASHBOARD_CHECK_URL, 'http
 verifier('le défaut désigne un fichier PHP, pas un dépôt git',
 	strpos(_DASHBOARD_CHECK_URL, '.php') !== false && substr(_DASHBOARD_CHECK_URL, -4) !== '.git',
 	_DASHBOARD_CHECK_URL);
+/* Le dépôt publie les deux orthographes, identiques. On prend celle à souligné
+   des deux côtés : elle passe sur les hébergements qui réécrivent les noms à
+   tiret, et c'est celle de son voisin de palier, spip_loader.php. */
+verifier('le défaut prend la variante à souligné',
+	strpos(_DASHBOARD_CHECK_URL, 'spip_check.php') !== false
+		&& strpos(_DASHBOARD_CHECK_URL, 'spip-check.php') === false,
+	_DASHBOARD_CHECK_URL);
 $GLOBALS['dashboard_config_test'] = [];
 
 
@@ -204,7 +211,16 @@ foreach (['check_etat', 'check_maj', 'check_retirer'] as $op) {
 }
 /* Et réciproquement : op_check n'ouvre rien d'autre. */
 verifier('op_check n’ouvre pas le spip_loader', !dashagent_operation_autorisee('loader_maj'));
+verifier('op_check n’ouvre pas le retrait du spip_loader',
+	!dashagent_operation_autorisee('loader_retirer'));
 verifier('op_check n’ouvre pas la sauvegarde', !dashagent_operation_autorisee('sauvegarde_creer'));
+
+/* Retirer le spip_loader relève du même droit que le déposer : c'est le même
+   fichier, et ne plus l'avoir à la racine est plus sûr que l'y avoir. */
+$GLOBALS['dashagent_config_test'] = [];
+verifier('loader_retirer est refusée par défaut', !dashagent_operation_autorisee('loader_retirer'));
+$GLOBALS['dashagent_config_test'] = ['op_loader' => 'on'];
+verifier('loader_retirer s’ouvre avec op_loader', dashagent_operation_autorisee('loader_retirer'));
 $GLOBALS['dashagent_config_test'] = [];
 
 

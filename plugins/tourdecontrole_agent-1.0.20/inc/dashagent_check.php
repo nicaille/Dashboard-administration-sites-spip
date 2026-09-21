@@ -277,6 +277,16 @@ function dashagent_check_maj($args = []) {
 	}
 	@chmod($chemin, 0644);
 
+	// L'écart n'était qu'un filet le temps d'écrire : la nouvelle version en
+	// place, l'ancienne n'a plus de raison d'être. On ne la garde pas comme on
+	// garde celle d'un core ou d'un plugin — ce fichier se retélécharge d'un
+	// clic, et le laisser traîner sous un nom caché irait contre tout ce qu'on
+	// cherche ici. SPIP Check signale d'ailleurs comme suspect tout script dont
+	// le nom commence par un point : nous lui fabriquerions son propre constat.
+	if ($sauvegarde !== '') {
+		@unlink($sauvegarde);
+	}
+
 	$apres = dashagent_check_etat();
 
 	return [
@@ -296,10 +306,16 @@ function dashagent_check_maj($args = []) {
 /**
  * Retire le spip_check de la racine du site.
  *
- * Par renommage, jamais par suppression — comme partout ailleurs ici. Le point
- * initial le soustrait au balayage de SPIP comme aux regards, et surtout le
- * rend inappelable : c'est bien le but. Le retour arrière reste possible tant
- * que la tâche d'entretien ne l'a pas effacé.
+ * **Supprimé**, pas écarté sous un nom caché — et c'est l'exception à la règle
+ * qui gouverne tout le reste de l'agent. Trois raisons :
+ *
+ * - ce fichier n'a jamais eu vocation à rester ; l'écarter sous un autre nom
+ *   reviendrait à faire à moitié ce qu'on demande ;
+ * - il se retélécharge d'un clic, par `check_maj`. Un retour arrière ne coûte
+ *   rien, là où celui d'un core ou d'un plugin coûte tout ;
+ * - un script dont le nom commence par un point est précisément ce que SPIP
+ *   Check signale comme « une dissimulation qui n'est jamais légitime ». Lui
+ *   laisser sa propre dépouille sous ce nom serait lui fabriquer un constat.
  *
  * Le fichier de configuration éventuel n'est pas touché : il ne contient que
  * des identifiants d'auteurs, il ne s'exécute pas tout seul, et il sert aussi
@@ -314,22 +330,25 @@ function dashagent_check_retirer() {
 	}
 
 	$chemin = dashagent_check_chemin();
-	$ecarte = dashagent_check_ecarter($chemin);
-	if ($ecarte === '') {
+	if (!@unlink($chemin) || @is_file($chemin)) {
 		return ['ok' => false, 'erreur' => 'Impossible de retirer spip_check.php', 'etat' => $etat];
 	}
 
 	return [
 		'ok'      => true,
 		'erreur'  => '',
-		'retire'  => basename($ecarte),
+		'retire'  => 'spip_check.php',
 		'version' => $etat['version'],
 		'etat'    => dashagent_check_etat(),
 	];
 }
 
 /**
- * Met un fichier de côté sous un nom caché et daté.
+ * Met un fichier de côté sous un nom caché et daté, le temps d'en écrire un
+ * autre à sa place.
+ *
+ * Un filet transactionnel, pas une archive : `dashagent_check_maj()` l'efface
+ * dès que le nouveau fichier est en place.
  *
  * @param string $chemin
  * @return string Le nouveau chemin, ou '' si le renommage a échoué

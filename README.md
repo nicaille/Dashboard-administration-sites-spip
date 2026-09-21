@@ -118,7 +118,9 @@ embarqué dans le plugin, jamais appelé sur un CDN.
 **Le spip_loader.php** vit à la racine web, hors de l'arborescence que remplace
 une mise à jour du core : il vieillit sans que rien ne le signale. Un encadré en
 donne l'état et le renouvelle depuis `get.spip.net`. Le contenu téléchargé est
-contrôlé avant d'être écrit, et l'ancien fichier conservé.
+contrôlé avant d'être écrit, et l'ancien fichier conservé. Un second bouton le
+**retire** : c'est le fichier le plus dangereux d'un site SPIP, il n'a de raison
+d'être que le jour où l'on s'en sert, et il se redépose d'un clic.
 
 **Le contrôle d'intégrité** ([SPIP Check](https://git.spip.net/technova69/spip-check),
 GPL 3) se dépose de la même façon, et se **retire** — c'est là toute la
@@ -225,7 +227,7 @@ Le détail est dans [docs/installation.md](docs/installation.md).
 ### Sans installation SPIP
 
 ```bash
-php tests/test_protocole.php   # 372 vérifications : signature partagée, filtrage IP,
+php tests/test_protocole.php   # 382 vérifications : signature partagée, filtrage IP,
                                # validation des archives, masquage des identifiants,
                                # enchaînement des étapes d'un chantier
 php tests/test_structure.php   # 312 vérifications : manifestes, tables, autorisations,

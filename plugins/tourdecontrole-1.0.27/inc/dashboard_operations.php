@@ -30,17 +30,17 @@ if (!defined('_DASHBOARD_LOADER_URL')) {
  * ce qui y a été poussé, y compris un commit de développement. Pointer une
  * release figerait la version déposée ; c'est un réglage, et il se change.
  *
- * Le fichier distant porte un tiret, celui qu'on dépose un souligné : les deux
- * livrables sont strictement identiques, et l'auteur publie la variante à
- * souligné pour les hébergements qui réécrivent les noms à tiret. Autant
- * déposer d'emblée celui qui passe partout, quel que soit le nom de la source.
+ * Le dépôt publie les deux orthographes, strictement identiques. On prend celle
+ * à souligné, des deux côtés : c'est celle qui passe sur les hébergements qui
+ * bloquent ou réécrivent les noms à tiret, et c'est celle de `spip_loader.php`,
+ * son voisin de palier.
  *
  * Se règle dans *Configuration du tableau de bord*. Rien n'oblige à pointer le
  * dépôt d'origine : un miroir interne convient, et se contrôle. Vidé, l'encadré
  * le dit et ne propose aucun dépôt.
  */
 if (!defined('_DASHBOARD_CHECK_URL')) {
-	define('_DASHBOARD_CHECK_URL', 'https://git.spip.net/technova69/spip-check/-/raw/2.x/spip-check.php?ref_type=heads');
+	define('_DASHBOARD_CHECK_URL', 'https://git.spip.net/technova69/spip-check/-/raw/2.x/spip_check.php?ref_type=heads');
 }
 
 /**
@@ -1014,6 +1014,45 @@ function dashboard_operation_check_maj($id_dashboard_site) {
 		. ($edition !== '' ? ' (' . $edition . ')' : '');
 
 	dashboard_journaliser($id_dashboard_site, 'check_maj', 'ok', $message, $data, $reponse['duree_ms']);
+
+	return ['ok' => true, 'message' => $message, 'data' => $data];
+}
+
+/**
+ * Retire le `spip_loader.php` de la racine d'un site géré.
+ *
+ * C'est le fichier le plus dangereux d'un site SPIP : il installe ce qu'on lui
+ * dit d'installer, et n'importe qui peut l'appeler. Il n'a de raison d'être que
+ * le jour où l'on s'en sert. L'agent le supprime — il se retéléchargera d'un
+ * clic le jour suivant.
+ *
+ * @param int $id_dashboard_site
+ * @return array
+ */
+function dashboard_operation_loader_retirer($id_dashboard_site) {
+	include_spip('inc/dashboard_client');
+	include_spip('inc/dashboard_journal');
+
+	$site = dashboard_charger_site($id_dashboard_site);
+	if (!$site) {
+		return ['ok' => false, 'message' => 'Site inconnu', 'data' => []];
+	}
+
+	$reponse = dashboard_appeler($site, 'loader_retirer', [], ['timeout' => dashboard_config('timeout', 30)]);
+
+	if (!$reponse['ok']) {
+		$message = (string) ($reponse['erreur']['message'] ?? '');
+		dashboard_journaliser($id_dashboard_site, 'loader_retirer', 'erreur', $message, $reponse['erreur'], $reponse['duree_ms']);
+
+		return ['ok' => false, 'message' => $message, 'data' => $reponse['data']];
+	}
+
+	$data = (array) $reponse['data'];
+	$message = ((string) ($data['retire'] ?? '') !== '')
+		? 'spip_loader.php retiré de la racine du site'
+		: 'Aucun spip_loader.php à retirer';
+
+	dashboard_journaliser($id_dashboard_site, 'loader_retirer', 'ok', $message, $data, $reponse['duree_ms']);
 
 	return ['ok' => true, 'message' => $message, 'data' => $data];
 }

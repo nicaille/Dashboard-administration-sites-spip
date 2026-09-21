@@ -210,6 +210,11 @@ function dashagent_executer($op, $args) {
 
 			return dashagent_loader_maj($args);
 
+		case 'loader_retirer':
+			include_spip('inc/dashagent_loader');
+
+			return dashagent_loader_retirer();
+
 		case 'check_etat':
 			include_spip('inc/dashagent_check');
 

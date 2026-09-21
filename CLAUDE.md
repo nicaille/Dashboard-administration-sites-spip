@@ -380,8 +380,12 @@ sur tout le parc. L'agent se borne donc à ce que le FTP faisait à la main.
 Trois différences avec le `spip_loader.php`, dont tout le reste est copié :
 
 - **il se retire** (`check_retirer`), parce qu'un mégaoctet de code capable de
-  lire tout le disque n'a rien à faire en permanence à la racine web. Par
-  renommage, jamais par suppression ;
+  lire tout le disque n'a rien à faire en permanence à la racine web. Et il se
+  **supprime**, seule exception au « jamais d'effacement » qui gouverne le reste
+  de l'agent : il se retélécharge d'un clic, et un script dont le nom commence
+  par un point est exactement ce que SPIP Check signale comme dissimulation —
+  lui laisser sa dépouille sous ce nom lui fabriquerait son constat. Le
+  `spip_loader.php` a reçu le même bouton, pour les mêmes raisons ;
 - **sa version se lit dans la queue du fichier**, pas dans l'en-tête : les
   bibliothèques embarquées occupent tout le début du livrable. On relit
   `_DASHAGENT_CHECK_QUEUE` octets à la fin, pas le mégaoctet entier ;
@@ -391,10 +395,9 @@ Trois différences avec le `spip_loader.php`, dont tout le reste est copié :
   production préférera une release ou un miroir interne. Vidée, l'encadré le dit
   et ne propose rien.
 
-Et une asymétrie voulue : le fichier distant porte un **tiret**, celui qu'on
-dépose un **souligné**. Les deux livrables sont identiques ; l'auteur publie la
-variante à souligné pour les hébergements qui réécrivent les noms à tiret. Le
-nom de la source et celui de la destination sont indépendants.
+Le dépôt publie les deux orthographes, identiques. On prend celle à **souligné**
+des deux côtés : elle passe sur les hébergements qui réécrivent les noms à
+tiret, et c'est celle de son voisin de palier, `spip_loader.php`.
 
 L'autorisation `op_check` lui est propre : `op_loader` ne l'ouvre pas, et
 réciproquement.

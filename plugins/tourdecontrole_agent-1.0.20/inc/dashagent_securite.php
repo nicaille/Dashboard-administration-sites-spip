@@ -189,6 +189,9 @@ function dashagent_operation_autorisee($operation) {
 		// qu'on puisse demander à distance, et il ne se confond avec aucun autre.
 		'loader_etat'             => 'op_loader',
 		'loader_maj'              => 'op_loader',
+		// Le retirer relève du même droit que le déposer : c'est le même
+		// fichier, et ne plus l'avoir à la racine est plus sûr que l'y avoir.
+		'loader_retirer'          => 'op_loader',
 		// SPIP Check lit tout le disque du site et sait déplacer des fichiers.
 		// Le déposer, c'est rendre cette puissance appelable à la racine web —
 		// derrière son propre contrôle d'accès, mais appelable. Une

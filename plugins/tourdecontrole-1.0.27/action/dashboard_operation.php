@@ -83,6 +83,10 @@ function action_dashboard_operation_dist() {
 			$resultat = dashboard_operation_loader_maj($id_site);
 			break;
 
+		case 'loader_retirer':
+			$resultat = dashboard_operation_loader_retirer($id_site);
+			break;
+
 		case 'check_maj':
 			$resultat = dashboard_operation_check_maj($id_site);
 			break;

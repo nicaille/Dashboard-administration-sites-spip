@@ -447,8 +447,15 @@
 		]
 	</p>
 	<div data-loader-bloc="etat"></div>
+	[(#REM)
+		Le retrait compte autant que le dépôt : posé à la racine web, ce script
+		installe ce qu'on lui dit d'installer et n'importe qui peut l'appeler.
+		Il n'a de raison d'être que le jour où l'on s'en sert — et il se
+		retélécharge d'un clic le jour suivant.
+	]
 	<p class="boutons">
 		[(#BOUTON_ACTION{<:dashboard:action_loader_maj:>,#URL_ACTION_AUTEUR{dashboard_operation,loader_maj/#ID_DASHBOARD_SITE,#GET{retour_loader}},btn btn_danger,<:dashboard:loader_confirmation:>})]
+		[(#BOUTON_ACTION{<:dashboard:action_loader_retirer:>,#URL_ACTION_AUTEUR{dashboard_operation,loader_retirer/#ID_DASHBOARD_SITE,#GET{retour_loader}},btn btn_secondaire,<:dashboard:loader_retrait_confirmation:>})]
 	</p>
 </div>
 ]

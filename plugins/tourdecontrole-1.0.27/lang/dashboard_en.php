@@ -18,6 +18,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'action_depots_maj' => 'Refresh repositories',
 	'action_agent_parc' => 'Update the agent (@nb@ site(s))',
 	'action_depots_parc' => 'Refresh the whole fleet’s repositories',
+	'action_loader_retirer' => 'Remove from the site',
 	'action_purger_selection' => 'Clear the selection’s caches',
 	'action_sync_selection' => 'Synchronise the selection',
 	'action_loader_etat' => 'Check the state on the site',
@@ -176,6 +177,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 
 	// M
 	'loader_confirmation' => 'Replace this site’s spip_loader.php? The old one will be set aside.',
+	'loader_retrait_confirmation' => 'Remove spip_loader.php from this site’s root? The file is deleted — one click puts it back the day it is needed. Sitting at the web root, that script installs whatever it is told to, and anyone can call it.',
 	'memoire' => 'of memory',
 
 	// N

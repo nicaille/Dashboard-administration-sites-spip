@@ -377,6 +377,17 @@ avant d'être remplacé, et remis si l'écriture échoue.
 Retourne `octets`, `sha256`, `version_avant`, `version_apres`, `sauvegarde` et
 l'`etat` d'après.
 
+### `loader_retirer`
+
+Autorisation : `op_loader` — le même droit que le dépôt : c'est le même fichier,
+et ne plus l'avoir à la racine est plus sûr que l'y avoir. **Supprime** le
+`spip_loader.php`, qui se redépose d'un clic. Un site qui n'en a pas répond `ok`
+sans rien faire.
+
+Le `spip_loader_config.php` éventuel n'est pas touché : il ne contient que des
+identifiants d'auteurs, il ne s'exécute pas tout seul, et il sert aussi à SPIP
+Check.
+
 ### `check_etat`
 
 Autorisation : `op_check`. Décrit le `spip_check.php` présent à la racine du
@@ -415,10 +426,14 @@ Retourne `octets`, `sha256`, `version_avant`, `version_apres`, `edition`,
 
 ### `check_retirer`
 
-Autorisation : `op_check`. Retire le `spip_check.php` de la racine, **par
-renommage** : `.spip_check.php.dashagent-<date>`. Le fichier n'est plus
-appelable et le retour arrière reste possible. Un site qui n'en a pas répond
-`ok` sans rien faire.
+Autorisation : `op_check`. **Supprime** le `spip_check.php` de la racine — la
+seule opération de l'agent qui efface un fichier plutôt que de l'écarter sous un
+nom caché. Il n'a jamais eu vocation à rester, il se retélécharge d'un clic, et
+un nom commençant par un point est ce qu'un contrôle d'intégrité signale comme
+dissimulation. Un site qui n'en a pas répond `ok` sans rien faire.
+
+Le dépôt d'une nouvelle version ne laisse rien non plus : l'ancienne est écartée
+le temps d'écrire, puis effacée.
 
 Le fichier de configuration éventuel n'est pas touché : il ne contient que des
 identifiants d'auteurs, il ne s'exécute pas tout seul, et il sert aussi au

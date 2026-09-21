@@ -42,7 +42,16 @@ function dashagent_entretien_rollbacks() {
 
 	$limite = time() - 7 * 86400;
 	$n = 0;
-	$candidats = (array) glob((_DIR_RACINE ?: './') . '*.dashagent-[0-9]*');
+	// Les deux orthographes : `glob` n'atteint pas un nom commençant par un
+	// point sans qu'on le lui nomme. Les anciens `spip_loader.php` et
+	// `spip_check.php` sont écartés sous un point initial, et seule la première
+	// forme était balayée — ils s'accumulaient donc indéfiniment à la racine du
+	// site, ce que personne ne voit puisqu'ils sont cachés.
+	$racine = _DIR_RACINE ?: './';
+	$candidats = array_merge(
+		(array) glob($racine . '*.dashagent-[0-9]*'),
+		(array) glob($racine . '.*.dashagent-[0-9]*')
+	);
 
 	// Les anciennes versions de plugins sont cachées par un point initial, que
 	// `glob` n'atteint pas sans le nommer, et vivent à la profondeur où le site

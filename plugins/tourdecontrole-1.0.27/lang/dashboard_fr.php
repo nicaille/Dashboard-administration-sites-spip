@@ -18,6 +18,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'action_depots_maj' => 'Relire les dépôts',
 	'action_agent_parc' => 'Mettre à jour l’agent (@nb@ site(s))',
 	'action_depots_parc' => 'Relire les dépôts de tout le parc',
+	'action_loader_retirer' => 'Retirer du site',
 	'action_purger_selection' => 'Vider les caches de la sélection',
 	'action_sync_selection' => 'Synchroniser la sélection',
 	'action_loader_etat' => 'Voir l’état sur le site',
@@ -176,6 +177,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 
 	// M
 	'loader_confirmation' => 'Remplacer le spip_loader.php de ce site ? L’ancien sera mis de côté.',
+	'loader_retrait_confirmation' => 'Retirer spip_loader.php de la racine de ce site ? Le fichier est supprimé — il se redépose d’un clic le jour où l’on en a besoin. Posé à la racine web, ce script installe ce qu’on lui dit d’installer et n’importe qui peut l’appeler.',
 	'memoire' => 'de mémoire',
 
 	// N
