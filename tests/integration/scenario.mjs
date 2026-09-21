@@ -1492,6 +1492,200 @@ dit('un fichier qui n’est pas un spip_loader est refusé',
 		&& /ressemble|PHP/i.test(await page.locator('body').innerText()),
 	(await page.locator('.reponse_formulaire').first().innerText().catch(() => '—')).trim());
 
+/* Le retrait du spip_loader : c'est le fichier le plus dangereux d'un site SPIP,
+   et il n'a de raison d'être que le jour où l'on s'en sert. Supprimé pour les
+   mêmes raisons que le spip_check, et retéléchargeable d'un clic. */
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
+await page.fill('[name="url_spip_loader"]', base + '/core-archives/spip_loader.txt');
+await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').first().click()]);
+await page.waitForTimeout(600);
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+page.once('dialog', (d) => d.accept());
+await page.locator('#loader form.bouton_action_post').first().locator('button').click();
+await page.waitForLoadState('domcontentloaded').catch(() => {});
+await page.waitForTimeout(2500);
+dit('le spip_loader est de nouveau en place avant le test de retrait',
+	existsSync(site + '/spip_loader.php'));
+
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+page.once('dialog', (d) => d.accept());
+await page.locator('#loader form.bouton_action_post').last().locator('button').click();
+await page.waitForLoadState('domcontentloaded').catch(() => {});
+await page.waitForTimeout(2000);
+dit('spip_loader.php n’est plus à la racine', !existsSync(site + '/spip_loader.php'));
+dit('le retrait du spip_loader revient sous son encadré', page.url().includes('#loader'), page.url());
+dit('un retrait sans rien à retirer n’est pas une erreur (spip_loader)',
+	await (async () => {
+		page.once('dialog', (d) => d.accept());
+		await page.locator('#loader form.bouton_action_post').last().locator('button').click();
+		await page.waitForLoadState('domcontentloaded').catch(() => {});
+		await page.waitForTimeout(1500);
+		return /Aucun spip_loader/i.test(await page.locator('body').innerText());
+	})(),
+	(await page.locator('.reponse_formulaire').first().innerText().catch(() => '—')).trim());
+
+/* Et le ménage : `glob('*.dashagent-…')` n'atteint pas un nom commençant par un
+   point. Les anciens spip_loader écartés s'accumulaient donc indéfiniment à la
+   racine, invisibles. Le balayage nomme désormais les deux orthographes. */
+const entretien = readFileSync(
+	site + '/' + readdirSync(site + '/plugins').filter((d) => /^tourdecontrole_agent-/.test(d))[0]
+		.replace(/^/, 'plugins/') + '/genie/dashagent_entretien.php', 'utf8');
+dit('le ménage de la racine nomme aussi les fichiers cachés',
+	/glob\(\$racine \. '\.\*\.dashagent/.test(entretien));
+
+console.log('\n### Contrôle d’intégrité (spip_check.php)');
+
+/* Un livrable de test, servi en .txt pour la même raison que le spip_loader :
+   le serveur exécuterait un .php au lieu d'en rendre la source.
+
+   Sa forme reprend celle du vrai : les bibliothèques embarquées occupent tout
+   le début du fichier, et les deux fonctions que le gabarit engendre viennent
+   après. C'est ce qui oblige l'agent à relire la **queue** du fichier, et non
+   son en-tête comme pour le spip_loader. Le remplissage le vérifie. */
+const checkSource = site + '/core-archives/spip_check.txt';
+writeFileSync(checkSource,
+	"<?php\n\nnamespace Jfcherng\\Utility {\n\tclass MbString extends \\ArrayObject {}\n}\n\n"
+	+ '/* ' + 'x'.repeat(300000) + " */\n\n"
+	+ "function spipCheckToolVersion(): string {\n\treturn '2.4.0';\n}\n\n"
+	+ "function spipCheckEdition(): string {\n\treturn 'complete';\n}\n");
+
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+dit('l’encadré de SPIP Check est présent', (await page.locator('#check').count()) === 1);
+
+/* Le réglage porte une adresse par défaut, celle de la forge. On la vide le
+   temps de vérifier le cas contraire : sans adresse, aucun bouton de dépôt —
+   une fonction qui échouerait ne se propose pas. Ce cas se produit pour de bon
+   dès qu'un parc préfère un miroir et efface la valeur avant de la remplacer. */
+await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
+dit('le réglage porte l’adresse de la forge par défaut',
+	/git\.spip\.net/.test(await page.inputValue('[name="url_spip_check"]')),
+	await page.inputValue('[name="url_spip_check"]'));
+await page.fill('[name="url_spip_check"]', '');
+await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').first().click()]);
+await page.waitForTimeout(600);
+
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+dit('sans adresse réglée, aucun dépôt n’est proposé',
+	(await page.locator('#check form.bouton_action_post').count()) === 0
+		&& /adresse de téléchargement/i.test(await page.locator('#check').innerText()),
+	(await page.locator('#check').innerText()).replace(/\s+/g, ' ').slice(0, 80));
+
+await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
+await page.fill('[name="url_spip_check"]', base + '/core-archives/spip_check.txt');
+await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').first().click()]);
+await page.waitForTimeout(600);
+
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+// Un lien de navigation vers l'outil chez le site géré, pas une action.
+const lienCheck = page.locator('#check a.btn[target="_blank"]');
+dit('un lien mène au spip_check du site',
+	(await lienCheck.count()) === 1
+		&& /\/spip_check\.php$/.test((await lienCheck.getAttribute('href')) || ''),
+	(await lienCheck.getAttribute('href')) || 'absent');
+
+// Refusé tant que le site géré ne l'a pas accordé — et sous une autorisation
+// qui lui est propre : op_loader, déjà accordé plus haut, ne l'ouvre pas.
+page.once('dialog', (d) => d.accept());
+await page.locator('#check form.bouton_action_post button').first().click();
+await page.waitForLoadState('domcontentloaded').catch(() => {});
+await page.waitForTimeout(1500);
+dit('le dépôt est refusé tant que le site ne l’autorise pas',
+	/désactivée|autoris/i.test(await page.locator('body').innerText())
+		&& !existsSync(site + '/spip_check.php'),
+	existsSync(site + '/spip_check.php') ? 'fichier déposé malgré le refus' : 'refus');
+
+await page.goto(base + '/ecrire/?exec=configurer_dashagent', { waitUntil: 'domcontentloaded' });
+await page.check('[name="op_check"]').catch(() => {});
+await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').last().click()]);
+await page.waitForTimeout(600);
+
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await page.locator('[data-dashboard-check-etat]').click();
+await page.waitForTimeout(2000);
+const avantDepot = (await page.locator('#check [data-check-bloc="etat"]').innerText()).replace(/\s+/g, ' ');
+dit('l’état annonce l’absence avant dépôt', /Présent\s*:\s*non/i.test(avantDepot), avantDepot.trim());
+
+page.once('dialog', (d) => d.accept());
+await page.locator('#check form.bouton_action_post').first().locator('button').click();
+await page.waitForLoadState('domcontentloaded').catch(() => {});
+await page.waitForTimeout(2500);
+dit('spip_check.php est déposé à la racine du site', existsSync(site + '/spip_check.php'));
+dit('la version et l’édition déposées sont annoncées',
+	/2\.4\.0/.test(await page.locator('body').innerText())
+		&& /complete/.test(await page.locator('body').innerText()),
+	(await page.locator('.reponse_formulaire').first().innerText().catch(() => '—')).trim());
+dit('le dépôt revient sous son encadré', page.url().includes('#check'), page.url());
+
+await page.locator('[data-dashboard-check-etat]').click();
+await page.waitForTimeout(2000);
+const etatCheck = (await page.locator('#check [data-check-bloc="etat"]').innerText()).replace(/\s+/g, ' ');
+// La version est tout à la fin d'un fichier de 300 Ko : c'est la queue relue
+// qui la trouve, pas l'en-tête.
+dit('la version est lue dans la queue du fichier', /2\.4\.0/.test(etatCheck), etatCheck.trim());
+dit('l’édition du livrable est lue', /complete/.test(etatCheck), etatCheck.trim());
+// Sans fichier de configuration, SPIP Check n'ouvre son interface qu'à
+// l'auteur nº 1 du site géré : le dire évite un clic pour rien.
+dit('l’accès à l’outil est annoncé', /Acc[eè]s/i.test(etatCheck), etatCheck.trim());
+
+// Un second dépôt met l'ancien de côté plutôt que de l'effacer.
+page.once('dialog', (d) => d.accept());
+await page.locator('#check form.bouton_action_post').first().locator('button').click();
+await page.waitForLoadState('domcontentloaded').catch(() => {});
+await page.waitForTimeout(2500);
+/* L'écart n'était qu'un filet le temps d'écrire : la nouvelle version en place,
+   l'ancienne est effacée. Un script dont le nom commence par un point est
+   précisément ce que SPIP Check signale comme dissimulation — lui laisser sa
+   propre dépouille sous ce nom serait lui fabriquer son constat. */
+dit('un second dépôt ne laisse pas d’ancien fichier caché',
+	!readdirSync(site).some((n) => /^\.spip_check\.php\.dashagent-/.test(n)),
+	readdirSync(site).filter((n) => /spip_check/.test(n)).join(', ') || 'seul le fichier en place');
+
+// Ce qui n'est pas un spip_check ne s'installe pas — un spip_loader non plus,
+// bien qu'il soit du PHP et qu'il parle de SPIP.
+writeFileSync(site + '/core-archives/faux-check.txt',
+	"<?php\n// spip_loader.php\n$spip_loader_version = '3.1.2';\necho 'SPIP';\n");
+await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
+await page.fill('[name="url_spip_check"]', base + '/core-archives/faux-check.txt');
+await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').first().click()]);
+await page.waitForTimeout(600);
+const avantFauxCheck = readFileSync(site + '/spip_check.php', 'utf8');
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+page.once('dialog', (d) => d.accept());
+await page.locator('#check form.bouton_action_post').first().locator('button').click();
+await page.waitForLoadState('domcontentloaded').catch(() => {});
+await page.waitForTimeout(2000);
+dit('un fichier qui n’est pas un spip_check est refusé',
+	readFileSync(site + '/spip_check.php', 'utf8') === avantFauxCheck
+		&& /ressemble|PHP/i.test(await page.locator('body').innerText()),
+	(await page.locator('.reponse_formulaire').first().innerText().catch(() => '—')).trim());
+
+/* Le retrait : cet outil n'a jamais eu vocation à rester. Supprimé, pas écarté
+   sous un nom caché — il se retélécharge d'un clic, et un nom commençant par un
+   point est ce qu'un contrôle d'intégrité signale comme dissimulation. */
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await page.locator('#check form.bouton_action_post').last().locator('button').click();
+await page.waitForLoadState('domcontentloaded').catch(() => {});
+await page.waitForTimeout(2000);
+dit('spip_check.php n’est plus à la racine', !existsSync(site + '/spip_check.php'));
+dit('il ne reste aucune dépouille cachée',
+	!readdirSync(site).some((n) => /spip_check/.test(n)),
+	readdirSync(site).filter((n) => /spip_check/.test(n)).join(', ') || 'aucune');
+
+await page.locator('[data-dashboard-check-etat]').click();
+await page.waitForTimeout(2000);
+dit('l’état confirme l’absence après retrait',
+	/Présent\s*:\s*non/i.test((await page.locator('#check [data-check-bloc="etat"]').innerText()).replace(/\s+/g, ' ')),
+	(await page.locator('#check [data-check-bloc="etat"]').innerText()).replace(/\s+/g, ' ').trim());
+
+// Un retrait sur un site qui n'a rien n'est pas une erreur.
+await page.locator('#check form.bouton_action_post').last().locator('button').click();
+await page.waitForLoadState('domcontentloaded').catch(() => {});
+await page.waitForTimeout(1500);
+dit('un retrait sans rien à retirer n’est pas une erreur',
+	/Aucun spip_check/i.test(await page.locator('body').innerText()),
+	(await page.locator('.reponse_formulaire').first().innerText().catch(() => '—')).trim());
+
 console.log('\n### Restauration du dump');
 try {
 	const verdict = execFileSync('php', ['-r', `

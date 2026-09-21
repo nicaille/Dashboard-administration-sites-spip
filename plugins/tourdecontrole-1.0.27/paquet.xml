@@ -1,0 +1,30 @@
+<paquet
+	prefix="tourdecontrole"
+	categorie="maintenance"
+	version="1.0.27"
+	etat="test"
+	compatibilite="[4.1.0;4.*]"
+	schema="1.0.7"
+	logo="prive/themes/spip/images/dashboard-64.svg"
+	documentation="https://github.com/nicaille/Dashboard-administration-sites-spip/blob/main/docs/installation.md"
+	developpement="https://github.com/nicaille/Dashboard-administration-sites-spip"
+>
+
+	<nom>Tour de contrôle d'un parc de sites SPIP</nom>
+	<!-- Superviser et maintenir un parc de sites SPIP depuis un seul site -->
+
+	<auteur lien="https://github.com/nicaille">Nicolas Villeroy</auteur>
+
+	<licence lien="https://www.gnu.org/licenses/gpl-3.0.html">GPL 3</licence>
+
+	<pipeline nom="declarer_tables_objets_sql" inclure="base/tourdecontrole_tables.php" />
+	<pipeline nom="declarer_tables_principales" inclure="base/tourdecontrole_tables.php" />
+	<pipeline nom="declarer_tables_interfaces" inclure="base/tourdecontrole_tables.php" />
+	<pipeline nom="autoriser" inclure="tourdecontrole_autorisations.php" />
+	<pipeline nom="taches_generales_cron" inclure="tourdecontrole_pipelines.php" />
+
+	<necessite nom="php" compatibilite="[7.4.0;[" />
+
+	<menu nom="dashboard" titre="dashboard:titre_dashboard" parent="menu_edition" icone="images/dashboard-16.svg" />
+	<menu nom="configurer_dashboard" titre="dashboard:titre_configurer" parent="menu_configuration" icone="images/dashboard-16.svg" />
+</paquet>

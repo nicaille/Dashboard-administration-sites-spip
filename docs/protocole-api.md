@@ -377,6 +377,74 @@ avant d'être remplacé, et remis si l'écriture échoue.
 Retourne `octets`, `sha256`, `version_avant`, `version_apres`, `sauvegarde` et
 l'`etat` d'après.
 
+### `loader_retirer`
+
+Autorisation : `op_loader` — le même droit que le dépôt : c'est le même fichier,
+et ne plus l'avoir à la racine est plus sûr que l'y avoir. **Supprime** le
+`spip_loader.php`, qui se redépose d'un clic. Un site qui n'en a pas répond `ok`
+sans rien faire.
+
+Le `spip_loader_config.php` éventuel n'est pas touché : il ne contient que des
+identifiants d'auteurs, il ne s'exécute pas tout seul, et il sert aussi à SPIP
+Check.
+
+### `check_etat`
+
+Autorisation : `op_check`. Décrit le `spip_check.php` présent à la racine du
+site : `present`, `octets`, `modifie`, `version`, `edition` (`complete` ou
+`lite`), `racine_ecrit`, `fichier_ecrit`, et `config` — le nom du fichier
+d'autorisation trouvé, s'il y en a un.
+
+La version se lit **dans la queue du fichier**, à l'inverse du spip_loader : les
+bibliothèques embarquées occupent tout le début du livrable, et le code de
+l'outil vient après. En 2.4.0, `spipCheckToolVersion()` est au 854 687ᵉ octet
+sur 953 235. Seuls les 256 derniers kilo-octets sont relus.
+
+`config` compte à l'usage : sans fichier d'autorisation, SPIP Check n'ouvre son
+interface qu'à l'auteur nº 1 **du site géré**. Le savoir avant de déposer évite
+un clic pour rien.
+
+### `check_maj`
+
+Autorisation : `op_check`. Télécharge un `spip_check.php` et le dépose à la
+racine.
+
+Argument : `url` — https obligatoire, pris dans la configuration du tableau de
+bord ; l'agent n'a pas de valeur de repli et refuse si rien n'est transmis. Le
+défaut côté parc désigne le livrable publié sur la forge communautaire, sur une
+**branche** : chaque dépôt sert donc ce qui y a été poussé. Pointer une release
+figerait la version déposée.
+
+Le contenu est contrôlé avant écriture : du PHP, moins de huit méga-octets, et
+portant la fonction que son gabarit engendre — un spip_loader n'y passe pas,
+bien qu'il soit du PHP et qu'il parle de SPIP. Le fichier en place est renommé
+`.spip_check.php.dashagent-<date>` avant d'être remplacé, et remis si l'écriture
+échoue.
+
+Retourne `octets`, `sha256`, `version_avant`, `version_apres`, `edition`,
+`sauvegarde` et l'`etat` d'après.
+
+### `check_retirer`
+
+Autorisation : `op_check`. **Supprime** le `spip_check.php` de la racine — la
+seule opération de l'agent qui efface un fichier plutôt que de l'écarter sous un
+nom caché. Il n'a jamais eu vocation à rester, il se retélécharge d'un clic, et
+un nom commençant par un point est ce qu'un contrôle d'intégrité signale comme
+dissimulation. Un site qui n'en a pas répond `ok` sans rien faire.
+
+Le dépôt d'une nouvelle version ne laisse rien non plus : l'ancienne est écartée
+le temps d'écrire, puis effacée.
+
+Le fichier de configuration éventuel n'est pas touché : il ne contient que des
+identifiants d'auteurs, il ne s'exécute pas tout seul, et il sert aussi au
+spip_loader.
+
+Ces trois opérations relèvent de `op_check`, refusée par défaut, et `op_loader`
+ne les ouvre pas. L'agent ne **lance** pas le contrôle et n'en lit pas les
+résultats : SPIP Check s'autorise sur une session d'administrateur du site géré,
+là où l'agent s'authentifie par signature. Contourner cette autorisation pour le
+piloter à distance reviendrait à poser une porte dérobée sur tout le parc.
+
 ## Écrire un autre client
 
 Rien n'oblige à passer par le plugin dashboard. Un script suffit :
