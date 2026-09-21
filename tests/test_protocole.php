@@ -109,6 +109,55 @@ verifier('la requête et l’ancre sont écartées',
 verifier('une adresse vide ne donne pas de lien', dashboard_url_check('') === '');
 verifier('javascript: est refusé', dashboard_url_check('javascript:alert(1)') === '');
 
+echo "\n== Authentification HTTP d’un site gardé par un htpasswd ==\n";
+
+/* Un site gardé par un htpasswd renvoie un 401 **avant que PHP ne s'exécute**.
+   La signature du protocole n'y peut rien : le code qui la vérifie n'est jamais
+   atteint. Les identifiants ouvrent la porte du serveur ; la signature seule
+   authentifie l'appel, et l'une ne remplace jamais l'autre. */
+verifier('un site sans htpasswd n’envoie aucun identifiant',
+	dashboard_auth_http(['auth_user' => '', 'auth_pass' => '']) === '');
+verifier('une fiche sans ces champs non plus', dashboard_auth_http([]) === '');
+
+/* Le mot de passe passe par le même stockage que le secret partagé : chiffré
+   avec la clef du site quand le core la fournit, et **marqué** `p0:` sinon —
+   jamais écrit nu. Ce banc n'a pas le chiffrement du core : c'est donc la
+   seconde branche qu'on y exerce, celle de la dégradation. */
+$range = dashboard_chiffrer('motdepasse');
+verifier('un mot de passe stocké porte toujours sa marque',
+	preg_match('/^(c2|p0):/', $range) === 1, $range);
+verifier('la dégradation en clair est journalisée, pas silencieuse',
+	strncmp($range, 'p0:', 3) !== 0
+		|| !empty(array_filter($GLOBALS['spip_log_test'] ?? [], function ($l) {
+			return strpos($l[1], 'en clair') !== false;
+		})));
+verifier('le couple se reconstitue pour l’appel',
+	dashboard_auth_http(['auth_user' => 'jean', 'auth_pass' => $range]) === 'jean:motdepasse');
+
+/* Un utilisateur sans mot de passe reste un cas légitime — certains htpasswd
+   n'en demandent pas — et ne doit pas rendre une chaîne vide, qui couperait
+   l'authentification. */
+verifier('un utilisateur sans mot de passe est transmis quand même',
+	dashboard_auth_http(['auth_user' => 'jean', 'auth_pass' => '']) === 'jean:');
+
+/* Les espaces autour du nom viennent d'un copier-coller, pas d'une intention. */
+verifier('le nom d’utilisateur est débarrassé de ses espaces',
+	dashboard_auth_http(['auth_user' => '  jean  ', 'auth_pass' => $range]) === 'jean:motdepasse');
+
+/* Et la règle qui tient le reste : les identifiants passent par un en-tête,
+   jamais par l'adresse. Une URL qui les porte finit dans les journaux du
+   serveur, dans les référents, et dans les messages d'erreur. */
+$client = file_get_contents(chemin_plugin('tourdecontrole') . '/inc/dashboard_client.php');
+verifier('les identifiants ne sont jamais mis dans l’adresse',
+	!preg_match('{://[^\x27"\s]*\$auth}', $client)
+	&& strpos($client, 'Authorization: Basic ') !== false);
+/* L'affectation, pas le texte : le commentaire qui explique pourquoi on écarte
+   `CURLAUTH_ANY` le nomme forcément, et une recherche naïve s'y prendrait. */
+verifier('cURL s’en tient à Basic, sans négociation',
+	preg_match('/CURLOPT_HTTPAUTH\]\s*=\s*CURLAUTH_BASIC/', $client) === 1
+		&& !preg_match('/CURLOPT_HTTPAUTH\]\s*=\s*CURLAUTH_(ANY|ANYSAFE)/', $client));
+
+
 echo "\n== D’où vient l’adresse de SPIP Check ==\n";
 
 /* Le seul réglage du parc qui distingue « jamais réglé » de « vidé exprès ».

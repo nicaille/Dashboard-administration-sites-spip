@@ -40,6 +40,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'articles'                 => 'articles',
 
 	// C
+	'auth_configuree' => 'Un mot de passe est enregistré pour ce site.',
 	'badge_base_maj' => 'base à migrer',
 	'base_maj_confirmation' => 'Lancer la migration de la base de ce site ? Une sauvegarde est prise au préalable.',
 	'base_maj_disponible' => 'La base de ce site attend sa migration : son espace privé est bloqué.',
@@ -107,6 +108,8 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'etape_preflight'  => 'Contrôles préalables sur le site…',
 	'etape_sauvegarde' => 'Sauvegarde du site…',
 	'etape_sync'       => 'Relevé de l’inventaire…',
+	'explication_auth' => 'À renseigner seulement si le serveur du site géré est protégé par un <code>htpasswd</code>. Le serveur répond alors 401 avant que PHP ne s’exécute : la signature du protocole n’y peut rien, puisque le code qui la vérifie n’est jamais atteint. Ces identifiants ouvrent la porte ; la signature seule authentifie l’appel.',
+	'explication_auth_pass' => 'Laisser vide conserve le mot de passe enregistré. Il est chiffré comme le secret partagé, et n’est jamais réaffiché.',
 	'explication_autoriser_http' => 'À réserver au développement local : le secret partagé et les archives téléchargées circulent alors en clair. Le site géré doit en outre l’autoriser de son côté.',
 	'explication_chantier' => 'L’opération se déroule étape par étape. Vous pouvez quitter cette page : elle se poursuivra d’elle-même et son issue sera portée au journal.',
 	'explication_check' => 'SPIP Check compare les fichiers du site à l’archive officielle de sa version et examine les répertoires inscriptibles. C’est un outil ponctuel, déposé puis retiré — à la différence du spip_loader, qui reste. Le contrôle lui-même se conduit depuis le navigateur, sur le site : il n’accepte qu’un webmestre connecté là-bas.',
@@ -150,6 +153,9 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'label_groupe'             => 'Groupe',
 	'label_notes'              => 'Notes',
 	'label_retention_journal'  => 'Conserver le journal (jours)',
+	'label_auth_pass' => 'Mot de passe HTTP',
+	'label_auth_retirer' => 'Retirer l’authentification HTTP de ce site',
+	'label_auth_user' => 'Utilisateur HTTP',
 	'label_retention_sauvegardes' => 'Conserver les sauvegardes rapatriées (jours)',
 	'label_fraicheur_depots'   => 'Durée de validité du catalogue des dépôts (secondes)',
 	'label_fraicheur_sauvegarde' => 'Durée de validité d’une sauvegarde préalable (secondes)',
@@ -176,6 +182,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'legend_versions'          => 'Versions de SPIP',
 
 	// M
+	'legend_auth' => 'Authentification HTTP du serveur',
 	'loader_confirmation' => 'Remplacer le spip_loader.php de ce site ? L’ancien sera mis de côté.',
 	'loader_retrait_confirmation' => 'Retirer spip_loader.php de la racine de ce site ? Le fichier est supprimé — il se redépose d’un clic le jour où l’on en a besoin. Posé à la racine web, ce script installe ce qu’on lui dit d’installer et n’importe qui peut l’appeler.',
 	'memoire' => 'de mémoire',

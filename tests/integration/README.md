@@ -81,6 +81,7 @@ DASHBOARD_TEST_SANS_PREPARATION=1 tests/integration/executer.sh <zip> 8321
 | Mise à jour de l'agent | une version plus récente est publiée au dépôt local en cours de parcours : le parc s'en aperçoit, le bouton apparaît avec son décompte, le chantier sauvegarde puis remplace l'agent — qui se coupe la parole à lui-même —, la nouvelle version est déployée à côté de l'ancienne, l'agent répond encore, et le bouton disparaît |
 | Retrait des scripts de racine | le spip_loader et le spip_check sont supprimés à la demande, sans laisser de dépouille cachée, et un retrait à vide n'est pas une erreur ; le ménage de la racine nomme les deux orthographes de glob |
 | Contrôle d'intégrité | sans adresse réglée rien n'est proposé ; le dépôt est refusé tant que le site ne l'a pas accordé, et `op_loader` ne l'ouvre pas ; déposé, la version et l'édition sont lues dans la queue d'un fichier de 300 Ko ; un spip_loader est refusé à sa place ; le retrait écarte le fichier par renommage, et un retrait à vide n'est pas une erreur |
+| Site derrière un htpasswd | un gardien répond 401 avant tout traitement : sans identifiants la synchronisation échoue et rapporte le 401, avec eux elle passe ; le mot de passe porte sa marque en base, ne ressort pas du formulaire, survit à un enregistrement à blanc, et le retrait referme la porte |
 | Restauration | le dump se rejoue dans une base neuve, contenu intact |
 
 ## Ce que le parcours ne couvre pas

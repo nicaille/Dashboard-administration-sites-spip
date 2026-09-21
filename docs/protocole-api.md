@@ -445,6 +445,21 @@ résultats : SPIP Check s'autorise sur une session d'administrateur du site gér
 là où l'agent s'authentifie par signature. Contourner cette autorisation pour le
 piloter à distance reviendrait à poser une porte dérobée sur tout le parc.
 
+### Authentification HTTP du serveur
+
+Indépendante du protocole, et antérieure à lui. Quand le site géré est gardé par
+un `htpasswd`, le serveur répond **401 avant que PHP ne s'exécute** : la
+signature n'est jamais examinée. Le client joint alors un en-tête
+`Authorization: Basic` aux requêtes qu'il adresse à `url_agent`.
+
+Ces identifiants ouvrent la porte ; ils n'authentifient rien. Un appelant qui
+les connaîtrait sans le secret partagé franchirait le 401 pour se faire refuser
+par `dashagent_verifier_signature()`.
+
+Côté tour de contrôle, ils se règlent sur la fiche du site
+(`auth_user`, `auth_pass`) ; le mot de passe est chiffré comme le secret
+partagé. L'agent, lui, n'en sait rien et n'a rien à en savoir.
+
 ## Écrire un autre client
 
 Rien n'oblige à passer par le plugin dashboard. Un script suffit :

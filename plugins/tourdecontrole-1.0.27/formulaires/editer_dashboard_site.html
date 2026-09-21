@@ -56,6 +56,27 @@
 		</fieldset>
 
 		<fieldset>
+			<legend><:dashboard:legend_auth:></legend>
+			<p class="explication"><:dashboard:explication_auth:></p>
+			[(#ENV{auth_pass_present}|=={oui}|oui)<p class="explication"><:dashboard:auth_configuree:></p>]
+			<ul>
+				<li class="editer editer_auth_user">
+					<label for="auth_user"><:dashboard:label_auth_user:></label>
+					<input type="text" class="text" name="auth_user" id="auth_user" value="[(#ENV{auth_user}|entites_html)]" autocomplete="off" />
+				</li>
+				<li class="editer editer_auth_pass_clair">
+					<label for="auth_pass_clair"><:dashboard:label_auth_pass:></label>
+					<input type="password" class="text" name="auth_pass_clair" id="auth_pass_clair" value="" autocomplete="new-password" />
+					<p class="explication"><:dashboard:explication_auth_pass:></p>
+				</li>
+				<li class="editer editer_auth_retirer">
+					<input type="checkbox" name="auth_retirer" id="auth_retirer" value="on" />
+					<label for="auth_retirer"><:dashboard:label_auth_retirer:></label>
+				</li>
+			</ul>
+		</fieldset>
+
+		<fieldset>
 			<legend><:dashboard:legend_supervision:></legend>
 			<ul>
 				<li class="editer editer_statut">

@@ -227,7 +227,7 @@ Le détail est dans [docs/installation.md](docs/installation.md).
 ### Sans installation SPIP
 
 ```bash
-php tests/test_protocole.php   # 382 vérifications : signature partagée, filtrage IP,
+php tests/test_protocole.php   # 391 vérifications : signature partagée, filtrage IP,
                                # validation des archives, masquage des identifiants,
                                # enchaînement des étapes d'un chantier
 php tests/test_structure.php   # 312 vérifications : manifestes, tables, autorisations,

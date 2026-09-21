@@ -40,6 +40,13 @@ function formulaires_editer_dashboard_site_charger_dist($id_dashboard_site = 'ne
 	$valeurs['secret_empreinte'] = $secret !== '' ? substr(hash('sha256', $secret), 0, 12) : '';
 	$valeurs['secret_clair']     = '';
 	$valeurs['generer_secret']   = '';
+
+	// Même geste pour l'authentification HTTP du serveur : le mot de passe ne
+	// ressort jamais du formulaire. Le nom d'utilisateur, lui, n'est pas un
+	// secret — il s'édite comme n'importe quel champ, et le voir aide.
+	$valeurs['auth_pass_present'] = (isset($site) && $site && (string) $site['auth_pass'] !== '') ? 'oui' : 'non';
+	$valeurs['auth_pass_clair']   = '';
+	$valeurs['auth_retirer']      = '';
 	$valeurs['_hidden'] = ($valeurs['_hidden'] ?? '');
 
 	// `objet_inserer()` crée le site en « prepa » ; on ajoute un site pour le
@@ -116,6 +123,19 @@ function formulaires_editer_dashboard_site_traiter_dist($id_dashboard_site = 'ne
 		$nouveau_secret = dashboard_generer_secret();
 	} elseif (trim((string) _request('secret_clair')) !== '') {
 		$nouveau_secret = trim((string) _request('secret_clair'));
+	}
+
+	/* L'authentification HTTP. Trois gestes possibles, et le silence en est un :
+	   un champ laissé vide garde le mot de passe en place, sans quoi toute
+	   modification de la fiche l'effacerait par inadvertance. */
+	if (_request('auth_retirer') === 'on') {
+		sql_updateq('spip_dashboard_sites', ['auth_user' => '', 'auth_pass' => ''], 'id_dashboard_site = ' . $id);
+	} elseif (trim((string) _request('auth_pass_clair')) !== '') {
+		sql_updateq(
+			'spip_dashboard_sites',
+			['auth_pass' => dashboard_chiffrer(trim((string) _request('auth_pass_clair')))],
+			'id_dashboard_site = ' . $id
+		);
 	}
 
 	if ($nouveau_secret !== '') {

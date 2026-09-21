@@ -40,6 +40,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'articles'                 => 'articles',
 
 	// C
+	'auth_configuree' => 'A password is stored for this site.',
 	'badge_base_maj' => 'database to migrate',
 	'base_maj_confirmation' => 'Start migrating this site’s database? A backup is taken first.',
 	'base_maj_disponible' => 'This site’s database awaits migration: its private area is blocked.',
@@ -107,6 +108,8 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'etape_preflight'  => 'Pre-flight checks on the site…',
 	'etape_sauvegarde' => 'Backing the site up…',
 	'etape_sync'       => 'Taking the inventory…',
+	'explication_auth' => 'Only needed when the managed site’s server is protected by an <code>htpasswd</code>. The server then answers 401 before PHP runs: the protocol’s signature cannot help, since the code that checks it is never reached. These credentials open the door; the signature alone authenticates the call.',
+	'explication_auth_pass' => 'Leaving this empty keeps the stored password. It is encrypted like the shared secret, and never shown again.',
 	'explication_autoriser_http' => 'For local development only: the shared secret and the downloaded archives then travel in the clear. The managed site must allow it on its side too.',
 	'explication_chantier' => 'The operation runs step by step. You may leave this page: it carries on by itself and its outcome is recorded in the log.',
 	'explication_check' => 'SPIP Check compares the site’s files with the official archive of its version and examines writable directories. It is a one-off tool, dropped then removed — unlike spip_loader, which stays. The check itself is run from a browser, on the site: it only accepts a webmaster logged in there.',
@@ -150,6 +153,9 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'label_groupe'             => 'Group',
 	'label_notes'              => 'Notes',
 	'label_retention_journal'  => 'Keep the log (days)',
+	'label_auth_pass' => 'HTTP password',
+	'label_auth_retirer' => 'Remove this site’s HTTP authentication',
+	'label_auth_user' => 'HTTP user',
 	'label_retention_sauvegardes' => 'Keep downloaded backups (days)',
 	'label_fraicheur_depots'   => 'Repository catalogue validity (seconds)',
 	'label_fraicheur_sauvegarde' => 'How long a preliminary backup stays valid (seconds)',
@@ -176,6 +182,7 @@ $GLOBALS[$GLOBALS['idx_lang']] = [
 	'legend_versions'          => 'SPIP releases',
 
 	// M
+	'legend_auth' => 'Server HTTP authentication',
 	'loader_confirmation' => 'Replace this site’s spip_loader.php? The old one will be set aside.',
 	'loader_retrait_confirmation' => 'Remove spip_loader.php from this site’s root? The file is deleted — one click puts it back the day it is needed. Sitting at the web root, that script installs whatever it is told to, and anyone can call it.',
 	'memoire' => 'of memory',

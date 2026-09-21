@@ -402,6 +402,31 @@ tiret, et c'est celle de son voisin de palier, `spip_loader.php`.
 L'autorisation `op_check` lui est propre : `op_loader` ne l'ouvre pas, et
 réciproquement.
 
+## Franchir la porte n'est pas s'authentifier
+
+Un site géré derrière un `htpasswd` renvoie un **401 avant que PHP ne
+s'exécute** : la signature n'est jamais examinée, puisque le code qui la
+vérifie n'est jamais atteint. D'où deux colonnes sur la fiche d'un site —
+`auth_user` en clair, `auth_pass` chiffré comme le secret partagé — jointes en
+en-tête `Authorization: Basic` par `dashboard_auth_http()`.
+
+Les deux ne se confondent pas, et le code le dit : les identifiants **ouvrent
+la porte**, la signature **authentifie l'appel**. Un appelant qui connaîtrait le
+htpasswd sans le secret franchirait le 401 pour se faire refuser par
+`dashagent_verifier_signature()`.
+
+Deux règles qui tiennent à la fuite d'identifiants :
+
+- **en-tête, jamais dans l'adresse.** `https://user:pass@site/` finit dans les
+  journaux du serveur, dans les référents et dans les messages d'erreur ;
+- **Basic et rien d'autre** (`CURLAUTH_BASIC`). `CURLAUTH_ANY` ferait un premier
+  appel à blanc pour découvrir la méthode, et accepterait qu'un serveur réclame
+  une authentification qui laisse fuir davantage.
+
+Tout ce qui part vers un agent passe par `dashboard_http_post()` — l'appel signé
+et le rapatriement de sauvegarde. Un nouveau chemin vers un site géré se range
+derrière elle, pas à côté, sans quoi il ignorera le htpasswd.
+
 ## Tests à passer avant tout commit
 
 ```bash

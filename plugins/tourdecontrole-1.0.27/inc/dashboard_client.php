@@ -106,6 +106,30 @@ function dashboard_config($clef, $defaut = null) {
 }
 
 /**
+ * Les identifiants d'authentification HTTP d'un site, ou la chaîne vide.
+ *
+ * Un site gardé par un `htpasswd` renvoie un **401 avant que PHP ne
+ * s'exécute** : la signature du protocole n'y peut rien, puisque le code qui la
+ * vérifie n'est jamais atteint. Rien à corriger côté agent — il faut franchir
+ * la porte du serveur avant de lui parler.
+ *
+ * Le couple ne remplace évidemment pas la signature : il ouvre la porte, elle
+ * seule authentifie l'appel. Un site dont on connaîtrait le htpasswd sans le
+ * secret partagé ne nous répondrait rien.
+ *
+ * @param array $site
+ * @return string `utilisateur:motdepasse`, ou '' si le site n'en a pas
+ */
+function dashboard_auth_http($site) {
+	$utilisateur = trim((string) ($site['auth_user'] ?? ''));
+	if ($utilisateur === '') {
+		return '';
+	}
+
+	return $utilisateur . ':' . dashboard_dechiffrer((string) ($site['auth_pass'] ?? ''));
+}
+
+/**
  * Construit les champs signés d'une requête vers un agent.
  *
  * C'est la seule définition de la signature côté tableau de bord ; son pendant
@@ -248,7 +272,7 @@ function dashboard_appeler($site, $op, $args = [], $options = []) {
 	$champs = dashboard_signer($op, $json, $ts, $nonce, $secret);
 
 	$timeout = (int) ($options['timeout'] ?? dashboard_config('timeout', 30));
-	$http    = dashboard_http_post($url, $champs, $timeout);
+	$http    = dashboard_http_post($url, $champs, $timeout, '', dashboard_auth_http($site));
 
 	if (!$http['ok']) {
 		return dashboard_reponse_erreur('transport', $http['erreur'], $debut, $http['code']);
@@ -313,7 +337,13 @@ function dashboard_telecharger_sauvegarde($site, $identifiant, $destination) {
 	$nonce = bin2hex(random_bytes(16));
 	$champs = dashboard_signer('sauvegarde_telecharger', $json, $ts, $nonce, $secret);
 
-	$http = dashboard_http_post($url, $champs, (int) dashboard_config('timeout_long', 300), $destination);
+	$http = dashboard_http_post(
+		$url,
+		$champs,
+		(int) dashboard_config('timeout_long', 300),
+		$destination,
+		dashboard_auth_http($site)
+	);
 
 	if (!$http['ok']) {
 		@unlink($destination);
@@ -355,11 +385,11 @@ function dashboard_telecharger_sauvegarde($site, $identifiant, $destination) {
  * @param string $fichier Si fourni, le corps est écrit dans ce fichier
  * @return array{ok: bool, code: int, corps: string, erreur: string}
  */
-function dashboard_http_post($url, $champs, $timeout = 30, $fichier = '') {
+function dashboard_http_post($url, $champs, $timeout = 30, $fichier = '', $auth = '') {
 	$timeout = max(5, min(900, (int) $timeout));
 
 	if (function_exists('curl_init')) {
-		return dashboard_http_post_curl($url, $champs, $timeout, $fichier);
+		return dashboard_http_post_curl($url, $champs, $timeout, $fichier, $auth);
 	}
 
 	include_spip('inc/distant');
@@ -371,6 +401,12 @@ function dashboard_http_post($url, $champs, $timeout = 30, $fichier = '') {
 	];
 	if ($fichier !== '') {
 		$options['file'] = $fichier;
+	}
+	// L'en-tête plutôt que `https://user:pass@site/` : une adresse porteuse
+	// d'identifiants finit dans les journaux du serveur et dans les messages
+	// d'erreur, l'en-tête non.
+	if ($auth !== '') {
+		$options['entetes'] = 'Authorization: Basic ' . base64_encode($auth);
 	}
 	$res = recuperer_url($url, $options);
 
@@ -394,7 +430,7 @@ function dashboard_http_post($url, $champs, $timeout = 30, $fichier = '') {
  * @param string $fichier
  * @return array
  */
-function dashboard_http_post_curl($url, $champs, $timeout, $fichier = '') {
+function dashboard_http_post_curl($url, $champs, $timeout, $fichier = '', $auth = '') {
 	$ch = curl_init($url);
 	if (!$ch) {
 		return ['ok' => false, 'code' => 0, 'corps' => '', 'erreur' => 'Initialisation cURL impossible'];
@@ -414,6 +450,14 @@ function dashboard_http_post_curl($url, $champs, $timeout, $fichier = '') {
 		CURLOPT_USERAGENT      => 'SPIP Dashboard/1.0 (+' . url_de_base() . ')',
 		CURLOPT_HTTPHEADER     => ['Accept: application/json', 'Expect:'],
 	];
+
+	// Basic et rien d'autre : `CURLAUTH_ANY` ferait d'abord un appel à blanc
+	// pour découvrir la méthode, et surtout accepterait qu'un serveur réclame
+	// une authentification qui laisse fuir davantage.
+	if ($auth !== '') {
+		$options[CURLOPT_HTTPAUTH] = CURLAUTH_BASIC;
+		$options[CURLOPT_USERPWD]  = $auth;
+	}
 
 	if ($fichier !== '') {
 		$sortie = @fopen($fichier, 'wb');
