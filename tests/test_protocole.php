@@ -1669,6 +1669,63 @@ verifier('la version en place est intacte', is_file($cible . '/paquet.xml'));
 
 dashagent_supprimer_repertoire($bac, true);
 
+echo "\n== Relire un dépôt, et savoir ce qu'on a lu ==\n";
+
+/* SVP ne télécharge pas le catalogue : il appelle `copie_locale($url, 'modif')`,
+   qui ne va le chercher que si le serveur le dit plus récent que la copie rangée
+   sous `IMG/distant/`. Or cette copie voit sa date rafraîchie à chaque contrôle,
+   même quand rien n'est rapatrié. Un seul contrôle tombé pendant qu'un cache en
+   frontal servait l'ancien fichier suffit donc à rendre la copie « plus récente »
+   que le catalogue publié — et plus aucun téléchargement ne se déclenche.
+
+   Constaté en vrai : un site a relu son dépôt pendant six heures, la date de
+   fraîcheur avançant à chaque fois, sur un catalogue vieux d'une publication.
+   D'où le forçage qui efface la copie, et le constat qui dit ce qu'on a le droit
+   d'annoncer ensuite. */
+
+$ordinaire = dashagent_svp_relecture_constat(false, 0, 0, 'aaa', 'aaa');
+verifier('une relecture non forcée ne prétend rien', $ordinaire['constat'] === 'lu');
+verifier('et elle ne se plaint pas', $ordinaire['fiable'] === true && $ordinaire['message'] === '');
+
+$rapatrie = dashagent_svp_relecture_constat(true, 1, 1, 'aaa', 'bbb');
+verifier('copie effacée puis revenue : le catalogue a été téléchargé',
+	$rapatrie['constat'] === 'telecharge' && $rapatrie['fiable'] === true);
+verifier('et l’empreinte qui change dit qu’il a changé', $rapatrie['change'] === true);
+
+/* Un catalogue inchangé rend la même empreinte : ce n'est pas un échec. Les
+   confondre ferait crier au loup à chaque relecture d'un dépôt stable. */
+$inchange = dashagent_svp_relecture_constat(true, 1, 1, 'aaa', 'aaa');
+verifier('un catalogue inchangé reste une relecture fiable',
+	$inchange['constat'] === 'telecharge' && $inchange['fiable'] === true);
+verifier('mais on ne prétend pas qu’il a changé', $inchange['change'] === false);
+
+/* Le cas qui motive tout : SVP répond que tout va bien, et rien n'est revenu. */
+$menteur = dashagent_svp_relecture_constat(true, 1, 0, 'aaa', 'aaa');
+verifier('copie effacée et rien revenu : la relecture n’est pas fiable',
+	$menteur['constat'] === 'sans_telechargement' && $menteur['fiable'] === false);
+verifier('et elle le dit en clair', strpos($menteur['message'], 'téléchargé') !== false, $menteur['message']);
+
+/* Une empreinte vide après coup ne vaut pas changement. */
+verifier('une empreinte vide n’annonce aucun changement',
+	dashagent_svp_relecture_constat(true, 1, 1, 'aaa', '')['change'] === false);
+
+echo "\n== Ce que la tour ose annoncer après une relecture ==\n";
+
+verifier('une relecture fiable n’ajoute rien au compte rendu',
+	dashboard_depots_constat(['relecture' => ['fiable' => true, 'message' => '']]) === '');
+
+verifier('une relecture non fiable est rapportée',
+	strpos(dashboard_depots_constat(['relecture' => ['fiable' => false, 'message' => 'pas téléchargé']]), 'pas téléchargé') !== false);
+
+/* Compatibilité : un agent d'avant la 1.0.22 ne rend aucun constat. Son silence
+   vaut « on ne sait pas », pas « c'est cassé » — le crier serait inventer une
+   panne sur tout le parc au lendemain d'une mise à jour de la tour. */
+verifier('un agent qui ne rend pas de constat ne déclenche aucune alerte',
+	dashboard_depots_constat(['termine' => true, 'actualise' => 'Dépôt']) === '');
+verifier('un constat sans la clef « fiable » est ignoré de même',
+	dashboard_depots_constat(['relecture' => ['constat' => 'lu']]) === '');
+
+
 echo "\n== Délégation à SVP ==\n";
 
 /* La distinction qui compte : un refus de SVP ne se contourne pas en déployant

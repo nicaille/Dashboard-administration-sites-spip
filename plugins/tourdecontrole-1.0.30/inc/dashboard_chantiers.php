@@ -496,11 +496,17 @@ function dashboard_chantier_etape_depots($id_site) {
 	$depots = (array) ($data['depots'] ?? []);
 	$titre  = (string) ($data['actualise'] ?? '');
 
+	/* Un catalogue qui n'a pas été rapatrié ne fait pas échouer le chantier :
+	   la mise à jour qui suit sait se passer de SVP. Mais elle se dira, parce
+	   qu'elle explique pourquoi la version attendue peut n'être pas la bonne. */
+	$constat = dashboard_depots_constat($data);
+
 	return [
 		'ok'      => true,
-		'message' => $titre === ''
+		'message' => ($titre === ''
 			? 'Catalogue des dépôts déjà à jour'
-			: count($depots) . ' dépôt(s) relu(s), dont « ' . $titre . ' »',
+			: count($depots) . ' dépôt(s) relu(s), dont « ' . $titre . ' »')
+			. ($constat !== '' ? ' — ' . $constat : ''),
 	];
 }
 

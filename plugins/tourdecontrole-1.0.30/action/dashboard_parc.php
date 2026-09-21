@@ -144,14 +144,19 @@ function dashboard_parc_depots($site) {
 	$inventaire = dashboard_synchroniser($id_site, ['sans_depots' => true]);
 	$apres = dashboard_charger_site($id_site);
 
+	// Un catalogue que l'agent n'a pas réellement rapatrié rend le décompte qui
+	// suit sans valeur : le dire vaut mieux que d'annoncer un chiffre faux.
+	$constat = dashboard_depots_constat($data);
+
 	dashboard_parc_repondre([
-		'ok'      => !empty($inventaire['ok']),
+		'ok'      => !empty($inventaire['ok']) && $constat === '',
 		'termine' => true,
 		'site'    => $titre,
 		'plugins_maj' => (int) ($apres['nb_plugins_maj'] ?? 0),
 		'message' => empty($inventaire['ok'])
 			? $titre . ' : ' . (string) ($inventaire['message'] ?? 'inventaire impossible')
-			: $titre . ' : ' . (int) ($apres['nb_plugins_maj'] ?? 0) . ' mise(s) à jour de plugins',
+			: $titre . ' : ' . (int) ($apres['nb_plugins_maj'] ?? 0) . ' mise(s) à jour de plugins'
+				. ($constat !== '' ? ' — ' . $constat : ''),
 	]);
 }
 

@@ -12,7 +12,7 @@
 $racine = dirname(__DIR__);
 
 /**
- * Les dossiers de plugins portent leur version (`tourdecontrole-1.0.29`), pour qu'une
+ * Les dossiers de plugins portent leur version (`tourdecontrole-1.0.30`), pour qu'une
  * mise en ligne n'écrase pas la version précédente. On les retrouve donc par
  * préfixe, sans quoi ce fichier serait à retoucher à chaque montée de version.
  *
@@ -753,11 +753,17 @@ $api_spip = [
 	'sql_allfetsel', 'sql_alltable', 'sql_countsel', 'sql_create', 'sql_delete',
 	'sql_drop_table', 'sql_error', 'sql_fetch', 'sql_fetsel', 'sql_free', 'sql_insertq',
 	'sql_query', 'sql_quote', 'sql_select', 'sql_showtable', 'sql_updateq', 'sql_version',
-	'sql_in',
+	'sql_in', 'sql_getfetsel',
 	// SVP, quand le site géré en dispose : c'est lui qui sait mettre à jour un
 	// plugin proprement, dépendances comprises. Les classes Decideur et
 	// Actionneur ne passent pas par ici — seules les fonctions sont analysées.
 	'svp_actualiser_paquets_locaux', 'svp_actualiser_maj_version', 'svp_actualiser_depot',
+	// Elle dit quelles adresses SVP dérive de celle du dépôt — et donc où sont
+	// les copies locales qu'un forçage doit effacer. Appel gardé par
+	// function_exists() : les SVP anciens ne la connaissent pas.
+	'svp_depoter_distant_variantes_url',
+	// inc/distant : le nom de la copie locale d'un fichier distant.
+	'fichier_copie_locale',
 	// SPIP WAF, quand le site géré l'a installé. Son appel est gardé par un
 	// function_exists() : l'agent lit ses tables, et n'emprunte à son code que
 	// le vidage de la file d'événements, qu'on ne sait pas refaire soi-même.
@@ -885,6 +891,8 @@ $fournisseur = [
 	'svp_actualiser_paquets_locaux' => 'inc/svp_depoter_local',
 	'svp_actualiser_maj_version'    => 'inc/svp_depoter_local',
 	'svp_actualiser_depot'          => 'inc/svp_depoter_distant',
+	'svp_depoter_distant_variantes_url' => 'inc/svp_depoter_distant',
+	'fichier_copie_locale'          => 'inc/distant',
 	'formulaires_editer_objet_charger'  => 'inc/editer',
 	'formulaires_editer_objet_verifier' => 'inc/editer',
 	'formulaires_editer_objet_traiter'  => 'inc/editer',
@@ -1115,6 +1123,47 @@ foreach (['false', 'true'] as $issue) {
  */
 verifier('l’absence de « termine » est traitée explicitement',
 	strpos($lecture, "array_key_exists('termine'") !== false);
+
+
+echo "\n== Forcer une relecture de dépôt veut dire forcer ==\n";
+
+/*
+ * SVP ne télécharge pas le catalogue : il appelle `copie_locale($url, 'modif')`,
+ * qui ne va le chercher que si le serveur le dit plus récent que la copie rangée
+ * sous `IMG/distant/`. Cette copie voit sa date rafraîchie à chaque contrôle,
+ * même sans rapatriement — un contrôle tombé pendant qu'un cache en frontal
+ * servait l'ancien fichier la rend donc « plus récente » que le catalogue
+ * publié, et le verrou se referme pour de bon.
+ *
+ * Le forçage n'a de sens que s'il efface cette copie. Qu'on retire cet effacement
+ * et tout redevient vert : l'agent répond, la date avance, le catalogue reste
+ * celui d'avant. D'où ce garde-fou, qui confronte les deux bouts.
+ */
+$agent_svp = file_get_contents(chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_svp.php');
+$tour_ops  = file_get_contents(chemin_plugin('tourdecontrole') . '/inc/dashboard_operations.php');
+
+$forcage = fonction_php($agent_svp, 'dashagent_svp_depots_actualiser');
+verifier('la relecture forcée efface la copie locale du catalogue',
+	strpos($forcage, 'dashagent_svp_copies_effacer') !== false);
+verifier('et vide l’empreinte, l’autre moitié du garde-fou',
+	(bool) preg_match("/'sha_paquets'\s*=>\s*''/", $forcage));
+
+$constat = fonction_php($agent_svp, 'dashagent_svp_relecture_constat');
+foreach (['true', 'false'] as $issue) {
+	verifier('l’agent sait rendre un constat « fiable » à ' . $issue,
+		(bool) preg_match("/'fiable'\s*=>\s*" . $issue . "/", $constat));
+}
+
+$lecture = fonction_php($tour_ops, 'dashboard_depots_constat');
+verifier('la tour lit ce constat', strpos($lecture, "'fiable'") !== false);
+
+/*
+ * Et la compatibilité, dans l'autre sens : un agent d'avant la 1.0.22 ne rend
+ * aucun constat. Prendre son silence pour une panne ferait crier au loup sur
+ * tout le parc au lendemain d'une mise à jour de la tour.
+ */
+verifier('l’absence de constat est traitée explicitement',
+	strpos($lecture, "array_key_exists('fiable'") !== false);
 
 
 echo "\n== La branche « sinon » d'une boucle ==\n";

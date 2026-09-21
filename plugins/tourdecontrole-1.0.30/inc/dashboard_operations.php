@@ -342,6 +342,33 @@ function dashboard_operation_sauvegarder($id_dashboard_site, $options = []) {
 }
 
 /**
+ * Ce qu'une relecture de dépôt permet d'annoncer.
+ *
+ * L'agent, quand la relecture est forcée, efface la copie locale du catalogue
+ * avant d'appeler SVP et regarde ensuite si une copie est revenue. Une copie
+ * revenue prouve le téléchargement ; rien de revenu prouve le contraire, quoi
+ * que SVP ait répondu.
+ *
+ * Ce constat n'existe qu'à partir de l'agent 1.0.22. Son absence ne vaut pas
+ * mauvaise nouvelle : elle vaut « on ne sait pas », et on se tait alors, comme
+ * avant.
+ *
+ * @param array $data Réponse de l'opération `depots_actualiser`
+ * @return string Complément de message, vide quand il n'y a rien à dire
+ */
+function dashboard_depots_constat($data) {
+	$relecture = (array) ($data['relecture'] ?? []);
+	if (!$relecture || !array_key_exists('fiable', $relecture)) {
+		return '';
+	}
+	if (!empty($relecture['fiable'])) {
+		return '';
+	}
+
+	return (string) ($relecture['message'] ?? 'relecture non concluante');
+}
+
+/**
  * L'inventaire des sauvegardes présentes sur le site géré.
  *
  * @param int $id_dashboard_site

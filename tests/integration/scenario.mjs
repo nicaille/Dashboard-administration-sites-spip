@@ -7,7 +7,7 @@
  */
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, existsSync, utimesSync } from 'node:fs';
 
 const base = process.env.BASE_URL || 'http://127.0.0.1:8321';
 const site = process.env.SITE_DIR;
@@ -359,6 +359,63 @@ dit('un catalogue inchangé est daté quand même',
 dit('le dépôt n’est plus annoncé à relire',
 	(await page.locator('#depots.dashboard-depots-perimes').count()) === 0,
 	(await page.locator('#depots').innerText()).replace(/\s+/g, ' ').trim());
+
+/*
+ * La copie locale du catalogue, et ce que le banc peut en dire.
+ *
+ * SVP passe par `copie_locale($url, 'modif')`, qui ne retélécharge que si le
+ * serveur annonce le fichier plus récent que la copie rangée sous
+ * `IMG/distant/`. En production, cette copie est redatée à chaque vérification
+ * même sans rapatriement : une vérification faite pendant qu'un cache servait
+ * l'ancien fichier la rend définitivement « plus récente » que le catalogue
+ * publié, et plus rien n'est jamais rapatrié.
+ *
+ * **Ce verrou-là ne se reproduit pas ici** : `php -S` ne répond pas aux requêtes
+ * conditionnelles, il renvoie le fichier entier quoi qu'on lui demande. Ce banc
+ * ne peut donc prouver que le fait acquis — le forçage remplace bien la copie
+ * locale, jusqu'à celle qu'on a falsifiée et datée dans le futur.
+ *
+ * Que le forçage **efface** cette copie, c'est `tests/test_structure.php` qui
+ * l'exige, en confrontant les deux bouts : retirer l'effacement fait tomber son
+ * contrôle, là où le parcours d'intégration reste au vert.
+ */
+const copies = existsSync(site + '/IMG/distant/xml')
+	? readdirSync(site + '/IMG/distant/xml').filter((n) => /\.xml$/.test(n))
+	: [];
+dit('SVP garde une copie locale du catalogue sous IMG/distant/', copies.length > 0,
+	copies.join(', ') || '(aucune)');
+
+if (copies.length) {
+	const copie = site + '/IMG/distant/xml/' + copies[0];
+	const vrai = readFileSync(copie, 'utf8');
+	/* Une copie modifiée, et datée dans le futur : sans effacement, aucune
+	   relecture ne peut plus la remplacer. Le marqueur est un commentaire XML,
+	   donc la copie reste analysable — c'est son remplacement qu'on éprouve,
+	   pas la robustesse de l'analyseur de SVP. */
+	writeFileSync(copie, vrai + '\n<!-- copie falsifiee -->\n');
+	const futur = Math.floor(Date.now() / 1000) + 86400;
+	utimesSync(copie, futur, futur);
+	const falsifie = readFileSync(copie, 'utf8');
+	// Le test doit d'abord prouver qu'il a bien posé son piège : une
+	// falsification qui ne falsifie rien ferait passer la suite à vide.
+	dit('la copie locale a bien été falsifiée', falsifie !== vrai);
+
+	sqlEcrire("UPDATE spip_depots SET maj = datetime('now', '-2 days')");
+	await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+	await page.locator('[data-parc-action="depots"]').click();
+	await page.waitForFunction(() => /Termin|suivant/.test(
+		(document.querySelector('.dashboard-depots-avancement') || {}).textContent || ''), null, { timeout: 60000 }).catch(() => {});
+	await page.waitForTimeout(2500);
+
+	const apres = existsSync(copie) ? readFileSync(copie, 'utf8') : '';
+	dit('une copie locale falsifiée et datée dans le futur ne survit pas au forçage',
+		apres !== falsifie,
+		apres === '' ? 'copie absente' : (apres === vrai ? 'catalogue rétabli' : 'copie changée'));
+	const compteRenduDepots = (await page.locator('.dashboard-depots-avancement').innerText().catch(() => '')) || '';
+	dit('et le compte rendu ne crie pas au loup quand le catalogue est bien revenu',
+		!/pas été téléchargé/.test(compteRenduDepots),
+		compteRenduDepots.replace(/\s+/g, ' ').trim().slice(0, 160));
+}
 
 dit('le compte du parc reste celui des sites',
 	(await page.locator('.dashboard-synthese li').last().innerText()).trim().startsWith(
