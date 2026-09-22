@@ -1,0 +1,467 @@
+/**
+ * Habillage du tableau de bord dans l'espace privé de SPIP.
+ * Volontairement minimal : il se pose sur le thème privé sans le remplacer.
+ */
+
+.dashboard-synthese {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 1em;
+	margin: 0 0 1.5em;
+	padding: 0;
+	list-style: none;
+}
+.dashboard-synthese li {
+	flex: 1 1 10em;
+	padding: .75em 1em;
+	border: 1px solid rgba(0, 0, 0, .12);
+	border-radius: 4px;
+	background: rgba(0, 0, 0, .02);
+}
+.dashboard-synthese strong {
+	display: block;
+	font-size: 1.8em;
+	line-height: 1.1;
+}
+.dashboard-synthese .dashboard-erreur strong { color: #a4001c; }
+.dashboard-synthese .dashboard-attention strong { color: #9a6200; }
+
+.dashboard-fiche {
+	margin: 0 0 2em;
+	padding: 0 0 1em;
+	border-bottom: 1px solid rgba(0, 0, 0, .08);
+}
+.dashboard-fiche-alerte {
+	padding: 1em;
+	border: 1px solid #d9a400;
+	border-radius: 4px;
+	background: #fff8e5;
+}
+
+.dashboard-parc td,
+.dashboard-parc th { vertical-align: top; }
+
+.dashboard-groupe {
+	font-size: .85em;
+	opacity: .7;
+}
+.dashboard-lien-public {
+	font-size: .85em;
+	word-break: break-all;
+}
+/* Le retour au parc : l'icône accompagne le libellé, elle ne le remplace pas.
+   `inline-flex` pour que la flèche reste alignée sur la ligne de texte quel
+   que soit le corps choisi par le thème. */
+.dashboard-retour {
+	display: inline-flex;
+	align-items: center;
+	gap: .35em;
+}
+.dashboard-retour-icone {
+	flex: none;
+}
+
+/* La version de l'agent, sous le nom du site : une information de service,
+   qui ne doit pas concurrencer le titre. */
+.dashboard-agent {
+	font-size: .85em;
+	opacity: .7;
+}
+.dashboard-message-erreur {
+	display: block;
+	font-size: .85em;
+	color: #a4001c;
+}
+
+.dashboard-pastille {
+	display: inline-block;
+	width: .7em;
+	height: .7em;
+	margin-inline-end: .4em;
+	border-radius: 50%;
+	background: #999;
+}
+.dashboard-pastille-ok { background: #3f8f29; }
+.dashboard-pastille-ko { background: #c0001f; }
+
+.dashboard-badge {
+	display: inline-block;
+	padding: .1em .5em;
+	border-radius: 10px;
+	font-size: .8em;
+	white-space: nowrap;
+}
+.dashboard-badge-maj {
+	background: #ffe9b0;
+	color: #6b4500;
+}
+
+.dashboard-ligne-maj { background: rgba(255, 213, 128, .18); }
+
+/* Le badge « N à mettre à jour » nomme au survol les plugins concernés : un
+   décompte sans les noms obligeait à ouvrir la fiche du site pour savoir de quoi
+   il retourne.
+
+   Le fond et la couleur du texte sont posés ensemble, à dessein : le thème privé
+   met le texte du badge en brun sur ocre, et un fond blanc sans couleur explicite
+   rendrait la liste illisible — le travers déjà rencontré sur les boutons de
+   pagination. */
+.dashboard-survol {
+	position: relative;
+	cursor: help;
+}
+.dashboard-survol-liste {
+	display: none;
+	position: absolute;
+	z-index: 20;
+	top: 100%;
+	left: 0;
+	margin-top: .3em;
+	padding: .5em .7em;
+	min-width: 12em;
+	max-width: 24em;
+	border: 1px solid #b9b9b9;
+	border-radius: 4px;
+	background: #fff;
+	color: #222;
+	/* Le badge impose `nowrap` à sa descendance : la liste le reprend à son compte. */
+	white-space: normal;
+	text-align: left;
+	font-size: 1.05em;
+	line-height: 1.5;
+	box-shadow: 0 2px 6px rgba(0, 0, 0, .2);
+}
+.dashboard-survol:hover .dashboard-survol-liste,
+.dashboard-survol:focus .dashboard-survol-liste,
+.dashboard-survol:focus-within .dashboard-survol-liste {
+	display: block;
+}
+
+/* Les boutons sont ceux du thème privé : `.btn` et `.btn.btn_secondaire`. On
+   redéfinissait ici un fond blanc sans redéfinir la couleur du texte, que le
+   thème met en blanc — d'où des libellés invisibles sur les boutons de
+   pagination. Il ne reste que la mise en ligne des actions d'un tableau. */
+.dashboard-actions {
+	white-space: nowrap;
+}
+.dashboard-actions .btn,
+.dashboard-actions .bouton_action_post {
+	display: inline-block;
+	margin: 0 .25em .25em 0;
+	vertical-align: middle;
+}
+.dashboard-lien-danger { color: var(--spip-color-danger, #a4001c); }
+
+.dashboard-journal-erreur td { color: #a4001c; }
+
+/* Onglets de la fiche d'un site. Sans JavaScript, aucun panneau n'est masqué :
+   les deux listes s'affichent l'une sous l'autre, ce qui reste lisible. */
+.dashboard-onglets-liste {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .25em;
+	margin: 0 0 1em;
+	padding: 0;
+	list-style: none;
+	border-bottom: 1px solid rgba(0, 0, 0, .15);
+}
+.dashboard-onglets-liste button {
+	padding: .5em 1em;
+	border: 1px solid transparent;
+	border-bottom: none;
+	border-radius: 4px 4px 0 0;
+	background: none;
+	font: inherit;
+	color: inherit;
+	cursor: pointer;
+}
+.dashboard-onglets-liste button:hover { background: rgba(0, 0, 0, .04); }
+.dashboard-onglets-liste button[aria-selected="true"] {
+	border-color: rgba(0, 0, 0, .15);
+	background: #fff;
+	font-weight: bold;
+	margin-bottom: -1px;
+}
+.dashboard-onglets-liste button:focus-visible { outline: 2px solid #2b6ca3; outline-offset: -2px; }
+
+/* Le thème privé donne un « display » explicite aux <section>, ce qui prend le
+   pas sur la règle [hidden] du navigateur : on masque donc explicitement. */
+.dashboard-onglets [role="tabpanel"][hidden] { display: none; }
+
+.dashboard-compteur {
+	display: inline-block;
+	min-width: 1.6em;
+	padding: 0 .4em;
+	border-radius: 10px;
+	background: rgba(0, 0, 0, .08);
+	font-size: .85em;
+	font-weight: normal;
+	text-align: center;
+}
+/* Le nombre de plugins en retard, à côté du total : c'est la seule information
+   de cet onglet qui appelle un geste, elle se distingue donc du décompte neutre
+   par les couleurs de l'alerte. */
+.dashboard-compteur-maj {
+	background: #ffe9b0;
+	color: #a4001c;
+	font-weight: bold;
+}
+
+/* Opération en cours : un encadré qui se met à jour tout seul pendant que le
+   chantier avance, plutôt qu'une page figée le temps d'une longue requête. */
+.dashboard-chantier {
+	border-left: 4px solid #2b6ca3;
+}
+.dashboard-chantier-libelle {
+	margin: 0 0 .3em;
+	font-weight: bold;
+}
+.dashboard-chantier-etape {
+	display: flex;
+	align-items: baseline;
+	gap: .6em;
+	margin: 0 0 .5em;
+}
+.dashboard-chantier-rang {
+	flex: none;
+	padding: .1em .5em;
+	border-radius: 10px;
+	background: rgba(43, 108, 163, .12);
+	font-variant-numeric: tabular-nums;
+}
+/* Ce qui se joue à l'instant, par opposition au message, qui rend compte de
+   l'étape précédente. Les confondre faisait lire « bloqué sur la sauvegarde »
+   quand les contrôles préalables étaient en cours. */
+.dashboard-chantier-travail {
+	font-weight: bold;
+}
+.dashboard-chantier-message {
+	color: inherit;
+	opacity: .8;
+}
+
+/* Les trois vues de la liste des plugins. Le thème habille déjà `.btn` et
+   l'état exposé (`.on`) : il ne reste qu'à les poser en ligne. */
+.dashboard-filtres {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .4em;
+	align-items: center;
+	margin: 0 0 1em;
+	padding: 0;
+	list-style: none;
+}
+.dashboard-filtres .on {
+	padding: var(--spip-btn-padding-y, .3em) var(--spip-btn-padding-x, .8em);
+	border-bottom: 2px solid currentColor;
+}
+
+/* Fraîcheur du catalogue des dépôts : « aucune mise à jour disponible » ne vaut
+   que ce que vaut la date à laquelle il a été relu. */
+.dashboard-depots {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .6em;
+	align-items: baseline;
+	margin: 0 0 1em;
+	font-size: .9em;
+	opacity: .8;
+}
+.dashboard-depots-avancement {
+	font-style: italic;
+	opacity: .85;
+}
+.dashboard-depots-perimes {
+	padding: .5em .7em;
+	border-radius: 4px;
+	background: #fff8e5;
+	color: #6b4500;
+	opacity: 1;
+}
+
+/* Une base en attente de migration n'est pas un simple retard de version :
+   l'espace privé du site géré est bloqué tant qu'elle n'est pas jouée. */
+.dashboard-badge-alerte {
+	background: #a4001c;
+	color: #fff;
+}
+
+/* Onglet « Serveur ». Le contenu arrive par requête séparée : les blocs ont
+   donc une hauteur variable, et le tableau d'une table peut être très large. */
+.dashboard-serveur-sections h3 {
+	margin: 1.4em 0 .4em;
+	padding-bottom: .2em;
+	border-bottom: 1px solid rgba(0, 0, 0, .12);
+}
+.dashboard-serveur-extensions code {
+	display: inline-block;
+	margin: 0 .15em .3em 0;
+	padding: 0 .35em;
+	border-radius: 3px;
+	background: rgba(0, 0, 0, .06);
+	font-size: .9em;
+}
+/* Les champs reprennent l'habillage de `.formulaire_spip`, posés en ligne. */
+.dashboard-serveur-barre {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .8em;
+	align-items: flex-end;
+	margin: 0 0 1em;
+}
+.dashboard-serveur-barre .editer {
+	margin: 0;
+}
+.dashboard-serveur-barre label {
+	display: block;
+	font-size: .85em;
+	opacity: .8;
+}
+.dashboard-serveur-defilement {
+	overflow-x: auto;
+	max-width: 100%;
+}
+.dashboard-serveur-defilement table {
+	white-space: nowrap;
+}
+.dashboard-serveur-defilement td {
+	max-width: 32em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+/* Le tri d'une colonne : un bouton, mais qui doit se lire comme un en-tête —
+   le thème donne aux `button` nus un fond plein qui écraserait la ligne. */
+.dashboard-serveur-tri {
+	display: inline;
+	padding: 0;
+	margin: 0;
+	border: 0;
+	background: none;
+	font: inherit;
+	font-weight: bold;
+	color: inherit;
+	cursor: pointer;
+	text-decoration: underline dotted;
+}
+.dashboard-serveur-tri:hover,
+.dashboard-serveur-tri:focus {
+	background: none;
+	color: inherit;
+	text-decoration: underline;
+}
+.dashboard-serveur-tri.on {
+	text-decoration: none;
+}
+.dashboard-serveur-masquee {
+	font-weight: normal;
+	font-size: .85em;
+	opacity: .7;
+}
+
+.dashboard-serveur-fichier {
+	margin: 0 0 .4em;
+}
+.dashboard-serveur-fichier summary {
+	cursor: pointer;
+	font-family: monospace;
+}
+.dashboard-serveur-source {
+	max-height: 32em;
+	overflow: auto;
+	padding: .6em .8em;
+	border: 1px solid rgba(0, 0, 0, .12);
+	background: rgba(0, 0, 0, .03);
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+/* Le phpinfo apporte ses propres styles : un cadre isolé les garde chez lui. */
+.dashboard-serveur-phpinfo {
+	width: 100%;
+	height: 34em;
+	border: 1px solid rgba(0, 0, 0, .15);
+	background: #fff;
+}
+
+/* Tendance du WAF. Les teintes sont posées ici, en variables, pour deux raisons :
+   le thème sombre de l'espace privé n'a qu'à les redéfinir, et le JavaScript les
+   lit au lieu de les inventer.
+
+   Les deux pas — bleu pour les requêtes, orange pour les adresses — sont ceux
+   d'une palette catégorielle vérifiée : écart perceptuel suffisant sous les trois
+   formes de daltonisme, et contraste supérieur à 3:1 sur le fond, dans les deux
+   thèmes. */
+.dashboard-graphe {
+	--dashboard-graphe-requetes: #2a78d6;
+	--dashboard-graphe-ips:      #eb6834;
+	--dashboard-graphe-encre:    #52514e;
+	--dashboard-graphe-grille:   #e6e5e0;
+	margin: 1em 0;
+}
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) .dashboard-graphe {
+		--dashboard-graphe-requetes: #3987e5;
+		--dashboard-graphe-ips:      #d95926;
+		--dashboard-graphe-encre:    #c3c2b7;
+		--dashboard-graphe-grille:   #33322f;
+	}
+}
+:root[data-theme="dark"] .dashboard-graphe {
+	--dashboard-graphe-requetes: #3987e5;
+	--dashboard-graphe-ips:      #d95926;
+	--dashboard-graphe-encre:    #c3c2b7;
+	--dashboard-graphe-grille:   #33322f;
+}
+
+/* Une hauteur explicite : sans elle, un canvas en responsive s'étire sans fin. */
+.dashboard-graphe-cadre {
+	position: relative;
+	height: 220px;
+	margin-bottom: 1.2em;
+}
+
+/* Le sélecteur de fenêtre, sur une ligne au-dessus des deux graphiques. */
+.dashboard-graphe-fenetres {
+	margin-bottom: .8em;
+}
+.dashboard-graphe-fenetres .btn[aria-pressed="true"] {
+	font-weight: 700;
+}
+
+/* Le tableau qui double les courbes : replié, il ne les encombre pas. */
+.dashboard-graphe-tableau {
+	margin-top: .6em;
+}
+.dashboard-graphe-tableau summary {
+	cursor: pointer;
+	font-size: .95em;
+}
+.dashboard-graphe-tableau table {
+	margin-top: .5em;
+}
+
+/* Barre d'actions groupées, au-dessus du tableau du parc. Elle reprend
+   l'agencement de la ligne des dépôts : mêmes boutons du privé, même compte
+   rendu en italique. */
+.dashboard-parc-groupe {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .6em;
+	align-items: center;
+	margin: 0 0 .6em;
+}
+.dashboard-parc-groupe-compte {
+	font-size: .9em;
+	opacity: .8;
+}
+
+/* La colonne des cases : aussi étroite que possible, et la case centrée sur la
+   ligne plutôt que collée en haut de cellule. */
+.dashboard-parc-cocher {
+	width: 1%;
+	white-space: nowrap;
+	vertical-align: middle;
+	text-align: center;
+}
+.dashboard-parc-cocher input {
+	margin: 0;
+}

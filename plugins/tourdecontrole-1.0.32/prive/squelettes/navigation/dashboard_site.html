@@ -1,0 +1,41 @@
+<div class="box info nav-dashboard">
+	<div class="box__body clearfix">
+		<h2 class="box__title"><:dashboard:titre_dashboard:></h2>
+		<ul class="liste-items">
+			[(#REM)
+				L'icône est en ligne plutôt qu'en fichier : un chevron de seize
+				pixels ne mérite pas une requête, et SPIP 4.4 ne livre aucune
+				image de retour qu'on puisse désigner par son nom.
+
+				`aria-hidden` et `focusable` à faux : la flèche ne dit rien que
+				le libellé ne dise déjà, et un lecteur d'écran n'a pas à la
+				rencontrer.
+			]
+			<li><a class="dashboard-retour" href="[(#URL_ECRIRE{dashboard})]"><svg
+					class="dashboard-retour-icone" viewBox="0 0 16 16" width="16" height="16"
+					aria-hidden="true" focusable="false"><path d="M10 3 5 8l5 5"
+					fill="none" stroke="currentColor" stroke-width="2"
+					stroke-linecap="round" stroke-linejoin="round"/></svg><:dashboard:nav_retour_parc:></a></li>
+		</ul>
+
+		<BOUCLE_installe(CONDITION){si #VAL|dashboard_tables_presentes}>
+		<BOUCLE_site(DASHBOARD_SITES){id_dashboard_site}>
+			[(#REM)
+				L'ancre de retour est calculée à part : un filtre à accolades
+				glissé dans l'argument d'une autre balise est une source d'ennuis
+				que ce squelette a déjà connue.
+			]
+			#SET{retour_etat,#SELF|ancre_url{etat}}
+			#SET{retour_parc,#URL_ECRIRE{dashboard}}
+			<p class="explication"><:dashboard:nav_explication:></p>
+			[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+				[(#BOUTON_ACTION{<:dashboard:action_sync:>,#URL_ACTION_AUTEUR{dashboard_operation,sync/#ID_DASHBOARD_SITE,#GET{retour_etat}},btn})]
+			]
+			[(#AUTORISER{supprimer,dashboard_site,#ID_DASHBOARD_SITE})
+				[(#BOUTON_ACTION{<:dashboard:action_supprimer_site:>,#URL_ACTION_AUTEUR{dashboard_supprimer,#ID_DASHBOARD_SITE,#GET{retour_parc}},btn btn_danger,<:dashboard:confirmer_suppression:>})]
+			]
+		</BOUCLE_site>
+		</BOUCLE_installe>
+		<//B_installe>
+	</div>
+</div>

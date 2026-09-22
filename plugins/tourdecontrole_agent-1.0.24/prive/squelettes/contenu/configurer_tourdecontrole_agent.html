@@ -1,0 +1,112 @@
+[(#REM)
+	Nom dérivé du préfixe du plugin, et non de la famille de fonctions :
+	c'est ainsi que SPIP affiche le bouton « Configurer » dans sa page
+	Gestion des plugins.
+]
+[(#AUTORISER{configurer, _tourdecontrole_agent}|sinon_interdire_acces)]
+
+<h1 class="grostitre"><:dashagent:titre_configurer:></h1>
+
+#SET{alerte_autorites,#VAL|dashagent_alerte_autorites}
+[(#GET{alerte_autorites}|oui)
+<p class="reponse_formulaire reponse_formulaire_erreur">
+	<:dashagent:alerte_autorites:> [(#GET{alerte_autorites}|textebrut)]
+</p>
+]
+
+#FORMULAIRE_CONFIGURER_DASHAGENT
+
+[(#ENV{dashagent_message}|oui)
+<p class="reponse_formulaire reponse_formulaire_[(#ENV{dashagent_statut}|=={erreur}|?{erreur,ok})]">
+	[(#ENV{dashagent_message}|textebrut)]
+</p>
+]
+
+<div class="ajax" id="sauvegardes">
+	<h2><:dashagent:titre_sauvegardes:></h2>
+
+	[(#REM)
+		Ces fichiers portent la base entière du site. Ils vivent sous `tmp/`,
+		hors espace web, et rien ne les montrait ici : le webmestre pouvait
+		refuser qu'on en produise, pas constater ce qui avait été pris chez lui.
+	]
+	<p class="explication"><:dashagent:explication_sauvegardes:></p>
+
+	#SET{retour_sauvegardes,#SELF|ancre_url{sauvegardes}}
+	<B_sauvegardes>
+	#SET{poids_total,#VAL|dashagent_sauvegardes_octets}
+	<table class="spip liste">
+		<caption>
+			<:dashagent:sauvegardes_caption{nb=#TOTAL_BOUCLE}:>
+			&mdash; [(#GET{poids_total}|taille_en_octets)]
+		</caption>
+		<thead>
+			<tr>
+				<th scope="col"><:dashagent:col_date:></th>
+				<th scope="col"><:dashagent:col_fichier:></th>
+				<th scope="col"><:dashagent:col_poids:></th>
+				<th scope="col"><:dashagent:col_actions:></th>
+			</tr>
+		</thead>
+		<tbody>
+		<BOUCLE_sauvegardes(DATA){source table, #VAL|dashagent_sauvegardes}{pagination 10}>
+			<tr>
+				<td>[(#VALEUR|table_valeur{date}|affdate_heure)]</td>
+				<th scope="row"><code>[(#VALEUR|table_valeur{fichier}|entites_html)]</code></th>
+				<td>[(#VALEUR|table_valeur{octets}|taille_en_octets)]</td>
+				<td>
+					[(#REM)
+						L'identifiant se calcule à part : une balise à accolades
+						dans l'argument d'une autre désorganise l'analyse.
+					]
+					#SET{identifiant,#VALEUR|table_valeur{identifiant}}
+					[(#BOUTON_ACTION{<:dashagent:action_supprimer_sauvegarde:>,#URL_ACTION_AUTEUR{dashagent_sauvegarde_supprimer,#GET{identifiant},#GET{retour_sauvegardes}},btn btn_danger,<:dashagent:confirmer_suppression_sauvegarde:>})]
+				</td>
+			</tr>
+		</BOUCLE_sauvegardes>
+		</tbody>
+	</table>
+	[<nav class="pagination" role="navigation">(#PAGINATION{page_precedent_suivant})</nav>]
+	</B_sauvegardes>
+	<p class="petition"><:dashagent:sauvegardes_vide:></p>
+	<//B_sauvegardes>
+</div>
+
+<div class="ajax">
+	<h2><:dashagent:titre_journal:></h2>
+
+	<BOUCLE_installe(CONDITION){si #VAL|dashagent_tables_presentes}>
+	<B_journal>
+	<table class="spip liste">
+		<caption><:dashagent:journal_caption:></caption>
+		<thead>
+			<tr>
+				<th scope="col"><:dashagent:col_date:></th>
+				<th scope="col"><:dashagent:col_operation:></th>
+				<th scope="col"><:dashagent:col_statut:></th>
+				<th scope="col"><:dashagent:col_ip:></th>
+				<th scope="col"><:dashagent:col_duree:></th>
+				<th scope="col"><:dashagent:col_message:></th>
+			</tr>
+		</thead>
+		<tbody>
+		<BOUCLE_journal(DASHAGENT_JOURNAL){par date}{inverse}{pagination 25}>
+			<tr class="[(#COMPTEUR_BOUCLE|alterner{odd,even})]">
+				<td>[(#DATE|affdate_heure)]</td>
+				<td><code>#OPERATION</code></td>
+				<td class="dashagent-statut-#STATUT">#STATUT</td>
+				<td>#IP</td>
+				<td>[(#DUREE) ms]</td>
+				<td>[(#MESSAGE|couper{120})]</td>
+			</tr>
+		</BOUCLE_journal>
+		</tbody>
+	</table>
+	[<nav class="pagination" role="navigation">(#PAGINATION{page_precedent_suivant})</nav>]
+	</B_journal>
+	<p class="petition"><:dashagent:journal_vide:></p>
+	<//B_journal>
+	</BOUCLE_installe>
+	<p class="reponse_formulaire reponse_formulaire_erreur"><:dashagent:explication_tables_absentes:></p>
+	<//B_installe>
+</div>
