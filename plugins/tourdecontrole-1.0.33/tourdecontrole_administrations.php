@@ -111,6 +111,13 @@ function tourdecontrole_upgrade($nom_meta_base_version, $version_cible) {
 		['tourdecontrole_creer_tables'],
 	];
 
+	// 1.0.9 : les abonnements Web Push de l'espace privé. Une table de plus,
+	// sans reprise de données — un abonnement ne se devine pas, il se redemande
+	// au navigateur.
+	$maj['1.0.9'] = [
+		['tourdecontrole_creer_tables'],
+	];
+
 	include_spip('base/upgrade');
 	maj_plugin($nom_meta_base_version, $version_cible, $maj);
 }
@@ -130,6 +137,7 @@ function tourdecontrole_vider_tables($nom_meta_base_version) {
 	sql_drop_table('spip_dashboard_chantiers');
 	sql_drop_table('spip_dashboard_sauvegardes');
 	sql_drop_table('spip_dashboard_waf_jours');
+	sql_drop_table('spip_dashboard_push');
 
 	effacer_meta('dashboard');
 	effacer_meta($nom_meta_base_version);

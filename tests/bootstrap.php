@@ -151,3 +151,9 @@ require_once chemin_plugin('tourdecontrole') . '/inc/dashboard_sync.php';
    la logique d'enchaînement des étapes, elle, est vérifiable telle quelle. */
 require_once chemin_plugin('tourdecontrole') . '/inc/dashboard_chantiers.php';
 require_once chemin_plugin('tourdecontrole') . '/tourdecontrole_fonctions.php';
+/* Web Push : chiffrement et signature VAPID. Aucune base, aucun réseau —
+   ce fichier ne fabrique que des octets, et c'est ce qui le rend vérifiable. */
+require_once chemin_plugin('tourdecontrole') . '/inc/dashboard_push.php';
+/* Les alertes : seules les fonctions pures sont éprouvées ici — l'empreinte de
+   ce qui a déjà été annoncé, et la mise en forme du message. */
+require_once chemin_plugin('tourdecontrole') . '/inc/dashboard_alertes.php';

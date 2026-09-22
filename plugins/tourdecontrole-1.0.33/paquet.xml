@@ -4,7 +4,7 @@
 	version="1.0.33"
 	etat="test"
 	compatibilite="[4.1.0;4.*]"
-	schema="1.0.8"
+	schema="1.0.9"
 	logo="prive/themes/spip/images/dashboard-64.svg"
 	documentation="https://github.com/nicaille/Dashboard-administration-sites-spip/blob/main/docs/installation.md"
 	developpement="https://github.com/nicaille/Dashboard-administration-sites-spip"

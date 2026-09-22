@@ -1791,6 +1791,244 @@ $pris = dashagent_svp_vider_tampons($niveau);
 verifier('les tampons imbriqués sont rendus dans l’ordre', $pris === 'premiersecond', $pris);
 verifier('le niveau de départ est retrouvé', ob_get_level() === $niveau);
 
+echo "\n== Web Push : le chiffrement de la RFC 8291 ==\n";
+
+/*
+ * Le vecteur d'essai de la RFC 8291, section 5. C'est le seul contrôle qui
+ * prouve quoi que ce soit ici : un chiffrement faux produit des octets aussi
+ * plausibles que le bon, et la seule façon de s'en apercevoir autrement serait
+ * qu'un navigateur reste muet — six mois plus tard, sans rien pour le relier à
+ * la cause.
+ *
+ * Les valeurs sont celles de la RFC, relevées dans les tests de la
+ * bibliothèque de référence web-push-libs/web-push-php. L'en-tête et le
+ * chiffré y sont donnés séparément ; le corps est leur concaténation.
+ */
+$rfc = [
+	'clair'   => 'When I grow up, I want to be a watermelon',
+	'ua_priv' => 'q1dXpw3UpT5VOmu_cf_v6ih07Aems3njxI-JWgLcM94',
+	'ua_pub'  => 'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4',
+	'auth'    => 'BTBZMqHH6r4Tts7J_aSIgg',
+	'as_priv' => 'yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw',
+	'as_pub'  => 'BP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A8',
+	'sel'     => 'DGv6ra1nlYgDCS1FRnbzlw',
+	'entete'  => 'DGv6ra1nlYgDCS1FRnbzlwAAEABBBP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A8',
+	'chiffre' => '8pfeW0KbunFT06SuDKoJH9Ql87S1QUrdirN6GcG7sFz1y1sqLgVi1VhjVkHsUoEsbI_0LpXMuGvnzQ',
+];
+
+verifier('le base64 de l’URL fait l’aller-retour',
+	dashboard_push_b64(dashboard_push_deb64($rfc['ua_pub'])) === $rfc['ua_pub']);
+verifier('un base64 illisible ne lève pas d’exception',
+	dashboard_push_deb64('!!!pas du base64!!!') === '');
+
+$clef_as = dashboard_push_clef_privee(dashboard_push_deb64($rfc['as_priv']), dashboard_push_deb64($rfc['as_pub']));
+verifier('une clef privée P-256 se reconstruit de son scalaire brut', (bool) $clef_as);
+
+if ($clef_as) {
+	/* Le point reconstruit doit être celui qu'annonce la RFC : c'est le
+	   contrôle qui attrape un remplissage de coordonnée manquant — OpenSSL rend
+	   X et Y sans zéros de tête, et une coordonnée sur trente et un octets
+	   décalerait tout ce qui suit. */
+	$detail_as = openssl_pkey_get_details($clef_as);
+	verifier('le point public reconstruit est celui de la RFC',
+		dashboard_push_point($detail_as) === dashboard_push_deb64($rfc['as_pub']));
+
+	$pem_as = '';
+	openssl_pkey_export($clef_as, $pem_as);
+
+	$chiffre = dashboard_push_chiffrer(
+		$rfc['clair'],
+		dashboard_push_deb64($rfc['ua_pub']),
+		dashboard_push_deb64($rfc['auth']),
+		dashboard_push_deb64($rfc['sel']),
+		['pem' => $pem_as]
+	);
+	verifier('le chiffrement aboutit', !empty($chiffre['ok']), (string) $chiffre['message']);
+
+	$attendu = dashboard_push_deb64($rfc['entete']) . dashboard_push_deb64($rfc['chiffre']);
+	verifier('l’en-tête aes128gcm est celui de la RFC',
+		substr($chiffre['corps'], 0, 86) === dashboard_push_deb64($rfc['entete']));
+	/* L'étiquette GCM est incluse : elle authentifie la clef, le nonce et le
+	   chiffré à la fois. Qu'elle tombe juste prouve toute la dérivation. */
+	verifier('le chiffré et son étiquette GCM sont ceux de la RFC',
+		substr($chiffre['corps'], 86) === dashboard_push_deb64($rfc['chiffre']));
+	verifier('le corps complet est celui de la RFC', $chiffre['corps'] === $attendu);
+
+	/* Et l'aller-retour : une charge qu'on ne sait pas relire est une charge
+	   qu'on n'a pas vérifiée. */
+	$clef_ua = dashboard_push_clef_privee(dashboard_push_deb64($rfc['ua_priv']), dashboard_push_deb64($rfc['ua_pub']));
+	$pem_ua = '';
+	openssl_pkey_export($clef_ua, $pem_ua);
+	$relu = dashboard_push_dechiffrer($chiffre['corps'], $pem_ua, dashboard_push_deb64($rfc['auth']));
+	verifier('l’abonné relit exactement le texte d’origine',
+		!empty($relu['ok']) && $relu['charge'] === $rfc['clair'],
+		(string) $relu['message'] . ' / ' . var_export($relu['charge'], true));
+
+	/* Un secret d'authentification faux doit faire échouer le déchiffrement :
+	   c'est lui qui distingue le Web Push d'un ECDH ordinaire. S'il ne servait
+	   à rien, ce contrôle passerait quand même. */
+	$faux = dashboard_push_dechiffrer($chiffre['corps'], $pem_ua, str_repeat("\x00", 16));
+	verifier('un secret d’authentification faux fait échouer le déchiffrement', empty($faux['ok']));
+}
+
+/* Un sel ou une clef de taille inattendue se refusent plutôt que de produire
+   des octets qu'aucun navigateur ne saura lire. */
+$refus = dashboard_push_chiffrer('x', 'trop court', dashboard_push_deb64($rfc['auth']));
+verifier('une clef publique d’abonnement invalide est refusée', empty($refus['ok']));
+$refus = dashboard_push_chiffrer('x', dashboard_push_deb64($rfc['ua_pub']), 'court');
+verifier('un secret d’authentification de mauvaise taille est refusé', empty($refus['ok']));
+
+echo "\n== Web Push : la signature VAPID ==\n";
+
+$paire = dashboard_push_paire();
+verifier('une paire VAPID se fabrique', (bool) $paire);
+
+if ($paire) {
+	verifier('la clef publique fait 65 octets non compressés',
+		strlen(dashboard_push_deb64($paire['publique'])) === 65);
+
+	$jeton = dashboard_push_jeton('https://fcm.googleapis.com', 'mailto:parc@exemple.org', $paire['pem']);
+	verifier('le jeton se signe', !empty($jeton['ok']), (string) $jeton['message']);
+
+	$morceaux = explode('.', (string) $jeton['jeton']);
+	verifier('le jeton a trois parties', count($morceaux) === 3);
+	$entete = json_decode(dashboard_push_deb64($morceaux[0]), true);
+	$corps  = json_decode(dashboard_push_deb64($morceaux[1]), true);
+	verifier('l’algorithme annoncé est ES256', ($entete['alg'] ?? '') === 'ES256');
+	verifier('l’audience est l’origine, sans le chemin de l’abonnement',
+		($corps['aud'] ?? '') === 'https://fcm.googleapis.com');
+	verifier('l’expiration ne dépasse pas les 24 h de la RFC 8292',
+		((int) ($corps['exp'] ?? 0) - time()) <= 86400);
+	verifier('la signature fait 64 octets', strlen(dashboard_push_deb64($morceaux[2])) === 64);
+
+	/* La conversion DER → brut est le piège classique : OpenSSL rend des
+	   entiers de longueur variable, qui gagnent un octet nul de tête quand leur
+	   bit de poids fort est armé. Mille signatures parce que le cas ne se
+	   présente pas à tous les coups — et qu'une signature mal convertie est
+	   refusée par tous les services de distribution, sans qu'aucun ne dise
+	   lequel des deux nombres est en cause. */
+	$publique = dashboard_push_clef_publique(dashboard_push_deb64($paire['publique']));
+	$fautes = 0;
+	$longueurs = [];
+	for ($i = 0; $i < 200; $i++) {
+		$der = '';
+		openssl_sign('message ' . $i, $der, openssl_pkey_get_private($paire['pem']), OPENSSL_ALGO_SHA256);
+		$longueurs[strlen($der)] = true;
+		$brut = dashboard_push_der_vers_brut($der);
+		if (strlen($brut) !== 64) {
+			$fautes++;
+			continue;
+		}
+		if (openssl_verify('message ' . $i, dashboard_push_brut_vers_der($brut), $publique, OPENSSL_ALGO_SHA256) !== 1) {
+			$fautes++;
+		}
+	}
+	verifier('200 signatures traversent la conversion sans perte', $fautes === 0, $fautes . ' faute(s)');
+	verifier('plusieurs longueurs de DER ont été rencontrées',
+		count($longueurs) > 1, implode(', ', array_keys($longueurs)));
+
+	verifier('un DER tronqué est refusé plutôt que deviné',
+		dashboard_push_der_vers_brut("\x30\x06\x02\x01\x01") === '');
+	verifier('une signature brute de mauvaise taille est refusée',
+		dashboard_push_brut_vers_der(str_repeat("\x01", 63)) === '');
+}
+
+verifier('une adresse sans schéma n’a pas d’audience', dashboard_push_audience('fcm.googleapis.com/x') === '');
+verifier('l’audience retient le port quand il est explicite',
+	dashboard_push_audience('https://push.local:8443/wpush/abc') === 'https://push.local:8443');
+
+echo "\n== Web Push : ce qu'un code de réponse autorise à conclure ==\n";
+
+/* La même distinction que partout ailleurs : une réponse se respecte, un
+   silence ne dit rien. Supprimer un abonnement sur un silence reviendrait à
+   débrancher le webmestre parce que le réseau a hoqueté. */
+verifier('201 : remis', dashboard_push_verdict(201) === 'remis');
+verifier('200 : remis', dashboard_push_verdict(200) === 'remis');
+verifier('404 : abonnement périmé', dashboard_push_verdict(404) === 'perime');
+verifier('410 : abonnement périmé', dashboard_push_verdict(410) === 'perime');
+verifier('401 : refus, mais l’abonnement reste', dashboard_push_verdict(401) === 'refuse');
+verifier('413 : refus, mais l’abonnement reste', dashboard_push_verdict(413) === 'refuse');
+verifier('429 : refus, mais l’abonnement reste', dashboard_push_verdict(429) === 'refuse');
+verifier('503 : panne du service, donc silence', dashboard_push_verdict(503) === 'silence');
+verifier('500 : panne du service, donc silence', dashboard_push_verdict(500) === 'silence');
+verifier('aucune réponse : silence', dashboard_push_verdict(0) === 'silence');
+
+echo "\n== Alertes : on n'écrit que s'il y a du nouveau ==\n";
+
+$vide = ['core' => [], 'plugins' => [], 'agent' => [], 'pannes' => [], 'sites' => 12];
+verifier('un parc sans rien à dire est reconnu comme tel', dashboard_alerte_vide($vide));
+
+$etat = [
+	'core'    => [['id' => 3, 'titre' => 'Alpha', 'version' => '4.4.1']],
+	'plugins' => [['id' => 7, 'titre' => 'Beta', 'nb' => 2]],
+	'agent'   => [],
+	'pannes'  => [['id' => 9, 'titre' => 'Gamma', 'genre' => 'injoignable', 'detail' => 'timeout après 30 s']],
+	'sites'   => 12,
+];
+verifier('un parc qui a quelque chose à dire ne l’est pas', !dashboard_alerte_vide($etat));
+
+$empreinte = dashboard_alerte_empreinte($etat);
+verifier('l’empreinte est stable d’un appel à l’autre', dashboard_alerte_empreinte($etat) === $empreinte);
+
+/* Le détail d'une panne change à chaque tentative — « timeout après 30 s »,
+   puis « connexion refusée ». S'il entrait dans l'empreinte, la même panne
+   ferait repartir un courriel tous les jours. */
+$autre = $etat;
+$autre['pannes'][0]['detail'] = 'connexion refusée';
+verifier('le détail d’une panne ne change pas l’empreinte',
+	dashboard_alerte_empreinte($autre) === $empreinte);
+
+/* En revanche, tout ce qui constitue une nouvelle est une nouvelle. */
+$autre = $etat;
+$autre['plugins'][0]['nb'] = 3;
+verifier('un décompte de plugins qui bouge est du nouveau',
+	dashboard_alerte_empreinte($autre) !== $empreinte);
+
+$autre = $etat;
+$autre['core'][0]['version'] = '4.4.2';
+verifier('une version cible qui bouge est du nouveau',
+	dashboard_alerte_empreinte($autre) !== $empreinte);
+
+$autre = $etat;
+$autre['pannes'][0]['genre'] = 'muet';
+verifier('un genre de panne qui change est du nouveau',
+	dashboard_alerte_empreinte($autre) !== $empreinte);
+
+/* Et l'inverse : un parc qui va mieux est aussi une nouvelle, sans quoi on
+   resterait sur la dernière mauvaise nouvelle sans savoir qu'elle est levée. */
+verifier('un parc rentré dans l’ordre a une autre empreinte',
+	dashboard_alerte_empreinte($vide) !== $empreinte);
+
+/* L'ordre des sites ne doit rien changer : la synchronisation les rend par
+   titre, mais une jointure ou un tri modifié ferait repartir un courriel
+   identique au précédent. */
+$permute = $etat;
+$permute['core'][] = ['id' => 4, 'titre' => 'Delta', 'version' => '4.3.9'];
+$permute2 = $etat;
+array_unshift($permute2['core'], ['id' => 4, 'titre' => 'Delta', 'version' => '4.3.9']);
+verifier('l’ordre des sites ne change pas l’empreinte',
+	dashboard_alerte_empreinte($permute) === dashboard_alerte_empreinte($permute2));
+
+echo "\n== Alertes : ce qui vient d'un site géré reste inerte ==\n";
+
+/* Un titre de site vient du site géré, qui peut être compromis. Dans un
+   message en texte brut, ce sont les retours à la ligne qui mordent : ils
+   fabriqueraient de fausses lignes dans la liste, et, dans un sujet de
+   courriel, un en-tête supplémentaire. */
+verifier('un retour à la ligne est neutralisé',
+	strpos(dashboard_alerte_nom("Site\nBcc: victime@exemple.org"), "\n") === false,
+	dashboard_alerte_nom("Site\nBcc: victime@exemple.org"));
+verifier('un retour chariot est neutralisé',
+	strpos(dashboard_alerte_nom("Site\r\nSubject: autre"), "\r") === false);
+verifier('un caractère de contrôle est neutralisé',
+	strpos(dashboard_alerte_nom("Site\x00nul"), "\x00") === false);
+verifier('un titre vide reste lisible', dashboard_alerte_nom('   ') === '(sans titre)');
+verifier('un titre démesuré est coupé',
+	mb_strlen(dashboard_alerte_nom(str_repeat('x', 500))) === 80,
+	(string) mb_strlen(dashboard_alerte_nom(str_repeat('x', 500))));
+verifier('un titre ordinaire passe tel quel',
+	dashboard_alerte_nom('Mairie de Saint-Étienne') === 'Mairie de Saint-Étienne');
+
 echo "\n----------------------------------------\n";
 echo ($total - $echecs) . " / $total vérifications passées\n";
 

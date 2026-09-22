@@ -255,6 +255,46 @@ function tourdecontrole_declarer_tables_principales($tables) {
 		],
 	];
 
+	/*
+	 * Les abonnements Web Push de l'espace privé.
+	 *
+	 * Un abonnement appartient à un **navigateur**, pas à une personne : le
+	 * même webmestre en a un par poste et un par téléphone, et c'est voulu —
+	 * c'est là que la notification doit arriver. D'où la clef unique sur
+	 * l'adresse de distribution, que le navigateur regénère quand il révoque
+	 * l'abonnement.
+	 *
+	 * `endpoint` est un `text` : les adresses de FCM dépassent les 255
+	 * caractères, et un `varchar` les tronquerait sans rien dire — l'envoi
+	 * partirait alors vers une adresse invalide pour un 404 incompréhensible.
+	 * Un index sur un `text` demandant une longueur en MySQL, l'unicité se
+	 * porte sur l'empreinte de l'adresse plutôt que sur l'adresse.
+	 *
+	 * `echecs` compte les silences consécutifs, `date_succes` date la dernière
+	 * remise acceptée : un abonnement que le service refuse définitivement se
+	 * supprime, mais un qui se tait ne se supprime pas sur un seul silence.
+	 */
+	$tables['spip_dashboard_push'] = [
+		'field' => [
+			'id_dashboard_push' => 'bigint(21) NOT NULL',
+			'id_auteur'         => 'bigint(21) DEFAULT 0 NOT NULL',
+			'empreinte'         => "char(64) DEFAULT '' NOT NULL",
+			'endpoint'          => "text DEFAULT '' NOT NULL",
+			'p256dh'            => "varchar(255) DEFAULT '' NOT NULL",
+			'auth'              => "varchar(64) DEFAULT '' NOT NULL",
+			'navigateur'        => "varchar(255) DEFAULT '' NOT NULL",
+			'date'              => "datetime DEFAULT '0000-00-00 00:00:00' NOT NULL",
+			'date_succes'       => "datetime DEFAULT '0000-00-00 00:00:00' NOT NULL",
+			'echecs'            => 'int(11) DEFAULT 0 NOT NULL',
+			'maj'               => 'TIMESTAMP',
+		],
+		'key' => [
+			'PRIMARY KEY'            => 'id_dashboard_push',
+			'UNIQUE KEY empreinte'   => 'empreinte',
+			'KEY id_auteur'          => 'id_auteur',
+		],
+	];
+
 	return $tables;
 }
 
@@ -276,6 +316,7 @@ function tourdecontrole_declarer_tables_interfaces($interfaces) {
 	$interfaces['table_des_tables']['dashboard_journal']    = 'dashboard_journal';
 	$interfaces['table_des_tables']['dashboard_sauvegardes'] = 'dashboard_sauvegardes';
 	$interfaces['table_des_tables']['dashboard_chantiers']  = 'dashboard_chantiers';
+	$interfaces['table_des_tables']['dashboard_push']       = 'dashboard_push';
 
 	return $interfaces;
 }
