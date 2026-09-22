@@ -2127,23 +2127,61 @@ console.log('\n### Alertes : ce que dirait le parc');
 /* L'alerte se calcule sur l'état réel du site de test. On ne vérifie pas son
    contenu — il dépend du parcours — mais qu'elle se calcule sans erreur et
    que l'empreinte est stable : c'est elle qui décide des envois. */
-{
+try {
+	/* Surtout pas de `define('_ECRIRE_INC_VERSION')` avant l'amorçage : c'est
+	   la constante par laquelle SPIP reconnaît qu'il est déjà chargé, et la
+	   poser d'avance fait que `inc_version.php` ne charge rien du tout —
+	   `include_spip()` reste alors indéfinie. Le premier essai s'y est laissé
+	   prendre, et l'exception a emporté la fin du parcours. */
 	const verdict = execFileSync('php', ['-r', `
-		define('_ECRIRE_INC_VERSION', '1');
 		chdir(getenv('SITE'));
 		require_once 'vendor/autoload.php';
 		include_once SpipLeague\\Component\\Kernel\\param('spip.dirs.core') . 'inc_version.php';
+		/* Un amorçage nu ne charge pas la couche SQL : sous le web et dans un
+		   génie, SPIP s'en charge, ici il faut le dire. */
+		include_spip('base/abstract_sql');
 		include_spip('inc/dashboard_alertes');
 		$etat = dashboard_alerte_etat();
 		$a = dashboard_alerte_empreinte($etat);
 		$b = dashboard_alerte_empreinte(dashboard_alerte_etat());
 		$m = dashboard_alerte_texte($etat, 'https://exemple.org/ecrire/?exec=dashboard');
-		echo ($a === $b ? 'STABLE' : 'INSTABLE') . ':' . strlen($a) . ':' . strlen($m['sujet']);
+		echo 'VERDICT:' . ($a === $b ? 'STABLE' : 'INSTABLE') . ':' . strlen($a) . ':' . strlen($m['sujet']);
 	`], { env: { ...process.env, SITE: site } }).toString();
-	const [stable, taille, sujet] = verdict.trim().split(':');
-	dit('l’alerte se calcule sur le parc réel', stable === 'STABLE', verdict);
-	dit('l’empreinte est un sha256', Number(taille) === 64, taille);
-	dit('le sujet du message n’est pas vide', Number(sujet) > 0, sujet);
+	const ligne = (verdict.match(/VERDICT:(\S+)/) || [])[1] || '';
+	const [stable, taille, sujet] = ligne.split(':');
+	dit('l’alerte se calcule sur le parc réel', stable === 'STABLE', verdict.slice(-200));
+	dit('l’empreinte est un sha256', Number(taille) === 64, String(taille));
+	dit('le sujet du message n’est pas vide', Number(sujet) > 0, String(sujet));
+} catch (e) {
+	/* Une section qui explose ne doit pas emporter celles d'après : le
+	   parcours perdrait le reste de ses contrôles pour un seul défaut. */
+	dit('l’alerte se calcule sur le parc réel', false, String(e.message).slice(0, 200));
+}
+
+/* L'envoi passe par la fonction surchargeable de SPIP, et non par `mail()` :
+   c'est ce qui laisse un plugin comme Facteur prendre la main pour envoyer en
+   SMTP. Le contrôle relit d'où vient la fonction réellement résolue — écrire
+   `charger_fonction()` ne prouve pas qu'elle trouve quelque chose. */
+try {
+	const resolu = execFileSync('php', ['-r', `
+		chdir(getenv('SITE'));
+		require_once 'vendor/autoload.php';
+		include_once SpipLeague\\Component\\Kernel\\param('spip.dirs.core') . 'inc_version.php';
+		include_spip('base/abstract_sql');
+		include_spip('inc/envoyer_mail');
+		$f = charger_fonction('envoyer_mail', 'inc', true);
+		if (!$f) { echo 'MAIL:AUCUNE'; exit; }
+		$r = new ReflectionFunction($f);
+		echo 'MAIL:' . $f . ':' . basename(dirname($r->getFileName())) . '/' . basename($r->getFileName());
+	`], { env: { ...process.env, SITE: site } }).toString();
+	const ligne = (resolu.match(/MAIL:(\S+)/) || [])[1] || '';
+	dit('l’envoi de courriel passe par la fonction surchargeable de SPIP',
+		ligne.startsWith('inc_envoyer_mail'), ligne || resolu.slice(-160));
+	dit('elle vient bien du core et non d’une définition à nous',
+		ligne.includes('inc/envoyer_mail.php'), ligne);
+} catch (e) {
+	dit('l’envoi de courriel passe par la fonction surchargeable de SPIP', false,
+		String(e.message).slice(0, 200));
 }
 
 console.log('\n### Le cron en ligne de commande');
@@ -2151,7 +2189,7 @@ console.log('\n### Le cron en ligne de commande');
 /* Le script d'OVH, sur le site réel. Deux choses seulement, mais ce sont
    celles qui ont cassé au premier essai : il se termine, et il refuse d'être
    atteint par le web. */
-{
+try {
 	/* Le fichier est pris dans le plugin **tel que le site l'a installé**, par
 	   glob sur le préfixe : un chemin qui figerait la version casserait au
 	   prochain numéro. */
@@ -2177,7 +2215,10 @@ console.log('\n### Le cron en ligne de commande');
 	const parLeWeb = await page.request.get(base + '/cron-spip.php');
 	dit('atteint par le web, il refuse', parLeWeb.status() === 404, String(parLeWeb.status()));
 	unlinkSync(cron);
+} catch (e) {
+	dit('le cron se termine dans son budget', false, String(e.message).slice(0, 200));
 }
+
 
 console.log('\n' + (echecs ? `=== ${echecs} ÉCHEC(S) ===` : '=== PARCOURS COMPLET SANS ERREUR ==='));
 await nav.close();
