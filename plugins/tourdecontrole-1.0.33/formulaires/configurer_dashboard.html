@@ -109,6 +109,28 @@
 			</ul>
 		</fieldset>
 
+		<fieldset>
+			<legend><:dashboard:legend_alertes:></legend>
+			<ul>
+				<li class="editer editer_alerte_active">
+					<input type="checkbox" name="alerte_active" id="alerte_active" value="on"[ (#ENV{alerte_active}|=={on}|oui)checked="checked"] />
+					<label for="alerte_active"><:dashboard:label_alerte_active:></label>
+					<p class="explication"><:dashboard:explication_alerte_active:></p>
+				</li>
+				<li class="editer editer_alerte_destinataires[ (#ENV{erreurs}|table_valeur{alerte_destinataires}|oui)erreur]">
+					<label for="alerte_destinataires"><:dashboard:label_alerte_destinataires:></label>
+					[<span class="erreur_message">(#ENV{erreurs}|table_valeur{alerte_destinataires})</span>]
+					<textarea name="alerte_destinataires" id="alerte_destinataires" rows="3" class="text">[(#ENV{alerte_destinataires})]</textarea>
+					<p class="explication"><:dashboard:explication_alerte_destinataires:></p>
+				</li>
+				<li class="editer editer_alerte_sujet">
+					<label for="alerte_sujet"><:dashboard:label_alerte_sujet:></label>
+					<input type="text" class="text" name="alerte_sujet" id="alerte_sujet" value="[(#ENV{alerte_sujet})]" />
+					<p class="explication"><:dashboard:explication_alerte_sujet:></p>
+				</li>
+			</ul>
+		</fieldset>
+
 		<p class="boutons"><input type="submit" class="submit" value="<:bouton_enregistrer:>" /></p>
 	</div></form>
 	]

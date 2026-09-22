@@ -7,7 +7,7 @@
  */
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync, writeFileSync, existsSync, utimesSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, existsSync, utimesSync, copyFileSync, unlinkSync } from 'node:fs';
 
 const base = process.env.BASE_URL || 'http://127.0.0.1:8321';
 const site = process.env.SITE_DIR;
@@ -1365,10 +1365,27 @@ const portee = await page.evaluate(() => {
 });
 dit('une case ne porte aucune adresse d’action', !/url|href|action=/.test(portee), portee);
 
+/* Les deux ensembles se comparent l'un à l'autre plutôt qu'à une liste écrite
+   ici : une opération ajoutée sans sa file ne doit pas demander qu'on pense à
+   modifier ce fichier — c'est justement le défaut qu'on cherche. Le plancher
+   garde le contrôle de son sujet : deux ensembles vides sont égaux. */
 const filesVues = await page.evaluate(() =>
 	Array.from(document.querySelectorAll('[data-parc-file]'))
 		.map((u) => u.getAttribute('data-parc-file')).sort().join(','));
-dit('les files d’adresses sont présentes', filesVues === 'agent_maj,depots,purger,sync', filesVues);
+const boutonsVus = await page.evaluate(() =>
+	Array.from(new Set(Array.from(document.querySelectorAll('[data-parc-action]'))
+		.map((b) => b.getAttribute('data-parc-action')))).sort().join(','));
+/* L'inclusion, pas l'égalité : les files sont rendues sans condition, tandis
+   que certains boutons ne paraissent que s'il y a du travail — celui de
+   l'agent disparaît quand tout le parc est à jour. Une file sans bouton est
+   donc normale ; un bouton sans file est le défaut qu'on cherche, et c'est le
+   sens que `test_structure.php` vérifie déjà statiquement. */
+const orphelins = boutonsVus.split(',').filter(Boolean)
+	.filter((op) => !filesVues.split(',').includes(op));
+dit('chaque bouton de parc a sa file d’adresses dans la page',
+	orphelins.length === 0, `sans file : ${orphelins.join(',') || 'aucun'} — files ${filesVues} / boutons ${boutonsVus}`);
+dit('le parc propose bien ses cinq opérations',
+	filesVues.split(',').filter(Boolean).length >= 5, filesVues);
 
 const signees = await page.evaluate(() => {
 	const liens = Array.from(document.querySelectorAll('[data-parc-file] a'));
@@ -2017,6 +2034,203 @@ try {
 } catch (e) {
 	dit('dump rejouable dans une base neuve', false, e.message.slice(0, 120));
 }
+
+console.log('\n### Le pavé de mise à jour du core, en haut de la fiche');
+
+/* Il vivait en bas de page, sous SPIP Check, et *à l'intérieur* de
+   l'autorisation « operer ». On vérifie ici sa position dans le document : un
+   encadré présent mais relégué en bas est exactement le défaut qu'on corrige,
+   et aucune assertion de présence ne l'aurait vu. */
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+{
+	const ordre = await page.evaluate(() => {
+		const blocs = Array.from(document.querySelectorAll('.dashboard-fiche'));
+		return blocs.map((b) => b.id || '');
+	});
+	const rangCore = ordre.indexOf('core');
+	const rangEtat = ordre.indexOf('etat');
+	if (rangCore === -1) {
+		/* Le site de test est à jour : l'encadré ne s'affiche pas, et c'est
+		   correct. On le dit plutôt que de faire passer le contrôle pour
+		   concluant — un test qui perd son sujet ne le dit jamais. */
+		dit('pavé core absent car le site est à jour (contrôle non concluant)', rangEtat !== -1,
+			ordre.join(' < '));
+	} else {
+		dit('le pavé core précède l’encadré d’état', rangCore < rangEtat, ordre.join(' < '));
+	}
+}
+
+console.log('\n### Mettre à jour SPIP sur la sélection');
+
+await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+{
+	const bouton = await page.locator('[data-parc-action="core_maj"]').count();
+	dit('le bouton de mise à jour du core est dans la barre groupée', bouton === 1, bouton + ' bouton(s)');
+
+	const danger = await page.locator('[data-parc-action="core_maj"].btn_danger').count();
+	dit('il porte la classe de danger', danger === 1);
+
+	const confirme = await page.getAttribute('[data-parc-action="core_maj"]', 'data-parc-confirmer');
+	dit('il demande confirmation avec le décompte', !!confirme && confirme.includes('@nb@'), String(confirme));
+
+	/* Pas de jumeau « tout le parc » : c'est une décision, et elle doit tenir
+	   dans le temps. Un bouton sans data-parc-selection viserait tout le parc. */
+	const sansSelection = await page.locator('[data-parc-action="core_maj"]:not([data-parc-selection="oui"])').count();
+	dit('aucun bouton « core sur tout le parc »', sansSelection === 0);
+
+	const file = await page.locator('[data-parc-file="core_maj"] li[data-site]').count();
+	dit('la file d’adresses signées du core est peuplée', file >= 1, file + ' site(s)');
+
+	/* La règle qui tient tout : aucune adresse n'est fabriquée en JavaScript,
+	   et chaque adresse est signée pour son couple opération/site. */
+	const href = await page.getAttribute('[data-parc-file="core_maj"] li[data-site] a', 'href');
+	dit('l’adresse est signée pour core_maj', !!href && href.includes('core_maj') && /arg=|hash=/.test(href),
+		String(href).slice(0, 120));
+}
+
+console.log('\n### Alertes : réglages et notifications');
+
+await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole', { waitUntil: 'domcontentloaded' });
+{
+	dit('le formulaire porte la bascule des alertes',
+		(await page.locator('[name="alerte_active"]').count()) === 1);
+	dit('il porte la liste des destinataires',
+		(await page.locator('[name="alerte_destinataires"]').count()) === 1);
+
+	/* La clef VAPID doit être fabriquée et servie au navigateur : sans elle,
+	   `pushManager.subscribe()` ne peut rien faire. Soixante-cinq octets une
+	   fois décodée — c'est la forme non compressée d'un point P-256. */
+	const clef = await page.getAttribute('[data-dashboard-alertes]', 'data-clef');
+	dit('la clef publique VAPID est servie au navigateur', !!clef && clef.length > 80, String(clef).slice(0, 20) + '…');
+	if (clef) {
+		const octets = Buffer.from(clef.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+		dit('elle fait 65 octets et commence par 0x04', octets.length === 65 && octets[0] === 4,
+			octets.length + ' octets, premier = ' + octets[0]);
+	}
+
+	const portee = await page.getAttribute('[data-dashboard-alertes]', 'data-portee');
+	dit('la portée du service worker est l’espace privé, pas la racine',
+		!!portee && portee.endsWith('/') && portee !== '/', String(portee));
+
+	const abonner = await page.getAttribute('[data-dashboard-alertes]', 'data-abonner');
+	dit('l’adresse d’abonnement est signée', !!abonner && /arg=|hash=/.test(abonner), String(abonner).slice(0, 120));
+}
+
+/* Le service worker doit être servi par son adresse stable, avec le bon type
+   MIME : un navigateur refuse d'enregistrer un service worker servi en
+   text/html, et le message d'erreur ne dit pas pourquoi. */
+{
+	const reponse = await page.request.get(base + '/spip.php?action=dashboard_sw');
+	dit('le service worker répond 200', reponse.status() === 200, String(reponse.status()));
+	const type = reponse.headers()['content-type'] || '';
+	dit('il est servi comme du JavaScript', type.includes('javascript'), type);
+	const corps = await reponse.text();
+	dit('il écoute bien l’événement push', corps.includes("addEventListener('push'"));
+	dit('il n’intercepte pas le réseau', !corps.includes("addEventListener('fetch'"));
+}
+
+console.log('\n### Alertes : ce que dirait le parc');
+
+/* L'alerte se calcule sur l'état réel du site de test. On ne vérifie pas son
+   contenu — il dépend du parcours — mais qu'elle se calcule sans erreur et
+   que l'empreinte est stable : c'est elle qui décide des envois. */
+try {
+	/* Surtout pas de `define('_ECRIRE_INC_VERSION')` avant l'amorçage : c'est
+	   la constante par laquelle SPIP reconnaît qu'il est déjà chargé, et la
+	   poser d'avance fait que `inc_version.php` ne charge rien du tout —
+	   `include_spip()` reste alors indéfinie. Le premier essai s'y est laissé
+	   prendre, et l'exception a emporté la fin du parcours. */
+	const verdict = execFileSync('php', ['-r', `
+		chdir(getenv('SITE'));
+		require_once 'vendor/autoload.php';
+		include_once SpipLeague\\Component\\Kernel\\param('spip.dirs.core') . 'inc_version.php';
+		/* Un amorçage nu ne charge pas la couche SQL : sous le web et dans un
+		   génie, SPIP s'en charge, ici il faut le dire. */
+		include_spip('base/abstract_sql');
+		include_spip('inc/dashboard_alertes');
+		$etat = dashboard_alerte_etat();
+		$a = dashboard_alerte_empreinte($etat);
+		$b = dashboard_alerte_empreinte(dashboard_alerte_etat());
+		$m = dashboard_alerte_texte($etat, 'https://exemple.org/ecrire/?exec=dashboard');
+		echo 'VERDICT:' . ($a === $b ? 'STABLE' : 'INSTABLE') . ':' . strlen($a) . ':' . strlen($m['sujet']);
+	`], { env: { ...process.env, SITE: site } }).toString();
+	const ligne = (verdict.match(/VERDICT:(\S+)/) || [])[1] || '';
+	const [stable, taille, sujet] = ligne.split(':');
+	dit('l’alerte se calcule sur le parc réel', stable === 'STABLE', verdict.slice(-200));
+	dit('l’empreinte est un sha256', Number(taille) === 64, String(taille));
+	dit('le sujet du message n’est pas vide', Number(sujet) > 0, String(sujet));
+} catch (e) {
+	/* Une section qui explose ne doit pas emporter celles d'après : le
+	   parcours perdrait le reste de ses contrôles pour un seul défaut. */
+	dit('l’alerte se calcule sur le parc réel', false, String(e.message).slice(0, 200));
+}
+
+/* L'envoi passe par la fonction surchargeable de SPIP, et non par `mail()` :
+   c'est ce qui laisse un plugin comme Facteur prendre la main pour envoyer en
+   SMTP. Le contrôle relit d'où vient la fonction réellement résolue — écrire
+   `charger_fonction()` ne prouve pas qu'elle trouve quelque chose. */
+try {
+	const resolu = execFileSync('php', ['-r', `
+		chdir(getenv('SITE'));
+		require_once 'vendor/autoload.php';
+		include_once SpipLeague\\Component\\Kernel\\param('spip.dirs.core') . 'inc_version.php';
+		include_spip('base/abstract_sql');
+		include_spip('inc/envoyer_mail');
+		$f = charger_fonction('envoyer_mail', 'inc', true);
+		if (!$f) { echo 'MAIL:AUCUNE'; exit; }
+		$r = new ReflectionFunction($f);
+		echo 'MAIL:' . $f . ':' . basename(dirname($r->getFileName())) . '/' . basename($r->getFileName());
+	`], { env: { ...process.env, SITE: site } }).toString();
+	const ligne = (resolu.match(/MAIL:(\S+)/) || [])[1] || '';
+	dit('l’envoi de courriel passe par la fonction surchargeable de SPIP',
+		ligne.startsWith('inc_envoyer_mail'), ligne || resolu.slice(-160));
+	dit('elle vient bien du core et non d’une définition à nous',
+		ligne.includes('inc/envoyer_mail.php'), ligne);
+} catch (e) {
+	dit('l’envoi de courriel passe par la fonction surchargeable de SPIP', false,
+		String(e.message).slice(0, 200));
+}
+
+console.log('\n### Le cron en ligne de commande');
+
+/* Le script d'OVH, sur le site réel. Deux choses seulement, mais ce sont
+   celles qui ont cassé au premier essai : il se termine, et il refuse d'être
+   atteint par le web. */
+try {
+	/* Le fichier est pris dans le plugin **tel que le site l'a installé**, par
+	   glob sur le préfixe : un chemin qui figerait la version casserait au
+	   prochain numéro. */
+	const dossierTour = readdirSync(`${site}/plugins`).find((d) => d.startsWith('tourdecontrole-'));
+	const cron = `${site}/cron-spip.php`;
+	copyFileSync(`${site}/plugins/${dossierTour}/outils/cron.php`, cron);
+
+	const debut = Date.now();
+	let sortie = '';
+	try {
+		/* Le compte rendu part sur la sortie d'erreur, et c'est voulu : la
+		   sortie standard d'une tâche planifiée est postée par courriel, et un
+		   passage qui n'a rien à dire ne doit rien produire. Capturer stdout
+		   seul — ce que fait `execFileSync` — ne ramenait donc rien du tout. */
+		sortie = execFileSync('sh', ['-c',
+			`php ${JSON.stringify(cron)} --duree=10 --tours=5 --verbeux 2>&1`],
+			{ cwd: site, timeout: 60000 }).toString();
+	} catch (e) {
+		sortie = String(e.stdout || '') + String(e.stderr || '');
+	}
+	const duree = (Date.now() - debut) / 1000;
+	dit('le cron se termine dans son budget', duree < 30, duree.toFixed(1) + ' s');
+	dit('il rend compte de ses tours', /tour \d|rien à faire/.test(sortie), sortie.slice(0, 200));
+
+	/* Il vit dans l'espace web : atteint par un navigateur, il ne doit rien
+	   faire. C'est la seule protection entre une adresse publique et
+	   l'exécution des tâches de fond. */
+	const parLeWeb = await page.request.get(base + '/cron-spip.php');
+	dit('atteint par le web, il refuse', parLeWeb.status() === 404, String(parLeWeb.status()));
+	unlinkSync(cron);
+} catch (e) {
+	dit('le cron se termine dans son budget', false, String(e.message).slice(0, 200));
+}
+
 
 console.log('\n' + (echecs ? `=== ${echecs} ÉCHEC(S) ===` : '=== PARCOURS COMPLET SANS ERREUR ==='));
 await nav.close();

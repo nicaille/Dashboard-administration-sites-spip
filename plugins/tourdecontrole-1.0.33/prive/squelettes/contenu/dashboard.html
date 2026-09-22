@@ -164,6 +164,25 @@
 	        data-parc-action="depots" data-parc-tours="20">
 		<:dashboard:action_depots_parc:>
 	</button>
+	[(#REM)
+		La mise à jour de SPIP lui-même, sur la sélection et sur elle seule : pas
+		de jumeau « tout le parc », parce qu'un remplacement de noyau sur
+		quarante sites d'un clic n'est pas une commodité, c'est un accident qui
+		attend son heure. Cocher, c'est désigner ; il faut donc désigner.
+
+		Le bouton rouge et la confirmation chiffrée disent ce que les autres
+		n'ont pas à dire : chaque site sélectionné y passe par une sauvegarde
+		complète, un remplacement de fichiers et une migration de base.
+
+		Cent vingt rappels : le chantier compte cinq étapes, dont une sauvegarde
+		qui se découpe en tranches de vingt secondes. Un site volumineux en
+		réclame plusieurs dizaines à lui seul.
+	]
+	<button type="button" class="btn btn_danger"
+	        data-parc-action="core_maj" data-parc-selection="oui" data-parc-tours="120"
+	        data-parc-confirmer="<:dashboard:core_maj_parc_confirmation:>">
+		<:dashboard:action_core_maj_selection:>
+	</button>
 	]
 	<span class="dashboard-depots-avancement" role="status" aria-live="polite" data-parc-avancement></span>
 </div>
@@ -335,6 +354,25 @@
 		<li data-site="#ID_DASHBOARD_SITE"><a href="[(#URL_ACTION_AUTEUR{dashboard_parc,agent_maj/#ID_DASHBOARD_SITE})]">#TITRE</a></li>
 		]
 	</BOUCLE_file_agent>
+</ul>
+
+[(#REM)
+	La file du core liste elle aussi tout le parc, et pour la même raison que
+	celle de l'agent : `core_maj` en base date du dernier inventaire, tandis que
+	l'action redéduit la version cible au moment d'agir. Filtrer ici sur
+	`{core_maj = oui}` reviendrait à décider d'un remplacement de noyau sur la
+	foi d'un drapeau périmé — et à sauter un site dont la branche a reçu une
+	publication depuis.
+
+	Ce n'est pas la file qui protège, c'est le refus : un site sans version
+	cible répond « SPIP déjà à jour » sans ouvrir de chantier.
+]
+<ul class="dashboard-parc-file" data-parc-file="core_maj" hidden>
+	<BOUCLE_file_core(DASHBOARD_SITES){statut = publie}{par titre}>
+		[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+		<li data-site="#ID_DASHBOARD_SITE"><a href="[(#URL_ACTION_AUTEUR{dashboard_parc,core_maj/#ID_DASHBOARD_SITE})]">#TITRE</a></li>
+		]
+	</BOUCLE_file_core>
 </ul>
 ]
 

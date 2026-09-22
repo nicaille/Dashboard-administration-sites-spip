@@ -1,0 +1,80 @@
+[(#REM)
+	La page s'appelle `configurer_<prefixe du plugin>` et non
+	`configurer_dashboard` : c'est de ce nom-là que SPIP dérive le bouton
+	« Configurer » de sa page Gestion des plugins — `plugin_bouton_config()`
+	cherche l'exec `configurer_` . strtolower(prefix), et `inclure/cfg.html`
+	ne montre le lien que si cet exec existe.
+
+	L'autorisation suit le même nom : `_tourdecontrole`, pas `_dashboard`.
+]
+[(#AUTORISER{configurer, _tourdecontrole}|sinon_interdire_acces)]
+<link rel="stylesheet" href="[(#CHEMIN{css/dashboard.css}|timestamp|direction_css)]" type="text/css" />
+
+<h1 class="grostitre"><:dashboard:titre_configurer:></h1>
+
+#FORMULAIRE_CONFIGURER_DASHBOARD
+
+[(#REM)
+	Les notifications du navigateur vivent hors du formulaire : elles ne se
+	règlent pas, elles s'accordent. L'abonnement est pris par le navigateur
+	lui-même, auprès de son propre service de distribution, et ce que le
+	serveur en reçoit — une adresse et deux clefs — lui arrive par une action
+	signée, jamais par l'enregistrement de la page.
+
+	Un abonnement par navigateur, et c'est voulu : le même webmestre en aura un
+	sur son poste et un sur son téléphone.
+]
+#SET{clef_push,#VAL|dashboard_push_clef_parc}
+<div class="dashboard-fiche" id="notifications"
+     data-dashboard-alertes=""
+     data-abonner="[(#URL_ACTION_AUTEUR{dashboard_push})]"
+     data-sw="[(#VAL{dashboard_sw}|generer_url_action)]"
+     data-portee="[(#VAL|dashboard_push_portee)]"
+     data-clef="[(#GET{clef_push})]"
+     data-sans-support="<:dashboard:push_sans_support:>"
+     data-refus="<:dashboard:push_refuse:>">
+	<h2><:dashboard:titre_push:></h2>
+	<p class="explication"><:dashboard:explication_push:></p>
+
+	[(#GET{clef_push}|non)
+	<p class="reponse_formulaire reponse_formulaire_erreur"><:dashboard:push_sans_clef:></p>
+	]
+	[(#GET{clef_push}|oui)
+	<p class="boutons">
+		<button type="button" class="btn" data-alertes-bouton
+		        data-libelle-on="<:dashboard:action_push_activer:>"
+		        data-libelle-off="<:dashboard:action_push_desactiver:>"
+		        disabled="disabled"><:dashboard:action_push_activer:></button>
+	</p>
+	<p class="explication" role="status" aria-live="polite" data-alertes-etat></p>
+	<p><:dashboard:push_abonnes:> <strong>[(#VAL|dashboard_push_abonnes)]</strong></p>
+	<p class="explication"><:dashboard:push_apercu:> [(#VAL|dashboard_alerte_apercu|entites_html)]</p>
+	]
+</div>
+<script src="[(#CHEMIN{javascript/dashboard_alertes.js}|timestamp)]"></script>
+
+<div class="dashboard-fiche">
+	<h2><:dashboard:titre_maintenance:></h2>
+	<p class="explication"><:dashboard:explication_maintenance:></p>
+	[<p><:dashboard:tables_manquantes:> <code>(#VAL|dashboard_tables_absentes)</code></p>]
+
+	#SET{api_manquantes,#VAL|dashboard_api_manquantes}
+	#SET{api_optionnelle,#VAL|dashboard_api_optionnelle_manquantes}
+	[(#GET{api_manquantes}|oui)
+		<p class="reponse_formulaire reponse_formulaire_erreur">
+			<:dashboard:api_manquante:> <code>[(#GET{api_manquantes})]</code>
+		</p>
+	]
+	[(#GET{api_manquantes}|non)
+		<p><:dashboard:api_complete:></p>
+	]
+	[(#VAL|dashboard_secrets_chiffres|non)
+		<p class="reponse_formulaire reponse_formulaire_erreur"><:dashboard:secrets_en_clair:></p>
+	]
+	[(#GET{api_optionnelle}|oui)
+		<p class="explication"><:dashboard:api_optionnelle_manquante:> <code>[(#GET{api_optionnelle})]</code></p>
+	]
+	<p class="boutons">
+		[(#BOUTON_ACTION{<:dashboard:action_reparer:>,#URL_ACTION_AUTEUR{dashboard_installer,installer,#SELF},btn})]
+	</p>
+</div>

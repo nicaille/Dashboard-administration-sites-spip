@@ -85,6 +85,41 @@
 </div>
 </BOUCLE_chantier>
 
+[(#REM)
+	La mise à jour du core d'abord, avant tout le reste : c'est la seule ligne
+	de cette page qui dise qu'un site tourne sur une version dépassée, et c'est
+	la question qu'on se pose en arrivant. Elle vivait en bas, sous l'encadré de
+	SPIP Check, où il fallait dérouler toute la fiche pour la voir.
+
+	Elle vivait aussi *à l'intérieur* de l'autorisation « operer », si bien
+	qu'un utilisateur qui pouvait consulter le parc sans y agir ne voyait rien
+	du tout — pas même l'alerte. Constater un retard ne demande pas le droit
+	d'y remédier : l'encadré se montre à tous, le bouton reste réservé, comme
+	pour la migration de base juste en dessous.
+]
+[(#CORE_MAJ|=={oui}|oui)
+<div class="dashboard-fiche dashboard-fiche-alerte" id="core">
+	<h2><:dashboard:titre_core_maj:></h2>
+	<p>
+		<:dashboard:core_maj_texte{version_actuelle=#GET{version_spip},version_cible=#GET{version_cible}}:>
+	</p>
+	<p class="explication"><:dashboard:core_maj_avertissement:></p>
+	[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+	<p class="boutons">
+		<!-- La version cible n'est volontairement pas passee dans l'URL : une
+		     balise a accolades imbriquee dans les arguments d'une autre balise
+		     desorganise l'analyse des arguments, et l'identifiant du site
+		     arrivait litteralement dans l'adresse — d'ou un « Site inconnu »
+		     muet. L'operation rededuit la version cible, de la meme
+		     configuration et au moment de l'execution.
+		     Ne pas ecrire de syntaxe de balise dans un commentaire : SPIP la
+		     compile quand meme, et une balise invalide emporte le bloc. -->
+		[(#BOUTON_ACTION{<:dashboard:action_core_maj:>,#URL_ACTION_AUTEUR{dashboard_operation,core_maj/#ID_DASHBOARD_SITE,#GET{retour_core}},btn btn_danger,<:dashboard:core_maj_confirmation:>})]
+	</p>
+	]
+</div>
+]
+
 [(#BASE_MAJ|=={oui}|oui)
 <div class="dashboard-fiche dashboard-fiche-alerte">
 	<h2><:dashboard:titre_base_maj:></h2>
@@ -502,26 +537,6 @@
 </div>
 ]
 
-[(#CORE_MAJ|=={oui}|oui)
-<div class="dashboard-fiche dashboard-fiche-alerte" id="core">
-	<h2><:dashboard:titre_core_maj:></h2>
-	<p>
-		<:dashboard:core_maj_texte{version_actuelle=#GET{version_spip},version_cible=#GET{version_cible}}:>
-	</p>
-	<p class="explication"><:dashboard:core_maj_avertissement:></p>
-	<p class="boutons">
-		<!-- La version cible n'est volontairement pas passee dans l'URL : une
-		     balise a accolades imbriquee dans les arguments d'une autre balise
-		     desorganise l'analyse des arguments, et l'identifiant du site
-		     arrivait litteralement dans l'adresse — d'ou un « Site inconnu »
-		     muet. L'operation rededuit la version cible, de la meme
-		     configuration et au moment de l'execution.
-		     Ne pas ecrire de syntaxe de balise dans un commentaire : SPIP la
-		     compile quand meme, et une balise invalide emporte le bloc. -->
-		[(#BOUTON_ACTION{<:dashboard:action_core_maj:>,#URL_ACTION_AUTEUR{dashboard_operation,core_maj/#ID_DASHBOARD_SITE,#GET{retour_core}},btn btn_danger,<:dashboard:core_maj_confirmation:>})]
-	</p>
-</div>
-]
 ]
 
 <div class="dashboard-fiche" id="journal">

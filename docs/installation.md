@@ -30,6 +30,11 @@ Réglages dans *Configuration → Dashboard : configuration* :
 | Fréquence | 6 h |
 | Sites par passage | 10 (à baisser si le cron est court) |
 | Sauvegarder avant mise à jour du core | activé |
+| Prévenir le webmestre | à décider — éteint par défaut |
+| Destinataires des alertes | vide par défaut : sans adresse, aucun courriel ne part |
+
+Les alertes et les notifications du navigateur se règlent au même endroit ;
+voir [Exploitation](exploitation.md#être-prévenu-sans-venir-regarder).
 
 ## 2. Chaque site géré
 
@@ -101,6 +106,11 @@ site peu visité, elles ne se déclenchent pas toutes seules : penser à appeler
 ```
 */15 * * * * curl -s https://tour-de-controle.org/spip.php?action=cron > /dev/null
 ```
+
+Sur un hébergement mutualisé — où l'on n'a pas de cron Unix, et où le frontal
+coupe une requête avant qu'une synchronisation de parc ait fini —, préférer
+l'entrée en ligne de commande livrée avec le plugin. Voir
+[Exploitation](exploitation.md#faire-tourner-les-tâches-sur-un-mutualisé-ovh).
 
 Les sites gérés ont eux aussi une tâche d'entretien quotidienne, qui purge le
 journal de l'agent, les nonces périmés, les vieilles sauvegardes locales et les

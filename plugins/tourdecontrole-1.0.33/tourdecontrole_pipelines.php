@@ -26,6 +26,10 @@ function tourdecontrole_taches_generales_cron($taches) {
 	$heures = max(1, (int) dashboard_config('sync_frequence', 6));
 	$taches['dashboard_sync'] = $heures * 3600;
 	$taches['dashboard_entretien'] = 24 * 3600;
+	// L'alerte passe tous les jours, mais n'écrit que si l'état du parc a
+	// changé depuis le dernier envoi : la période dit à quelle fréquence on
+	// *regarde*, pas à quelle fréquence on dérange.
+	$taches['dashboard_alertes'] = 24 * 3600;
 	// Rythme serré, mais la tâche ne fait rien tant qu'aucun chantier n'a été
 	// laissé en plan : une mise à jour interrompue ne doit pas attendre des
 	// heures avant d'être menée à son terme.

@@ -1082,3 +1082,68 @@ function dashboard_agent_maj_libelle() {
 function dashboard_agent_maj_confirmation() {
 	return _T('dashboard:confirmer_agent_parc', ['nb' => dashboard_agent_maj_parc()]);
 }
+
+/**
+ * La clef publique VAPID du parc, pour l'abonnement d'un navigateur.
+ *
+ * Fabriquée au premier appel et jamais regénérée : les abonnements pris par
+ * les navigateurs sont liés à la clef qui leur a été présentée, et en changer
+ * les invaliderait tous d'un coup — sans que rien ne le signale avant la
+ * première alerte non reçue.
+ *
+ * @filtre
+ * @param string $rien SPIP passe une chaîne vide à `#VAL|filtre`
+ * @return string Base64url, ou chaîne vide si OpenSSL ne sait pas faire de P-256
+ */
+function dashboard_push_clef_parc($rien = '') {
+	include_spip('inc/dashboard_alertes');
+	$vapid = dashboard_push_vapid();
+
+	return (string) ($vapid['publique'] ?? '');
+}
+
+/**
+ * La portée à déclarer pour le service worker des alertes.
+ *
+ * @filtre
+ * @param string $rien
+ * @return string
+ */
+function dashboard_push_portee($rien = '') {
+	include_spip('action/dashboard_sw');
+
+	return dashboard_sw_portee();
+}
+
+/**
+ * Combien de navigateurs sont abonnés aux alertes ?
+ *
+ * @filtre
+ * @param string $rien
+ * @return int
+ */
+function dashboard_push_abonnes($rien = '') {
+	if (!dashboard_tables_presentes()) {
+		return 0;
+	}
+
+	return (int) sql_countsel('spip_dashboard_push');
+}
+
+/**
+ * Résumé de ce qu'une alerte dirait en l'état, pour l'afficher sans l'envoyer.
+ *
+ * Voir ce que le parc écrirait *avant* de brancher le canal vaut mieux que de
+ * le découvrir dans sa boîte : c'est aussi le seul moyen de vérifier qu'une
+ * alerte partirait, sur un parc où justement tout va bien.
+ *
+ * @filtre
+ * @param string $rien
+ * @return string
+ */
+function dashboard_alerte_apercu($rien = '') {
+	include_spip('inc/dashboard_alertes');
+	$message = dashboard_alerte_texte(dashboard_alerte_etat());
+
+	return (string) $message['court'];
+}

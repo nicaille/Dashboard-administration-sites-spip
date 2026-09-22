@@ -15,6 +15,7 @@ if (!defined('_ECRIRE_INC_VERSION')) {
 function formulaires_configurer_dashboard_charger_dist() {
 	include_spip('inc/dashboard_client');
 	include_spip('inc/dashboard_versions');
+	include_spip('inc/dashboard_alertes');
 
 	return [
 		'timeout'               => dashboard_config('timeout', 30),
@@ -34,6 +35,13 @@ function formulaires_configurer_dashboard_charger_dist() {
 		'retention_journal'     => dashboard_config('retention_journal', 180),
 		'retention_sauvegardes' => dashboard_config('retention_sauvegardes', 30),
 		'autoriser_http'        => dashboard_config('autoriser_http', ''),
+		// Les alertes, éteintes tant qu'on ne les allume pas. Même raison que
+		// pour `sync_auto` : une case décochée vaut la chaîne vide, que
+		// `dashboard_config()` prendrait pour une absence et remplacerait par
+		// son défaut — un réglage qu'on ne pourrait plus éteindre.
+		'alerte_active'         => dashboard_alerte_active() ? 'on' : '',
+		'alerte_destinataires'  => dashboard_config('alerte_destinataires', ''),
+		'alerte_sujet'          => dashboard_config('alerte_sujet', ''),
 		'_versions_connues'     => dashboard_versions_spip(),
 	];
 }
@@ -82,6 +90,19 @@ function formulaires_configurer_dashboard_verifier_dist() {
 		$erreurs['sha256_spip_check'] = _T('dashboard:erreur_sha256_check');
 	}
 
+	/* Les destinataires des alertes : une adresse par ligne, ou séparées par
+	   des virgules. Vide est parfaitement valide — c'est le défaut, et il
+	   signifie « n'écrire à personne ». Une adresse fautive, en revanche, se
+	   signale ici : la découvrir au premier envoi voudrait dire un parc en
+	   difficulté et un courriel qui ne part pas. */
+	include_spip('inc/filtres');
+	foreach (preg_split('/[\s,;]+/', (string) _request('alerte_destinataires'), -1, PREG_SPLIT_NO_EMPTY) as $adresse) {
+		if (!email_valide($adresse)) {
+			$erreurs['alerte_destinataires'] = _T('dashboard:erreur_alerte_destinataires', ['adresse' => $adresse]);
+			break;
+		}
+	}
+
 	foreach (preg_split('/[\r\n]+/', (string) _request('versions_manuelles')) as $ligne) {
 		$ligne = trim($ligne);
 		if ($ligne === '') {
@@ -122,7 +143,10 @@ function formulaires_configurer_dashboard_traiter_dist() {
 	$config['fraicheur_sauvegarde']  = max(0, (int) _request('fraicheur_sauvegarde'));
 	$config['fraicheur_depots']      = max(0, (int) _request('fraicheur_depots'));
 
-	foreach (['sync_auto', 'autoriser_http'] as $bascule) {
+	$config['alerte_destinataires'] = trim((string) _request('alerte_destinataires'));
+	$config['alerte_sujet']         = trim((string) _request('alerte_sujet'));
+
+	foreach (['sync_auto', 'autoriser_http', 'alerte_active'] as $bascule) {
 		$config[$bascule] = (_request($bascule) === 'on') ? 'on' : '';
 	}
 

@@ -796,6 +796,16 @@ $api_spip = [
 	// function_exists() : l'agent lit ses tables, et n'emprunte à son code que
 	// le vidage de la file d'événements, qu'on ne sait pas refaire soi-même.
 	'waf_flush_events',
+	// Les alertes : une adresse absolue pour le lien du courriel, le contrôle
+	// des adresses de destinataires, et l'incrément SQL du compteur d'échecs
+	// (sql_updateq() citerait la valeur, et « echecs + 1 » deviendrait une
+	// chaîne).
+	'url_absolue', 'email_valide', 'sql_update',
+	// La file de travaux, pour l'entrée en ligne de commande d'outils/cron.php.
+	// Les deux vivent dans ecrire/inc/utils.php, donc chargées par l'amorçage
+	// lui-même : aucun include_spip() ne les apporte, et il ne faut pas en
+	// chercher un.
+	'cron', 'queue_sleep_time_to_next_job',
 ];
 
 $definies = [];
@@ -907,6 +917,8 @@ $fournisseur = [
 	'sous_repertoire'      => 'inc/flock',
 	'recuperer_url'        => 'inc/distant',
 	'session_get'          => 'inc/session',
+	'url_absolue'          => 'inc/filtres',
+	'email_valide'         => 'inc/filtres',
 	'redirige_par_entete'  => 'inc/headers',
 	'spip_version_compare' => 'inc/plugin',
 	'liste_plugin_actifs'  => 'plugins/installer',
