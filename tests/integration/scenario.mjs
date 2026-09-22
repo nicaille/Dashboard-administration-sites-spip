@@ -1375,8 +1375,15 @@ const filesVues = await page.evaluate(() =>
 const boutonsVus = await page.evaluate(() =>
 	Array.from(new Set(Array.from(document.querySelectorAll('[data-parc-action]'))
 		.map((b) => b.getAttribute('data-parc-action')))).sort().join(','));
+/* L'inclusion, pas l'égalité : les files sont rendues sans condition, tandis
+   que certains boutons ne paraissent que s'il y a du travail — celui de
+   l'agent disparaît quand tout le parc est à jour. Une file sans bouton est
+   donc normale ; un bouton sans file est le défaut qu'on cherche, et c'est le
+   sens que `test_structure.php` vérifie déjà statiquement. */
+const orphelins = boutonsVus.split(',').filter(Boolean)
+	.filter((op) => !filesVues.split(',').includes(op));
 dit('chaque bouton de parc a sa file d’adresses dans la page',
-	filesVues === boutonsVus, `files ${filesVues} / boutons ${boutonsVus}`);
+	orphelins.length === 0, `sans file : ${orphelins.join(',') || 'aucun'} — files ${filesVues} / boutons ${boutonsVus}`);
 dit('le parc propose bien ses cinq opérations',
 	filesVues.split(',').filter(Boolean).length >= 5, filesVues);
 
@@ -2200,10 +2207,15 @@ try {
 	const debut = Date.now();
 	let sortie = '';
 	try {
-		sortie = execFileSync('php', [cron, '--duree=10', '--tours=5', '--verbeux'],
-			{ cwd: site, stdio: ['ignore', 'pipe', 'pipe'], timeout: 60000 }).toString();
+		/* Le compte rendu part sur la sortie d'erreur, et c'est voulu : la
+		   sortie standard d'une tâche planifiée est postée par courriel, et un
+		   passage qui n'a rien à dire ne doit rien produire. Capturer stdout
+		   seul — ce que fait `execFileSync` — ne ramenait donc rien du tout. */
+		sortie = execFileSync('sh', ['-c',
+			`php ${JSON.stringify(cron)} --duree=10 --tours=5 --verbeux 2>&1`],
+			{ cwd: site, timeout: 60000 }).toString();
 	} catch (e) {
-		sortie = String(e.stderr || '') + String(e.stdout || '');
+		sortie = String(e.stdout || '') + String(e.stderr || '');
 	}
 	const duree = (Date.now() - debut) / 1000;
 	dit('le cron se termine dans son budget', duree < 30, duree.toFixed(1) + ' s');
