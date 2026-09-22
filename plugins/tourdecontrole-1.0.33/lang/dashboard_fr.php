@@ -27,6 +27,7 @@ $lang = [
 	'action_agent_parc' => 'Mettre à jour l’agent (@nb@ site(s))',
 	'action_depots_parc' => 'Relire les dépôts de tout le parc',
 	'action_depots_selection' => 'Relire les dépôts de la sélection',
+	'action_core_maj_selection' => 'Mettre à jour SPIP sur la sélection',
 	'action_loader_retirer' => 'Retirer du site',
 	'action_purger_selection' => 'Vider les caches de la sélection',
 	'action_sync_selection' => 'Synchroniser la sélection',
@@ -82,6 +83,7 @@ $lang = [
 	'core_maj_avertissement' => 'Une mise à jour du core remplace les fichiers de SPIP sur le site distant. L’agent conserve l’ancienne version sur place pour permettre un retour arrière, mais vérifiez le site immédiatement après l’opération.',
 	'core_maj_confirmation'  => 'Confirmer la mise à jour du core SPIP sur ce site ?',
 	'core_maj_disponible'    => 'Une nouvelle version de SPIP est disponible',
+	'core_maj_parc_confirmation' => 'Mettre à jour SPIP sur @nb@ site(s) ? Chacun sera sauvegardé, ses fichiers remplacés et sa base migrée. Les sites déjà à jour seront ignorés.',
 	'core_maj_texte'         => 'Ce site tourne en SPIP @version_actuelle@ alors que la version @version_cible@ est disponible dans la même branche.',
 
 	// D

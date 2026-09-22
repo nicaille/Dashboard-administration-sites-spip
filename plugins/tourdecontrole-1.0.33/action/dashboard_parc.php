@@ -8,12 +8,13 @@
  * **un seul site** et rend la main ; c'est le navigateur qui enchaîne, site
  * après site, en montrant où il en est.
  *
- * L'argument a la forme `operation/id_site`. Quatre opérations :
+ * L'argument a la forme `operation/id_site`. Cinq opérations :
  *
  * - `depots` : relit le catalogue des dépôts du site, puis recompte ;
  * - `sync` : relit l'inventaire ;
  * - `purger` : vide les caches ;
- * - `agent_maj` : met l'agent à jour, en menant un chantier étape par étape.
+ * - `agent_maj` : met l'agent à jour, en menant un chantier étape par étape ;
+ * - `core_maj` : met SPIP lui-même à jour, de la même façon.
  *
  * Toutes rendent le même contrat : `ok`, `termine`, `site`, `message`. Tant que
  * `termine` est faux, le pilote rappelle **la même adresse** — c'est ainsi
@@ -86,6 +87,10 @@ function action_dashboard_parc_dist() {
 
 		case 'agent_maj':
 			dashboard_parc_agent_maj($site);
+			break;
+
+		case 'core_maj':
+			dashboard_parc_core_maj($site);
 			break;
 	}
 
@@ -259,6 +264,92 @@ function dashboard_parc_agent_maj($site) {
 	}
 
 	$fini = dashboard_chantier_fini($chantier);
+	$etapes = dashboard_chantier_etapes((string) $chantier['operation']);
+	$total  = max(1, count($etapes));
+	$rang   = min((int) $chantier['rang'] + 1, $total);
+
+	dashboard_parc_repondre([
+		'ok'      => ((string) $chantier['statut'] !== 'erreur'),
+		'termine' => $fini,
+		'site'    => $titre,
+		'message' => $fini
+			? $titre . ' : ' . (string) $chantier['message']
+			: $titre . ' (' . $rang . '/' . $total . ') '
+				. dashboard_libelle_etape((string) $chantier['etape']),
+	]);
+}
+
+/**
+ * Met SPIP lui-même à jour sur un site, une étape de chantier par appel.
+ *
+ * La mise à jour la plus lourde du parc : sauvegarde complète, contrôles
+ * préalables, remplacement du noyau, migration de la base, inventaire. Elle se
+ * conduit donc exactement comme celle de l'agent — un chantier, poussé étape
+ * par étape par le navigateur —, et le contrat de réponse est le même.
+ *
+ * La disponibilité se vérifie **ici**, au moment d'agir, et non dans la file
+ * que compose le squelette. Deux raisons, et la seconde compte davantage :
+ *
+ * - la colonne `core_maj` date du dernier inventaire du site, quand la liste
+ *   des versions amont, elle, a pu être rafraîchie depuis. Redéduire la cible
+ *   de `version_spip` répond de l'état d'aujourd'hui ;
+ * - bâtir la file sur le drapeau reviendrait à confier à une valeur périmée le
+ *   soin de dire qui reçoit un remplacement de noyau. Une file large et un
+ *   refus net valent mieux qu'une file étroite et un drapeau qu'on croit juste.
+ *
+ * Un site qui n'a rien à mettre à jour répond « déjà à jour » en un aller et
+ * retour, sans ouvrir de chantier — donc sans sauvegarde et sans rien toucher.
+ *
+ * @param array $site
+ * @return void
+ */
+function dashboard_parc_core_maj($site) {
+	include_spip('inc/dashboard_chantiers');
+	include_spip('inc/dashboard_versions');
+
+	$id_site = (int) $site['id_dashboard_site'];
+	$titre   = (string) $site['titre'];
+
+	$chantier = dashboard_chantier_courant($id_site);
+
+	if (!$chantier) {
+		$cible = dashboard_version_cible((string) $site['version_spip']);
+		if ($cible === '') {
+			dashboard_parc_repondre([
+				'ok'      => true,
+				'termine' => true,
+				'site'    => $titre,
+				'message' => $titre . ' : SPIP déjà à jour',
+			]);
+		}
+
+		$ouverture = dashboard_chantier_creer($id_site, 'core_maj', $cible);
+		if (empty($ouverture['ok'])) {
+			dashboard_parc_repondre([
+				'ok'      => false,
+				'termine' => true,
+				'site'    => $titre,
+				'message' => $titre . ' : ' . (string) $ouverture['message'],
+			]);
+		}
+		$chantier = dashboard_chantier_charger((int) $ouverture['id']);
+	} elseif ((string) $chantier['operation'] !== 'core_maj') {
+		// Un chantier déjà ouvert sur ce site n'est pas le nôtre : on ne le
+		// pousse pas, et on ne le remplace pas non plus.
+		dashboard_parc_repondre([
+			'ok'      => false,
+			'termine' => true,
+			'site'    => $titre,
+			'message' => $titre . ' : une autre opération est en cours — '
+				. dashboard_chantier_resume($chantier),
+		]);
+	}
+
+	if (!dashboard_chantier_fini($chantier)) {
+		$chantier = dashboard_chantier_avancer((int) $chantier['id_dashboard_chantier']);
+	}
+
+	$fini   = dashboard_chantier_fini($chantier);
 	$etapes = dashboard_chantier_etapes((string) $chantier['operation']);
 	$total  = max(1, count($etapes));
 	$rang   = min((int) $chantier['rang'] + 1, $total);

@@ -102,6 +102,11 @@ site peu visité, elles ne se déclenchent pas toutes seules : penser à appeler
 */15 * * * * curl -s https://tour-de-controle.org/spip.php?action=cron > /dev/null
 ```
 
+Sur un hébergement mutualisé — où l'on n'a pas de cron Unix, et où le frontal
+coupe une requête avant qu'une synchronisation de parc ait fini —, préférer
+l'entrée en ligne de commande livrée avec le plugin. Voir
+[Exploitation](exploitation.md#faire-tourner-les-tâches-sur-un-mutualisé-ovh).
+
 Les sites gérés ont eux aussi une tâche d'entretien quotidienne, qui purge le
 journal de l'agent, les nonces périmés, les vieilles sauvegardes locales et les
 copies de sécurité laissées par les mises à jour.

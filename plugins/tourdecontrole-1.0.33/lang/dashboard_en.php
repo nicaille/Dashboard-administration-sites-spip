@@ -27,6 +27,7 @@ $lang = [
 	'action_agent_parc' => 'Update the agent (@nb@ site(s))',
 	'action_depots_parc' => 'Refresh the whole fleet’s repositories',
 	'action_depots_selection' => 'Refresh the selection’s repositories',
+	'action_core_maj_selection' => 'Upgrade SPIP on the selection',
 	'action_loader_retirer' => 'Remove from the site',
 	'action_purger_selection' => 'Clear the selection’s caches',
 	'action_sync_selection' => 'Synchronise the selection',
@@ -82,6 +83,7 @@ $lang = [
 	'core_maj_avertissement' => 'A core upgrade replaces SPIP files on the remote site. The agent keeps the previous version in place so you can roll back, but check the site right after the operation.',
 	'core_maj_confirmation'  => 'Confirm the SPIP core upgrade on this site?',
 	'core_maj_disponible'    => 'A newer SPIP release is available',
+	'core_maj_parc_confirmation' => 'Upgrade SPIP on @nb@ site(s)? Each one will be backed up, its files replaced and its database migrated. Sites already up to date will be skipped.',
 	'core_maj_texte'         => 'This site runs SPIP @version_actuelle@ while @version_cible@ is available in the same branch.',
 
 	// D

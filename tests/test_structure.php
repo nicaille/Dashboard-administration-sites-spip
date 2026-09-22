@@ -796,6 +796,11 @@ $api_spip = [
 	// function_exists() : l'agent lit ses tables, et n'emprunte à son code que
 	// le vidage de la file d'événements, qu'on ne sait pas refaire soi-même.
 	'waf_flush_events',
+	// La file de travaux, pour l'entrée en ligne de commande d'outils/cron.php.
+	// Les deux vivent dans ecrire/inc/utils.php, donc chargées par l'amorçage
+	// lui-même : aucun include_spip() ne les apporte, et il ne faut pas en
+	// chercher un.
+	'cron', 'queue_sleep_time_to_next_job',
 ];
 
 $definies = [];
