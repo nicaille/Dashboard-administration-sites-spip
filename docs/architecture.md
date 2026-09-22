@@ -57,7 +57,13 @@ Installé une seule fois, sur la tour de contrôle.
 | `action/dashboard_chantier.php` | avancement d'une étape, appelé en boucle par la fiche du site |
 | `genie/dashboard_chantiers.php` | reprise des chantiers laissés en plan |
 | `action/dashboard_serveur.php` | relais vers les consultations de l'agent, liste d'opérations fermée |
-| `action/dashboard_parc.php` | relit un dépôt d'un site et le réinventorie ; la vue d'ensemble l'appelle site après site |
+| `action/dashboard_parc.php` | les cinq opérations groupées, un site par requête ; la vue d'ensemble l'appelle site après site |
+| `inc/dashboard_alertes.php` | ce qu'il y a à dire au webmestre, et l'empreinte de ce qui a déjà été dit |
+| `genie/dashboard_alertes.php` | passage quotidien, qui n'écrit que s'il y a du nouveau |
+| `inc/dashboard_push.php` | chiffrement RFC 8291 et signature VAPID RFC 8292, sans dépendance |
+| `action/dashboard_push.php` | abonnement et désabonnement d'un navigateur |
+| `action/dashboard_sw.php` | sert le service worker à une adresse que la version ne fait pas bouger |
+| `outils/cron.php` | amorce SPIP en ligne de commande, pour les hébergements sans cron Unix |
 
 La table `spip_dashboard_sites` est déclarée **deux fois** : dans
 `declarer_tables_objets_sql`, qui lui donne la machinerie d'objet éditorial
@@ -83,7 +89,11 @@ Quatre tables :
 - `spip_dashboard_sites` — l'objet éditorial « site géré », avec le dernier état connu ;
 - `spip_dashboard_plugins` — l'inventaire des plugins, remplacé à chaque synchronisation ;
 - `spip_dashboard_journal` — ce qui a été fait, par qui, quand, avec quel résultat ;
-- `spip_dashboard_sauvegardes` — le catalogue des sauvegardes, distantes ou rapatriées.
+- `spip_dashboard_sauvegardes` — le catalogue des sauvegardes, distantes ou rapatriées ;
+- `spip_dashboard_push` — les abonnements des navigateurs aux notifications. Un
+  par navigateur, pas un par personne : l'unicité porte sur l'empreinte de
+  l'adresse de distribution, celles de FCM dépassant ce qu'un index MySQL
+  accepte sur du texte.
 
 ## Pourquoi les mises à jour sont des chantiers
 

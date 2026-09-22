@@ -57,6 +57,8 @@ function action_dashboard_sw_dist() {
  * @return string
  */
 function dashboard_sw_portee() {
+	include_spip('inc/filtres');
+
 	$url = generer_url_ecrire('dashboard');
 	$chemin = (string) parse_url(url_absolue($url, url_de_base()), PHP_URL_PATH);
 

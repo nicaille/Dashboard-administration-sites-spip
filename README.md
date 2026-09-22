@@ -17,7 +17,9 @@ Depuis une seule interface :
   **par tranches**, pour passer sous la patience d'un cache en frontal ;
 - purge sélective des caches : pages, squelettes, images calculées, CSS/JS, sessions ;
 - consultation de l'état d'un serveur : `phpinfo()`, contenu des tables,
-  fichiers de réglage — refusée par défaut, voir plus bas.
+  fichiers de réglage — refusée par défaut, voir plus bas ;
+- **alerte du webmestre** par courriel et par notification du navigateur, y
+  compris sur mobile — et seulement quand l'état du parc a changé.
 
 **Toute mise à jour commence par une sauvegarde**, sans exception et sans
 réglage pour la désactiver.
@@ -88,8 +90,11 @@ essayés auprès du serveur avant qu'une mise à jour ne s'engage. Voir
 
 La vue d'ensemble ne sert pas qu'à regarder. Des cases à cocher désignent une
 partie du parc, et deux boutons la **synchronisent** ou **vident ses caches** ;
-deux autres relisent les catalogues de dépôts de tout le parc et **mettent à
-jour l'agent** partout où il a vieilli. Chaque tour se déroule un site par
+deux autres relisent les catalogues de dépôts, sur la sélection ou sur tout le
+parc, un dernier **met à jour l'agent** partout où il a vieilli. Un bouton
+rouge met enfin **SPIP lui-même** à jour sur la sélection — sur la sélection
+seule, car un remplacement de noyau sur quarante sites d'un clic n'est pas une
+commodité. Chaque tour se déroule un site par
 requête, en affichant où il en est : faire le tour d'un parc en une requête,
 c'est la coupure assurée et l'impossibilité de dire où elle a eu lieu.
 
@@ -101,6 +106,30 @@ La mise à jour de l'agent est un cas à part, parce que le plugin remplacé est
 celui qui répond : le site se tait au beau milieu de l'opération. Le chantier
 va donc constater plutôt que conclure — et, comme toute mise à jour, il
 commence par sauvegarder la base.
+
+## Être prévenu plutôt que devoir regarder
+
+Une tour de contrôle qui sait tout et ne dit rien ne sert qu'à ceux qui pensent
+à venir la consulter. Un passage quotidien compare l'état du parc à ce qui a
+déjà été annoncé, et **n'écrit que s'il y a du nouveau** : core en retard,
+agent en retard, plugins à mettre à jour, sites injoignables ou bases en
+attente. Un récapitulatif identique tous les jours est un récapitulatif qu'on
+cesse d'ouvrir.
+
+Deux canaux, un seul contenu : un courriel de synthèse, et des **notifications
+du navigateur** qui arrivent même quand l'espace privé est fermé — sur mobile
+compris. Le Web Push est écrit ici en PHP nu, sans Composer ni dépendance, et
+éprouvé contre le vecteur d'essai de la RFC 8291.
+
+Tout est éteint par défaut, liste de destinataires comprise.
+
+## Faire travailler SPIP sans visiteurs
+
+SPIP relance sa file de travaux à la fin de chaque visite : un parc que
+personne ne consulte ne se synchronise jamais. Là où l'on dispose d'un cron
+Unix, `spip.php?action=cron` suffit. Sur un mutualisé — pas de cron Unix, et un
+frontal qui coupe avant PHP —, `outils/cron.php` amorce SPIP **en ligne de
+commande** et refuse d'être atteint par le web.
 
 ## Deux lectures de plus, chacune sous son autorisation
 

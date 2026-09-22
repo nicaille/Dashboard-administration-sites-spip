@@ -208,6 +208,40 @@ sensible.
 (`tests/test_protocole.php`) : aucun répertoire déclaré remplaçable ne peut s'y
 trouver.
 
+## Les alertes, et ce qu'elles font sortir du parc
+
+Deux canaux sortent de la tour de contrôle, et il faut savoir ce qu'ils
+emportent.
+
+**Le courriel** part par le serveur de messagerie du site. Il contient des
+titres de sites, des numéros de version et des décomptes — pas d'adresse
+d'agent, pas de secret, aucun détail d'erreur. Les titres viennent des sites
+gérés : ils sont donc **neutralisés** de leurs caractères de contrôle avant
+d'entrer dans le message. Un retour à la ligne dans un titre fabriquerait
+sinon un en-tête de courriel supplémentaire — un `Bcc:`, par exemple — à
+partir d'une donnée que le parc ne maîtrise pas.
+
+**La notification du navigateur** transite par le service de distribution du
+navigateur : Google pour Chrome, Mozilla pour Firefox, Apple pour Safari.
+Elle est **chiffrée de bout en bout** (RFC 8291) : le service relaie sans
+pouvoir lire. Il connaît en revanche l'existence de l'envoi, son instant et sa
+taille — ce que ni lui ni nous ne pouvons éviter.
+
+Son contenu se limite au résumé d'une ligne (« 3 sites en retard de SPIP,
+2 anomalies ») et à l'adresse de la vue d'ensemble. Le détail par site reste
+dans le courriel.
+
+La paire de clefs **VAPID** est rangée dans la configuration du plugin, donc
+en base. Sa clef privée ne sert qu'à prouver aux services de distribution que
+les envois viennent bien de cette tour : elle ne chiffre rien, et sa fuite ne
+permettrait pas de lire une notification. Elle permettrait en revanche
+d'écrire aux navigateurs abonnés — d'où l'accès à la table
+`spip_dashboard_push`, qui est celui de la base tout entière.
+
+S'abonner demande le droit de **configurer le parc**, c'est-à-dire le statut
+de webmestre : c'est le même droit que celui de la page où le bouton se
+trouve.
+
 ## Recommandations d'exploitation
 
 1. **Isoler le tour de contrôle.** Idéalement sur un hébergement dédié, avec

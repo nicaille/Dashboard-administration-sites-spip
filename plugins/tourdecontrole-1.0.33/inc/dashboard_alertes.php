@@ -291,6 +291,7 @@ function dashboard_alerte_nom($titre) {
  */
 function dashboard_alerte_destinataires() {
 	include_spip('inc/filtres');
+	include_spip('inc/dashboard_client');
 
 	$brut = (string) dashboard_config('alerte_destinataires', '');
 	$adresses = preg_split('/[\s,;]+/', $brut, -1, PREG_SPLIT_NO_EMPTY);
@@ -355,6 +356,8 @@ function dashboard_alerte_memoriser($empreinte) {
  * @return array{courriels: int, push: int, retires: int}
  */
 function dashboard_alerte_diffuser($etat) {
+	include_spip('inc/filtres');
+
 	$bilan = ['courriels' => 0, 'push' => 0, 'retires' => 0];
 
 	$url_parc = url_absolue(generer_url_ecrire('dashboard'), url_de_base());
@@ -452,6 +455,7 @@ function dashboard_alerte_pousser($message, $url_parc) {
  */
 function dashboard_push_vapid() {
 	include_spip('inc/config');
+	include_spip('inc/dashboard_client');
 	include_spip('inc/dashboard_push');
 
 	$pem      = (string) lire_config('dashboard/push_pem', '');

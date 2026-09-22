@@ -23,6 +23,7 @@ if (!defined('_ECRIRE_INC_VERSION')) {
  */
 function action_dashboard_push_dist() {
 	include_spip('inc/autoriser');
+	include_spip('inc/session');
 	include_spip('inc/dashboard_push');
 
 	$securiser_action = charger_fonction('securiser_action', 'inc');

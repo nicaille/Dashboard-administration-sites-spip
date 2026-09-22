@@ -30,6 +30,11 @@ Réglages dans *Configuration → Dashboard : configuration* :
 | Fréquence | 6 h |
 | Sites par passage | 10 (à baisser si le cron est court) |
 | Sauvegarder avant mise à jour du core | activé |
+| Prévenir le webmestre | à décider — éteint par défaut |
+| Destinataires des alertes | vide par défaut : sans adresse, aucun courriel ne part |
+
+Les alertes et les notifications du navigateur se règlent au même endroit ;
+voir [Exploitation](exploitation.md#être-prévenu-sans-venir-regarder).
 
 ## 2. Chaque site géré
 

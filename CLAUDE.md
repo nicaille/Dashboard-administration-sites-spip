@@ -2,7 +2,7 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.32`,
+`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.33`,
 `plugins/tourdecontrole_agent-1.0.24`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
@@ -632,6 +632,155 @@ Ce que la conversion ne touche pas : le test lit les clefs **au texte**, par une
 expression régulière sur `^\t'clef' =>`, jamais par `include`. Le décompte des
 références résolues n'a donc pas bougé — c'est la première chose à regarder
 après un tel remaniement, un test qui perd son sujet ne le disant jamais.
+
+## Prévenir quelqu'un qui ne regarde pas la page
+
+Le Web Push est le seul chemin vers un navigateur fermé, et le seul vers un
+téléphone. `inc/dashboard_push.php` l'écrit en PHP nu — `ext-openssl` et
+`hash_hkdf()` suffisent, aucun Composer —, et ce fichier ne parle à personne :
+il fabrique des octets. C'est ce qui le rend vérifiable.
+
+**Le contrôle qui prouve quelque chose est le vecteur d'essai de la RFC 8291
+§5**, rejoué dans `tests/test_protocole.php` : en-tête, chiffré et étiquette
+GCM identiques à la référence, puis l'aller-retour qui relit le texte. Sans
+lui, un chiffrement faux produirait des octets tout aussi plausibles que le
+bon, et on ne s'en apercevrait que par un navigateur resté muet — six mois
+plus tard, sans rien pour le relier à la cause. D'où les paramètres `$sel` et
+`$ephemere` de `dashboard_push_chiffrer()`, et l'existence même de
+`dashboard_push_dechiffrer()`, qui n'a aucun usage en service : une charge
+qu'on ne sait pas relire est une charge qu'on n'a pas vérifiée.
+
+Trois pièges, tous silencieux :
+
+- **OpenSSL rend X et Y sans remplissage.** Une coordonnée dont le premier
+  octet est nul revient sur trente et un octets, et concaténer sans compléter
+  décale tout le point. Une fois sur deux cent cinquante-six — donc jamais en
+  développement, et un jour en production. D'où `dashboard_push_point()`, et
+  jamais de concaténation à la main ;
+- **une signature ECDSA sort en DER**, avec deux entiers de longueur variable
+  qui gagnent un octet nul de tête quand leur bit de poids fort est armé. JOSE
+  en veut deux de trente-deux octets, collés. Passer le DER tel quel produit
+  une signature que rien ne rejette ici et que **tous** les services de
+  distribution refusent, avec un « invalid JWT » qui ne dit pas lequel des deux
+  bouts est en cause. Le test en fait deux cents et **vérifie que plusieurs
+  longueurs de DER ont été rencontrées** — sans cela il passerait au vert sans
+  avoir rien éprouvé ;
+- **l'ordre des deux clefs publiques** dans `'WebPush: info'` : l'abonné
+  d'abord, l'émetteur ensuite. Les intervertir donne une clef parfaitement
+  valide que le navigateur n'a aucun moyen de retrouver, et le message est
+  rejeté sans que rien, côté émetteur, n'ait l'air d'avoir échoué.
+
+La règle du silence s'applique mot pour mot au verdict d'un envoi
+(`dashboard_push_verdict()`, pure et donc vérifiable) : **404 et 410 sont des
+réponses** — l'abonnement est mort, on le supprime, le navigateur en
+refabriquera un ; **500 et l'absence de réponse sont des silences** — on
+compte, on ne conclut pas. Supprimer un abonnement sur un silence reviendrait
+à débrancher le webmestre parce que le réseau a hoqueté.
+
+### Un service worker s'enregistre par une adresse, pas par un fichier
+
+Le chemin d'un plugin porte son numéro de version. Enregistrer le service
+worker par ce chemin fabriquerait **un enregistrement de plus à chaque mise à
+jour**, les précédents restant actifs avec leurs abonnements — des
+notifications en double, puis en triple. D'où `spip.php?action=dashboard_sw`,
+adresse qui ne bouge pas.
+
+Cette action **n'est pas signée**, et ne doit pas l'être : le navigateur
+revient chercher ce fichier tout seul pour savoir s'il a changé, longtemps
+après la visite qui l'a enregistré, et une adresse signée aurait expiré. Ce
+qu'elle sert est du code public, le même pour tous.
+
+Sa portée est **l'espace privé**, pas la racine : un seul service worker peut
+tenir une portée donnée, et prendre `/` priverait un autre plugin de la
+sienne. Le nôtre n'a de toute façon aucun gestionnaire `fetch` — il ne sert
+qu'à recevoir.
+
+La paire VAPID se fabrique au premier besoin et **ne se regénère jamais** :
+les abonnements pris par les navigateurs sont liés à la clef publique qui leur
+a été présentée. En changer les invaliderait tous d'un coup, sans que personne
+ne s'en aperçoive avant la première alerte non reçue.
+
+## Une alerte qui se répète est une alerte qu'on n'ouvre plus
+
+`inc/dashboard_alertes.php` n'écrit **que s'il y a du nouveau**. Un
+récapitulatif quotidien identique à celui de la veille cesse d'être lu au bout
+d'une semaine, et le jour où il porte enfin quelque chose, personne ne
+l'ouvre.
+
+L'empreinte porte sur ce qui est en retard **site par site**, jamais sur des
+compteurs globaux : deux sites qui échangent leurs rôles laisseraient un total
+inchangé, et le silence serait alors un mensonge. Elle exclut le *détail* des
+pannes — « timeout après 30 s » puis « connexion refusée » décrivent la même
+panne, et la feraient repartir chaque jour — mais retient leur *genre*.
+
+Deux conséquences qu'on oublie en écrivant ce genre de chose :
+
+- **l'empreinte ne se mémorise qu'après un envoi réussi.** L'enregistrer
+  quand rien n'est parti ferait taire l'alerte pour de bon : la nouveauté
+  aurait été consommée sans être dite, et il faudrait qu'un *autre* changement
+  survienne pour que le canal se réveille ;
+- **une levée d'alerte est aussi une nouvelle.** Sans elle, on resterait sur
+  la dernière mauvaise nouvelle sans jamais savoir qu'elle est périmée. Un
+  parc neuf fait exception : son empreinte connue est vide alors que celle
+  d'un parc sain ne l'est pas, et la première alerte serait « tout va bien »,
+  ce qui ne se demande pas.
+
+Tout est **éteint par défaut**, liste de destinataires comprise : une tour de
+contrôle qui se met à écrire à quelqu'un dès son installation est une tour
+qu'on désinstalle. La bascule a les trois états habituels.
+
+Ce qui vient d'un site géré reste inerte **hors du HTML aussi** :
+`dashboard_alerte_nom()` neutralise les caractères de contrôle d'un titre de
+site. Dans un message en texte brut, ce sont les retours à la ligne qui
+mordent — ils fabriqueraient de fausses lignes dans la liste et, dans un sujet
+de courriel, un en-tête supplémentaire.
+
+Enfin, les clefs de langue des pannes sont écrites **en toutes lettres** dans
+un tableau, jamais composées par concaténation : une clef fabriquée échappe au
+contrôle qui vérifie que toute référence de langue existe, et la faute de
+frappe se lirait dans l'alerte elle-même.
+
+## Faire travailler SPIP sans visiteurs
+
+SPIP n'a pas d'horloge à lui : sa file de travaux est relancée à la fin de
+chaque visite. Une tour de contrôle que personne ne visite ne synchronise
+jamais son parc — et c'est précisément le site dont on attend qu'il travaille
+tout seul.
+
+`spip.php?action=cron` répond à cela partout où l'on a un vrai cron Unix. Sur
+un mutualisé, il n'y en a pas, et le frontal coupe la requête avant qu'une
+synchronisation de dix sites ait fini — le même frontal que partout ailleurs
+ici. D'où `outils/cron.php`, qui amorce SPIP **en ligne de commande** et
+appelle `cron()` directement.
+
+Il vit dans l'espace web, puisque c'est la seule chose qu'une tâche planifiée
+d'hébergeur sait exécuter, et **refuse donc tout autre SAPI que la ligne de
+commande**.
+
+Trois défauts trouvés en l'éprouvant sur un SPIP 4.4 réel, aucun deviné :
+
+- **la boucle s'emballait** : soixante-huit mille tours en vingt-cinq
+  secondes. Quand il reste des travaux qu'un passage n'a pas épuisés, SPIP
+  écrit « dès que possible » dans son fichier d'échéance
+  (`queue_update_next_job_time(0)`), et la boucle le relisait sans fin. Le
+  temps ne borne pas un tour qui coûte une milliseconde : il faut **deux
+  bornes**, une de durée et une de nombre de tours ;
+- **l'heure de la file était gelée.** Elle compare les dates des travaux à
+  `$_SERVER['REQUEST_TIME']`, que rien ne met à jour hors du web. Posée une
+  fois à l'amorçage, elle faisait conclure, après trois minutes de
+  synchronisation, qu'il restait six secondes à attendre — six secondes
+  passées depuis longtemps — et le reste du parc était remis à la fois
+  d'après ;
+- **un génie tiers qui explose emportait les nôtres.** Celui de SVP lève une
+  `ValueError` sur un catalogue injoignable. On l'attrape et on continue, ce
+  qui est sans danger : SPIP réinsère un travail au statut « en cours » *avant*
+  de l'exécuter et ne le repasse à « planifié » qu'une fois fini, si bien qu'un
+  travail mort en route n'est pas repris au tour suivant et que la boucle ne
+  peut pas s'y enfermer. Sortie en code 1, pour que l'hébergeur le fasse
+  remonter dans son rapport.
+
+`_DIRECT_CRON_FORCE` se pose **sous garde** : SPIP la définit lui-même quand
+la file déborde.
 
 ## Le serveur intégré de PHP n'est pas exempt d'opcache
 
