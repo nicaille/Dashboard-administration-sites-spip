@@ -1365,10 +1365,20 @@ const portee = await page.evaluate(() => {
 });
 dit('une case ne porte aucune adresse d’action', !/url|href|action=/.test(portee), portee);
 
+/* Les deux ensembles se comparent l'un à l'autre plutôt qu'à une liste écrite
+   ici : une opération ajoutée sans sa file ne doit pas demander qu'on pense à
+   modifier ce fichier — c'est justement le défaut qu'on cherche. Le plancher
+   garde le contrôle de son sujet : deux ensembles vides sont égaux. */
 const filesVues = await page.evaluate(() =>
 	Array.from(document.querySelectorAll('[data-parc-file]'))
 		.map((u) => u.getAttribute('data-parc-file')).sort().join(','));
-dit('les files d’adresses sont présentes', filesVues === 'agent_maj,depots,purger,sync', filesVues);
+const boutonsVus = await page.evaluate(() =>
+	Array.from(new Set(Array.from(document.querySelectorAll('[data-parc-action]'))
+		.map((b) => b.getAttribute('data-parc-action')))).sort().join(','));
+dit('chaque bouton de parc a sa file d’adresses dans la page',
+	filesVues === boutonsVus, `files ${filesVues} / boutons ${boutonsVus}`);
+dit('le parc propose bien ses cinq opérations',
+	filesVues.split(',').filter(Boolean).length >= 5, filesVues);
 
 const signees = await page.evaluate(() => {
 	const liens = Array.from(document.querySelectorAll('[data-parc-file] a'));
