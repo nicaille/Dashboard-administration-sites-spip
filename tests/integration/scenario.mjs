@@ -113,15 +113,15 @@ for (const attendue of ['spip_dashagent_journal', 'spip_dashagent_nonces', 'spip
 
 console.log('\n### Pages de l’espace privé');
 await ouvrir(page, 'vue du parc', '/ecrire/?exec=dashboard');
-await ouvrir(page, 'configuration du tableau de bord', '/ecrire/?exec=configurer_dashboard');
-await ouvrir(page, 'configuration de l’agent', '/ecrire/?exec=configurer_dashagent');
+await ouvrir(page, 'configuration du tableau de bord', '/ecrire/?exec=configurer_tourdecontrole');
+await ouvrir(page, 'configuration de l’agent', '/ecrire/?exec=configurer_tourdecontrole_agent');
 await ouvrir(page, 'formulaire de création', '/ecrire/?exec=dashboard_site&new=oui');
 
 // L'agent de test est sur la boucle locale, donc en http : le tableau de bord
 // refuse cette URL tant que l'exception n'est pas accordée. À poser avant la
 // création, puisque c'est la saisie du formulaire qui est validée.
 console.log('\n### Autorisation du http local');
-await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
+await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole', { waitUntil: 'domcontentloaded' });
 await page.check('[name="autoriser_http"]');
 await page.locator('form input[type=submit]').first().click();
 await page.waitForLoadState('domcontentloaded').catch(() => {});
@@ -143,7 +143,7 @@ dit('site enregistré en base', sites.length === 1, JSON.stringify(sites));
 dit('secret chiffré, jamais en clair', sites[0]?.prefixe === 'c2:', 'préfixe ' + (sites[0]?.prefixe || '?'));
 
 console.log('\n### Appairage avec l’agent local');
-await page.goto(base + '/ecrire/?exec=configurer_dashagent', { waitUntil: 'domcontentloaded' });
+await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole_agent', { waitUntil: 'domcontentloaded' });
 await page.check('[name="generer"]');
 for (const op of ['op_infos', 'op_purger', 'op_sauvegarde']) { await page.check(`[name="${op}"]`).catch(() => {}); }
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').last().click()]);
@@ -183,7 +183,7 @@ dit('sauvegarde enregistrée localement', sauvegardes.some((s) => s.statut === '
 const dossierSauvegardes = site + '/tmp/dashagent/sauvegardes';
 const surDisque = () => readdirSync(dossierSauvegardes).filter((n) => /\.sql\.gz$/.test(n));
 
-await page.goto(base + '/ecrire/?exec=configurer_dashagent', { waitUntil: 'domcontentloaded' });
+await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole_agent', { waitUntil: 'domcontentloaded' });
 const tableauSauvegardes = page.locator('#sauvegardes');
 dit('le site géré liste ses sauvegardes',
 	(await tableauSauvegardes.locator('tbody tr').count()) === surDisque().length
@@ -288,7 +288,7 @@ try {
 }
 
 console.log('\n### Mise à jour d’un plugin');
-await page.goto(base + '/ecrire/?exec=configurer_dashagent', { waitUntil: 'domcontentloaded' });
+await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole_agent', { waitUntil: 'domcontentloaded' });
 await page.check('[name="op_plugin_maj"]').catch(() => {});
 await page.locator('form input[type=submit]').last().click();
 await page.waitForTimeout(700);
@@ -303,7 +303,7 @@ console.log('\n### Vue d’ensemble : relire les dépôts du parc');
 // relève l'inventaire — qui n'y touchera donc pas. Couper le rafraîchissement
 // ne fait pas taire l'avertissement : c'est le cas où plus rien ne rajeunit le
 // catalogue, et l'âge s'apprécie alors sur la validité par défaut d'un jour.
-await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
+await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole', { waitUntil: 'domcontentloaded' });
 await page.fill('[name="fraicheur_depots"]', '0');
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').last().click()]);
 await page.waitForTimeout(500);
@@ -322,10 +322,10 @@ dit('le compte du parc est celui des sites',
 	(await page.locator('.dashboard-synthese li').last().innerText()).replace(/\s+/g, ' ').trim());
 
 // Le tour du parc, un site à la fois : c'est ce qui rend le compte réel.
-const relire = page.locator('[data-parc-action="depots"]');
+const relire = page.locator('[data-parc-action="depots"]:not([data-parc-selection])');
 dit('un bouton relit les dépôts de tout le parc', (await relire.count()) === 1);
 await relire.click();
-await page.waitForFunction(() => !document.querySelector('[data-parc-action="depots"]')
+await page.waitForFunction(() => !document.querySelector('[data-parc-action="depots"]:not([data-parc-selection])')
 	|| !document.querySelector('.dashboard-depots-perimes'), null, { timeout: 60000 }).catch(() => {});
 await page.waitForTimeout(2500);
 
@@ -349,7 +349,7 @@ dit('plus de catalogue périmé après le tour du parc',
 sqlEcrire("UPDATE spip_depots SET maj = datetime('now', '-2 days')");
 await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
 const avantSecondTour = JSON.parse(sql('SELECT maj FROM spip_depots ORDER BY id_depot LIMIT 1'))[0].maj;
-await page.locator('[data-parc-action="depots"]').click();
+await page.locator('[data-parc-action="depots"]:not([data-parc-selection])').click();
 await page.waitForFunction(() => /Termin|suivant/.test(
 	(document.querySelector('.dashboard-depots-avancement') || {}).textContent || ''), null, { timeout: 60000 }).catch(() => {});
 await page.waitForTimeout(2500);
@@ -402,7 +402,7 @@ if (copies.length) {
 
 	sqlEcrire("UPDATE spip_depots SET maj = datetime('now', '-2 days')");
 	await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
-	await page.locator('[data-parc-action="depots"]').click();
+	await page.locator('[data-parc-action="depots"]:not([data-parc-selection])').click();
 	await page.waitForFunction(() => /Termin|suivant/.test(
 		(document.querySelector('.dashboard-depots-avancement') || {}).textContent || ''), null, { timeout: 60000 }).catch(() => {});
 	await page.waitForTimeout(2500);
@@ -493,7 +493,7 @@ if (await badgeMaj.count()) {
 }
 
 // Rendre au parc son rafraîchissement automatique pour la suite du parcours.
-await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
+await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole', { waitUntil: 'domcontentloaded' });
 await page.fill('[name="fraicheur_depots"]', '86400');
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').last().click()]);
 await page.waitForTimeout(500);
@@ -632,8 +632,8 @@ console.log('\n### Rendu des pages');
 for (const [nom, url] of [
 	['parc', '/ecrire/?exec=dashboard'],
 	['fiche du site', '/ecrire/?exec=dashboard_site&id_dashboard_site=1'],
-	['configuration', '/ecrire/?exec=configurer_dashboard'],
-	['configuration de l’agent', '/ecrire/?exec=configurer_dashagent'],
+	['configuration', '/ecrire/?exec=configurer_tourdecontrole'],
+	['configuration de l’agent', '/ecrire/?exec=configurer_tourdecontrole_agent'],
 ]) {
 	await page.goto(base + url, { waitUntil: 'domcontentloaded' });
 	const trouves = await artefacts(page);
@@ -826,7 +826,7 @@ await page.waitForTimeout(2500);
 const refus = await page.locator('[data-serveur-bloc="resume"]').innerText();
 dit('consultation refusée tant qu’elle n’est pas autorisée', /désactivée|autoris/i.test(refus), refus.trim().slice(0, 90));
 
-await page.goto(base + '/ecrire/?exec=configurer_dashagent', { waitUntil: 'domcontentloaded' });
+await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole_agent', { waitUntil: 'domcontentloaded' });
 await page.check('[name="op_serveur"]').catch(() => {});
 await page.locator('form input[type=submit]').last().click();
 await page.waitForTimeout(700);
@@ -945,14 +945,14 @@ const coreCible = process.env.CORE_CIBLE || '4.4.99';
 // _DASHAGENT_ARCHIVES_HTTP dans son mes_options.php. Deux accords distincts.
 // Sur le site géré, la mise à jour du core est refusée par défaut : c'est une
 // case à cocher à part, et le test la coche comme le ferait l'administrateur.
-await page.goto(base + '/ecrire/?exec=configurer_dashagent', { waitUntil: 'domcontentloaded' });
+await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole_agent', { waitUntil: 'domcontentloaded' });
 await page.check('[name="op_core_maj"]').catch(() => {});
 await page.locator('form input[type=submit]').last().click();
 await page.waitForTimeout(700);
 dit('mise à jour du core autorisée sur le site géré',
 	await page.locator('[name="op_core_maj"]').isChecked().catch(() => false));
 
-await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
+await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole', { waitUntil: 'domcontentloaded' });
 await page.fill('[name="url_archives_spip"]', base + '/core-archives/');
 await page.fill('[name="versions_manuelles"]', `4.4 = ${coreCible}`);
 // Zéro seconde de validité : une sauvegarde neuve est exigée, ce qui vérifie
@@ -1191,7 +1191,7 @@ if (!wafInstalle) {
 			+ ` '/spip.php?page=x&q=${'A'.repeat(40)}', 'curl/8.5', '')`);
 	}
 
-	await page.goto(base + '/ecrire/?exec=configurer_dashagent', { waitUntil: 'domcontentloaded' });
+	await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole_agent', { waitUntil: 'domcontentloaded' });
 	await page.check('[name="op_waf"]').catch(() => {});
 	await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').last().click()]);
 	await page.waitForTimeout(600);
@@ -1418,6 +1418,76 @@ await page.waitForFunction(() => /Termin/.test(
 await page.waitForTimeout(3000);
 dit('la purge groupée a bien vidé le cache du site', !existsSync(temoinCache));
 
+console.log('\n### La vue d’ensemble : version de l’agent, et dépôts groupés');
+
+await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+
+/* La version de l'agent, sous le nom du site : c'est la question qu'on se pose
+   en premier quand le parc se comporte mal — lequel répond encore avec un agent
+   d'avant le correctif ? Elle vient du site géré, relevée à la synchronisation. */
+const ligneAgent = (await page.locator('.dashboard-parc .dashboard-agent').first().innerText().catch(() => '')) || '';
+dit('la vue d’ensemble donne la version de l’agent',
+	/\d+\.\d+\.\d+/.test(ligneAgent), ligneAgent.replace(/\s+/g, ' ').trim());
+dit('et c’est bien celle qu’annonce la base',
+	ligneAgent.includes(JSON.parse(sql('SELECT agent_version FROM spip_dashboard_sites WHERE id_dashboard_site = 1'))[0].agent_version || 'x'),
+	ligneAgent.replace(/\s+/g, ' ').trim());
+
+/* La relecture des dépôts a rejoint la barre d'actions groupées : deux boutons
+   pour une seule opération, que `data-parc-selection` départage. */
+const depotsParc = page.locator('.dashboard-parc-groupe [data-parc-action="depots"]:not([data-parc-selection])');
+const depotsSelection = page.locator('.dashboard-parc-groupe [data-parc-action="depots"][data-parc-selection="oui"]');
+dit('les deux boutons de relecture sont dans la barre d’actions',
+	(await depotsParc.count()) === 1 && (await depotsSelection.count()) === 1,
+	(await depotsParc.count()) + ' + ' + (await depotsSelection.count()));
+dit('l’encadré des dépôts n’en porte plus',
+	(await page.locator('#depots [data-parc-action]').count()) === 0);
+
+/* Sans sélection, le bouton qui vise la sélection ne fait rien : le pilote le
+   désactive, plutôt que de laisser cliquer dans le vide. */
+dit('sans sélection, la relecture ciblée est désactivée',
+	await depotsSelection.isDisabled());
+await page.locator('[data-parc-site="1"]').check();
+await page.waitForTimeout(300);
+dit('un site coché la rend cliquable', !(await depotsSelection.isDisabled()));
+
+sqlEcrire("UPDATE spip_depots SET maj = datetime('now', '-3 days')");
+await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+await page.locator('[data-parc-site="1"]').check();
+await page.locator('.dashboard-parc-groupe [data-parc-action="depots"][data-parc-selection="oui"]').click();
+await page.waitForFunction(() => /Termin|suivant|relu/.test(
+	(document.querySelector('.dashboard-parc-groupe [data-parc-avancement]') || {}).textContent || ''), null, { timeout: 60000 }).catch(() => {});
+await page.waitForTimeout(2500);
+dit('la relecture ciblée date le dépôt du site coché',
+	JSON.parse(sql("SELECT maj FROM spip_depots ORDER BY maj DESC LIMIT 1"))[0].maj
+		> JSON.parse(sql("SELECT datetime('now', '-1 hours') AS t"))[0].t,
+	JSON.parse(sql('SELECT maj FROM spip_depots ORDER BY maj DESC LIMIT 1'))[0].maj);
+
+console.log('\n### Navigation : fil d’Ariane et retour au parc');
+
+await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+const ariane = (await page.locator('#chemin').first().innerText().catch(() => '')) || '';
+dit('le fil d’Ariane remonte au parc, pas à une page inexistante',
+	ariane.includes('Parc de sites SPIP') && !ariane.includes('Sites gérés'),
+	ariane.replace(/\s+/g, ' ').trim().slice(0, 120));
+dit('et son lien mène bien à la vue d’ensemble',
+	(await page.locator('#chemin a').first().getAttribute('href').catch(() => '') || '')
+		.includes('exec=dashboard'),
+	await page.locator('#chemin a').first().getAttribute('href').catch(() => ''));
+
+dit('le retour au parc porte son icône',
+	(await page.locator('.dashboard-retour .dashboard-retour-icone').count()) === 1);
+
+console.log('\n### Gestion des plugins : le bouton « Configurer »');
+
+/* SPIP ne propose ce bouton que si l'exec `configurer_<prefixe>` existe — le
+   préfixe du plugin, pas celui de nos fonctions. Nos pages s'appelaient
+   `configurer_dashboard` et `configurer_dashagent` : le bouton n'apparaissait
+   nulle part, et rien ne le disait. */
+await page.goto(base + '/ecrire/?exec=admin_plugin', { waitUntil: 'domcontentloaded' });
+const liens = await page.locator('a[href*="configurer_tourdecontrole"]').count();
+dit('la page Gestion des plugins propose les deux boutons « Configurer »',
+	liens >= 2, liens + ' lien(s)');
+
 console.log('\n### Mise à jour de l’agent sur tout le parc');
 
 /* Le dépôt local publie une version de l'agent supérieure d'un cran. Le code
@@ -1435,7 +1505,7 @@ writeFileSync(site + '/zzztest-archives/paquets.xml',
 	readFileSync(site + '/zzztest-archives/paquets-agent.xml', 'utf8'));
 sqlEcrire("UPDATE spip_depots SET maj = datetime('now', '-3 days')");
 await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
-await page.locator('[data-parc-action="depots"]').click();
+await page.locator('[data-parc-action="depots"]:not([data-parc-selection])').click();
 await page.waitForFunction(() => /Termin|suivant/.test(
 	(document.querySelector('#depots [data-parc-avancement]') || {}).textContent || ''),
 	null, { timeout: 120000 }).catch(() => {});
@@ -1533,7 +1603,7 @@ writeFileSync(loaderSource,
 	+ "    public const DATE = '2026-09-04 06:44:10';\n\n"
 	+ "    public const NAME = 'spip_loader.phar';\n}\n");
 
-await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
+await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole', { waitUntil: 'domcontentloaded' });
 await page.fill('[name="url_spip_loader"]', base + '/core-archives/spip_loader.txt');
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').first().click()]);
 await page.waitForTimeout(600);
@@ -1558,7 +1628,7 @@ dit('le dépôt est refusé tant que le site ne l’autorise pas',
 	existsSync(site + '/spip_loader.php') ? 'fichier déposé malgré le refus' : 'refus');
 
 // Accordée, l'opération dépose le fichier à la racine.
-await page.goto(base + '/ecrire/?exec=configurer_dashagent', { waitUntil: 'domcontentloaded' });
+await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole_agent', { waitUntil: 'domcontentloaded' });
 await page.check('[name="op_loader"]').catch(() => {});
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').last().click()]);
 await page.waitForTimeout(600);
@@ -1601,7 +1671,7 @@ dit('l’ancien spip_loader est conservé',
 
 // Et ce qui n'est pas un spip_loader ne s'installe pas.
 writeFileSync(site + '/core-archives/faux.txt', "<?php\nunlink(__FILE__);\n");
-await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
+await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole', { waitUntil: 'domcontentloaded' });
 await page.fill('[name="url_spip_loader"]', base + '/core-archives/faux.txt');
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').first().click()]);
 await page.waitForTimeout(600);
@@ -1620,7 +1690,7 @@ dit('un fichier qui n’est pas un spip_loader est refusé',
    et il n'a de raison d'être que le jour où l'on s'en sert. Supprimé pour les
    mêmes raisons que le spip_check, et retéléchargeable d'un clic. */
 await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
-await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
+await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole', { waitUntil: 'domcontentloaded' });
 await page.fill('[name="url_spip_loader"]', base + '/core-archives/spip_loader.txt');
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').first().click()]);
 await page.waitForTimeout(600);
@@ -1681,7 +1751,7 @@ dit('l’encadré de SPIP Check est présent', (await page.locator('#check').cou
    temps de vérifier le cas contraire : sans adresse, aucun bouton de dépôt —
    une fonction qui échouerait ne se propose pas. Ce cas se produit pour de bon
    dès qu'un parc préfère un miroir et efface la valeur avant de la remplacer. */
-await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
+await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole', { waitUntil: 'domcontentloaded' });
 dit('le réglage porte l’adresse de la forge par défaut',
 	/git\.spip\.net/.test(await page.inputValue('[name="url_spip_check"]')),
 	await page.inputValue('[name="url_spip_check"]'));
@@ -1695,7 +1765,7 @@ dit('sans adresse réglée, aucun dépôt n’est proposé',
 		&& /adresse de téléchargement/i.test(await page.locator('#check').innerText()),
 	(await page.locator('#check').innerText()).replace(/\s+/g, ' ').slice(0, 80));
 
-await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
+await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole', { waitUntil: 'domcontentloaded' });
 await page.fill('[name="url_spip_check"]', base + '/core-archives/spip_check.txt');
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').first().click()]);
 await page.waitForTimeout(600);
@@ -1719,7 +1789,7 @@ dit('le dépôt est refusé tant que le site ne l’autorise pas',
 		&& !existsSync(site + '/spip_check.php'),
 	existsSync(site + '/spip_check.php') ? 'fichier déposé malgré le refus' : 'refus');
 
-await page.goto(base + '/ecrire/?exec=configurer_dashagent', { waitUntil: 'domcontentloaded' });
+await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole_agent', { waitUntil: 'domcontentloaded' });
 await page.check('[name="op_check"]').catch(() => {});
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').last().click()]);
 await page.waitForTimeout(600);
@@ -1769,7 +1839,7 @@ dit('un second dépôt ne laisse pas d’ancien fichier caché',
 // bien qu'il soit du PHP et qu'il parle de SPIP.
 writeFileSync(site + '/core-archives/faux-check.txt',
 	"<?php\n// spip_loader.php\n$spip_loader_version = '3.1.2';\necho 'SPIP';\n");
-await page.goto(base + '/ecrire/?exec=configurer_dashboard', { waitUntil: 'domcontentloaded' });
+await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole', { waitUntil: 'domcontentloaded' });
 await page.fill('[name="url_spip_check"]', base + '/core-archives/faux-check.txt');
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').first().click()]);
 await page.waitForTimeout(600);

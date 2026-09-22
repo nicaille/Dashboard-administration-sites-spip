@@ -1,0 +1,373 @@
+[(#AUTORISER{voir, dashboard}|sinon_interdire_acces)]
+<link rel="stylesheet" href="[(#CHEMIN{css/dashboard.css}|timestamp|direction_css)]" type="text/css" />
+
+<h1 class="grostitre"><:dashboard:titre_dashboard:></h1>
+
+[(#ENV{dashboard_message}|oui)
+	<p class="[(#ENV{dashboard_statut}|=={ok}|?{reponse_formulaire_ok,reponse_formulaire_erreur})] reponse_formulaire">
+		[(#ENV{dashboard_message}|textebrut)]
+	</p>
+]
+
+<BOUCLE_installe(CONDITION){si #VAL|dashboard_tables_presentes}>
+
+#SET{synthese,#VAL|dashboard_synthese}
+<ul class="dashboard-synthese">
+	<li><strong>[(#GET{synthese}|table_valeur{supervises})]</strong> <:dashboard:synthese_supervises:></li>
+	<li class="dashboard-erreur"><strong>[(#GET{synthese}|table_valeur{en_erreur})]</strong> <:dashboard:synthese_erreurs:></li>
+	<li class="dashboard-attention"><strong>[(#GET{synthese}|table_valeur{core_retard})]</strong> <:dashboard:synthese_core_retard:></li>
+	<li class="dashboard-attention"><strong>[(#GET{synthese}|table_valeur{base_retard})]</strong> <:dashboard:synthese_base_retard:></li>
+	<li class="dashboard-attention"><strong>[(#GET{synthese}|table_valeur{plugins_maj})]</strong> <:dashboard:synthese_plugins_maj:></li>
+</ul>
+
+[(#REM)
+	Tout ce qui se pilote site après site vit dans ce conteneur : le pilote
+	(javascript/dashboard_parc.js) n'y cherche que trois choses — des boutons
+	`data-parc-action`, des cases `data-parc-site`, et les files d'adresses
+	signées qui disent quel site peut recevoir quelle opération.
+]
+<div data-dashboard-parc>
+
+[(#VAL|dashboard_depots_parc_age|oui)
+	[(#REM)
+		Ce nombre est la somme de ce que chaque site a relevé, et chaque site ne
+		relève que ce que son propre catalogue lui dit. Le donner sans le dater,
+		c'est affirmer « tout va bien » sans avoir regardé.
+	]
+	#SET{depots_perimes,#VAL|dashboard_depots_parc_perimes}
+	<p class="dashboard-depots[(#GET{depots_perimes}|>{0}|oui) dashboard-depots-perimes]"
+	   id="depots" data-parc-bloc>
+		<span>
+			<:dashboard:depots_parc_relus:> [(#VAL|dashboard_depots_parc_age)][(#GET{depots_perimes}|>{0}|oui)
+			&mdash; <:dashboard:depots_parc_perimes{nb=#GET{depots_perimes}}:>]
+		</span>
+	</p>
+]
+
+[(#REM)
+	La mise à jour de l'agent sur tout le parc.
+
+	C'est une mise à jour de plugin ordinaire — même chantier, mêmes étapes,
+	même sauvegarde de la base avant de toucher au moindre fichier —, à ceci
+	près que le plugin remplacé est celui qui répond. L'agent se coupe donc la
+	parole à lui-même, et le site se tait au beau milieu de l'opération. Ce
+	silence est prévu : dashboard_chantier_plugin_verifier() va constater
+	plutôt que conclure.
+
+	Le décompte vient du dernier inventaire de chaque site ; l'action, elle,
+	revérifie site par site au moment d'agir, et n'ouvre aucun chantier — donc
+	aucune sauvegarde — sur un site déjà à jour.
+]
+#SET{agent_maj,#VAL|dashboard_agent_maj_parc}
+[(#REM)
+	Les deux libellés portent un décompte, et se calculent donc en PHP.
+
+	La forme habituelle — `#VAL{clef}|_T{#ARRAY{nb,#BALISE}}` — veut une balise
+	simple à la place du nombre. Y glisser un `#GET{…}` y ajoute des accolades
+	imbriquées, que l'analyse ne suit plus : « Argument manquant dans la balise
+	SET », et la vue d'ensemble entière tombe sur une erreur de squelette.
+]
+#SET{libelle_agent,#VAL|dashboard_agent_maj_libelle}
+#SET{confirmer_agent,#VAL|dashboard_agent_maj_confirmation}
+[(#GET{agent_maj}|>{0}|oui)
+	[(#AUTORISER{operer,dashboard_site})
+	<p class="dashboard-depots dashboard-agent-parc" id="agent" data-parc-bloc>
+		<span><:dashboard:explication_agent_parc:></span>
+		[(#REM)
+			Un chantier fait bien plus d'allers-retours qu'une relecture de
+			dépôts : cinq étapes, dont une qui rejoue tant que SVP n'a pas fini,
+			et jusqu'à six tentatives pendant que le site se tait.
+		]
+		<button type="button" class="btn btn_secondaire"
+		        data-parc-action="agent_maj" data-parc-tours="60"
+		        data-parc-confirmer="[(#GET{confirmer_agent}|attribut_html)]">
+			[(#GET{libelle_agent})]
+		</button>
+		<span class="dashboard-depots-avancement" role="status" aria-live="polite" data-parc-avancement></span>
+	</p>
+	]
+]
+
+[(#REM)
+	La tendance du parc : la somme, jour par jour, de ce que les sites équipés du
+	WAF ont bloqué. Elle ne s'affiche que s'il y a quelque chose à montrer.
+
+	Les requêtes s'additionnent sans réserve ; les adresses, non — une même IP qui
+	frappe trois sites y compte trois fois. Le graphique mesure donc la pression
+	subie par le parc, pas le nombre d'assaillants distincts, et sa légende le dit.
+]
+[(#VAL|dashboard_waf_parc_present|oui)
+#SET{serie_parc,#VAL|dashboard_waf_serie_parc}
+<div class="box" id="waf">
+	<div class="box__body clearfix">
+		<h2 class="box__title"><:dashboard:titre_waf_parc:></h2>
+		<p class="explication"><:dashboard:explication_waf_parc:></p>
+		<div class="dashboard-graphe" data-dashboard-waf-graphe data-jours="30"
+			data-libelle-requetes="<:dashboard:graphe_requetes_parc:>"
+			data-libelle-ips="<:dashboard:graphe_ips_parc:>"
+			data-libelle-jour="<:dashboard:graphe_jour:>"
+			data-libelle-tableau="<:dashboard:graphe_tableau:>">
+			<div class="dashboard-graphe-fenetres">
+				<button type="button" class="btn btn_secondaire" data-fenetre="7" aria-pressed="false"><:dashboard:graphe_7j:></button>
+				<button type="button" class="btn btn_secondaire" data-fenetre="30" aria-pressed="true"><:dashboard:graphe_30j:></button>
+				<button type="button" class="btn btn_secondaire" data-fenetre="90" aria-pressed="false"><:dashboard:graphe_90j:></button>
+			</div>
+			<div class="dashboard-graphe-cadre"><canvas data-graphe="requetes"></canvas></div>
+			<div class="dashboard-graphe-cadre"><canvas data-graphe="ips"></canvas></div>
+			<script type="application/json">[(#GET{serie_parc}|dashboard_waf_json)]</script>
+		</div>
+	</div>
+</div>
+]
+
+<B_sites>
+[(#AUTORISER{synchroniser,dashboard_site})
+[(#REM)
+	Agir sur plusieurs sites d'un coup. La case ne fait que **désigner** : elle
+	ne crée aucun droit et ne fabrique aucune adresse. C'est la file d'adresses
+	signées, plus bas, qui dit ce qu'un site peut recevoir — un site coché qui
+	n'y figure pas est simplement écarté, et le pilote le dit.
+
+	Le tableau est paginé : « tout cocher » ne coche donc que la page affichée.
+	C'est ce que dit son intitulé, plutôt que de laisser croire à une sélection
+	qu'on ne voit pas.
+]
+<div class="dashboard-parc-groupe" data-parc-bloc>
+	<span class="dashboard-parc-groupe-compte" data-parc-compte
+	      data-gabarit="<:dashboard:parc_selection:>"></span>
+	<button type="button" class="btn btn_secondaire"
+	        data-parc-action="sync" data-parc-selection="oui" data-parc-tours="2">
+		<:dashboard:action_sync_selection:>
+	</button>
+	[(#AUTORISER{operer,dashboard_site})
+	<button type="button" class="btn btn_secondaire"
+	        data-parc-action="purger" data-parc-selection="oui" data-parc-tours="2">
+		<:dashboard:action_purger_selection:>
+	</button>
+	[(#REM)
+		La relecture des catalogues rejoint les autres opérations groupées :
+		elle se conduit de la même façon, et il n'y avait pas de raison qu'elle
+		vive à part, sans pouvoir viser une sélection.
+
+		Deux boutons pour une seule opération : c'est `data-parc-selection` qui
+		les distingue, et le pilote fait le reste. La file d'adresses signées,
+		elle, reste unique — la case à cocher désigne, elle n'autorise pas.
+
+		Vingt tours, contre deux pour les autres : un site peut déclarer
+		plusieurs dépôts, et l'agent n'en relit qu'un par appel.
+	]
+	<button type="button" class="btn btn_secondaire"
+	        data-parc-action="depots" data-parc-selection="oui" data-parc-tours="20">
+		<:dashboard:action_depots_selection:>
+	</button>
+	<button type="button" class="btn btn_secondaire"
+	        data-parc-action="depots" data-parc-tours="20">
+		<:dashboard:action_depots_parc:>
+	</button>
+	]
+	<span class="dashboard-depots-avancement" role="status" aria-live="polite" data-parc-avancement></span>
+</div>
+]
+<table class="spip liste dashboard-parc">
+	<caption><:dashboard:parc_caption:></caption>
+	<thead>
+		<tr>
+			[(#AUTORISER{synchroniser,dashboard_site})
+			<th scope="col" class="dashboard-parc-cocher">
+				<input type="checkbox" data-parc-tout title="<:dashboard:parc_cocher_page:>"
+				       aria-label="<:dashboard:parc_cocher_page:>" />
+			</th>
+			]
+			<th scope="col"><:dashboard:col_site:></th>
+			<th scope="col"><:dashboard:col_etat:></th>
+			<th scope="col"><:dashboard:col_spip:></th>
+			<th scope="col"><:dashboard:col_plugins:></th>
+			<th scope="col"><:dashboard:col_sync:></th>
+			<th scope="col"><:dashboard:col_actions:></th>
+		</tr>
+	</thead>
+	<tbody>
+	<BOUCLE_sites(DASHBOARD_SITES){statut != poubelle}{par groupe, titre}{pagination 25}>
+		<tr class="[(#COMPTEUR_BOUCLE|alterner{odd,even})] [(#ETAT|dashboard_classe_etat)]">
+			[(#AUTORISER{synchroniser,dashboard_site})
+			<td class="dashboard-parc-cocher">
+				<input type="checkbox" data-parc-site="#ID_DASHBOARD_SITE"
+				       aria-label="[(#TITRE|attribut_html)]" />
+			</td>
+			]
+			<th scope="row">
+				<a href="[(#URL_ECRIRE{dashboard_site,id_dashboard_site=#ID_DASHBOARD_SITE})]">#TITRE</a>
+				[<br /><span class="dashboard-groupe">(#GROUPE)</span>]
+				[(#REM)
+					Deux balises dans un même bloc optionnel : la dernière en est le
+					sujet, la première ressort telle quelle avec ses parenthèses —
+					d'où un href valant « (https://…/) », que le navigateur relit
+					comme une adresse relative. Chacune a désormais ses crochets.
+				]
+				#SET{url_publique,#URL_SITE}
+				[(#GET{url_publique}|oui)
+				<br /><a class="dashboard-lien-public" href="[(#GET{url_publique}|attribut_url)]" rel="noreferrer">[(#GET{url_publique}|couper{48})]</a>
+				]
+				[(#REM)
+					La version de l'agent, là où l'on identifie le site. Elle
+					répond à la question qu'on se pose en premier quand le parc
+					se comporte mal : lequel de ces sites répond encore avec un
+					agent d'avant le correctif ?
+
+					`#AGENT_VERSION` vient du site géré : inerte à l'affichage,
+					comme tout ce qui traverse le protocole.
+				]
+				[<br /><span class="dashboard-agent"><:dashboard:parc_agent:> <code>(#AGENT_VERSION|entites_html)</code></span>]
+			</th>
+			<td class="dashboard-etat">
+				[(#ETAT|=={ok}|oui)<span class="dashboard-pastille dashboard-pastille-ok"></span>]
+				[(#ETAT|=={ok}|non)<span class="dashboard-pastille dashboard-pastille-ko"></span>]
+				[(#STATUT|=={prepa}|oui)<em><:dashboard:statut_pause:></em>]
+				[<span class="dashboard-message-erreur">(#ERREUR|couper{90})</span>]
+			</td>
+			<td>
+				[<code>(#VERSION_SPIP|entites_html)</code>]
+				[(#CORE_MAJ|=={oui}|oui)
+					<span class="dashboard-badge dashboard-badge-maj" title="<:dashboard:core_maj_disponible:>">
+						&rarr; [(#VERSION_SPIP|dashboard_version_disponible|entites_html)]
+					</span>
+				]
+				[(#BASE_MAJ|=={oui}|oui)
+					<span class="dashboard-badge dashboard-badge-alerte" title="<:dashboard:base_maj_disponible:>">
+						<:dashboard:badge_base_maj:>
+					</span>
+				]
+			</td>
+			<td>
+				#NB_PLUGINS
+				[(#REM)
+					Le décompte seul obligeait à ouvrir la fiche du site pour savoir
+					de quels plugins il s'agit. Le survol du badge les nomme.
+
+					La liste reprend les deux critères qui font le décompte :
+					une mise à jour annoncée, et un plugin qui n'est pas livré avec
+					SPIP — celui-là suit le core et ne se met pas à jour seul.
+
+					`tabindex` et `aria-describedby` parce qu'un survol à la souris
+					n'est pas une interface : au clavier, le focus ouvre la même
+					liste, et un lecteur d'écran la rattache au badge.
+				]
+				[(#NB_PLUGINS_MAJ|>{0}|oui)
+					<span class="dashboard-badge dashboard-badge-maj dashboard-survol"
+						tabindex="0" aria-describedby="plugins-maj-#ID_DASHBOARD_SITE">
+						[(#NB_PLUGINS_MAJ)] <:dashboard:a_mettre_a_jour:>
+						<span class="dashboard-survol-liste" role="tooltip" id="plugins-maj-#ID_DASHBOARD_SITE">
+							<BOUCLE_maj(DASHBOARD_PLUGINS){id_dashboard_site}{maj_disponible=oui}{distribue=non}{par nom, prefixe}>
+							[(#COMPTEUR_BOUCLE|>{1}|oui)<br />]
+							[(#NOM|sinon{#PREFIXE}|entites_html)]
+							</BOUCLE_maj>
+						</span>
+					</span>
+				]
+			</td>
+			<td>[(#DATE_SYNC|dashboard_date_lisible{jour})][(#DATE_SYNC|dashboard_date_lisible{jour}|non)<:dashboard:jamais:>]</td>
+			<td class="dashboard-actions">
+				[(#BOUTON_ACTION{<:dashboard:action_sync:>,#URL_ACTION_AUTEUR{dashboard_operation,sync/#ID_DASHBOARD_SITE,#SELF},btn btn_secondaire})]
+				[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+					[(#BOUTON_ACTION{<:dashboard:action_purger:>,#URL_ACTION_AUTEUR{dashboard_operation,purger/#ID_DASHBOARD_SITE/tout,#SELF},btn btn_secondaire})]
+				]
+			</td>
+		</tr>
+	</BOUCLE_sites>
+	</tbody>
+</table>
+[<nav class="pagination" role="navigation">(#PAGINATION{page_precedent_suivant})</nav>]
+</B_sites>
+<p class="petition"><:dashboard:parc_vide:></p>
+<//B_sites>
+
+[(#REM)
+	Les files d'adresses, en clair dans la page : le pilote y lit ce qu'un site
+	peut recevoir. Chaque adresse est signée pour son site **et pour son
+	opération**, comme n'importe quelle action — aucune n'est fabriquée en
+	JavaScript, et cocher une case ne saurait en inventer une.
+
+	D'où une file par opération, et non une file de sites : la signature porte
+	sur l'argument entier, `operation/id_site`.
+
+	Les sites en pause n'y figurent pas — `statut = publie`. Un site qu'on a
+	mis de côté ne se réveille pas parce qu'il est resté coché.
+]
+[(#AUTORISER{synchroniser,dashboard_site})
+<ul class="dashboard-parc-file" data-parc-file="sync" hidden>
+	<BOUCLE_file_sync(DASHBOARD_SITES){statut = publie}{par titre}>
+		[(#AUTORISER{synchroniser,dashboard_site,#ID_DASHBOARD_SITE})
+		<li data-site="#ID_DASHBOARD_SITE"><a href="[(#URL_ACTION_AUTEUR{dashboard_parc,sync/#ID_DASHBOARD_SITE})]">#TITRE</a></li>
+		]
+	</BOUCLE_file_sync>
+</ul>
+]
+
+[(#AUTORISER{operer,dashboard_site})
+<ul class="dashboard-parc-file" data-parc-file="purger" hidden>
+	<BOUCLE_file_purger(DASHBOARD_SITES){statut = publie}{par titre}>
+		[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+		<li data-site="#ID_DASHBOARD_SITE"><a href="[(#URL_ACTION_AUTEUR{dashboard_parc,purger/#ID_DASHBOARD_SITE})]">#TITRE</a></li>
+		]
+	</BOUCLE_file_purger>
+</ul>
+
+<ul class="dashboard-parc-file" data-parc-file="depots" hidden>
+	<BOUCLE_file_depots(DASHBOARD_SITES){statut = publie}{par titre}>
+		[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+		<li data-site="#ID_DASHBOARD_SITE"><a href="[(#URL_ACTION_AUTEUR{dashboard_parc,depots/#ID_DASHBOARD_SITE})]">#TITRE</a></li>
+		]
+	</BOUCLE_file_depots>
+</ul>
+
+[(#REM)
+	La file de l'agent liste tout le parc, sans présélection : le décompte
+	affiché date du dernier inventaire de chaque site, quand l'action, elle,
+	revérifie au moment d'agir. Un site déjà à jour répond « rien à faire » en
+	un aller-retour et sans ouvrir de chantier — donc sans sauvegarde.
+
+	Se fier au décompte pour bâtir la file reviendrait à sauter un site dont
+	l'agent a vieilli depuis, et à en visiter un autre pour rien.
+]
+<ul class="dashboard-parc-file" data-parc-file="agent_maj" hidden>
+	<BOUCLE_file_agent(DASHBOARD_SITES){statut = publie}{par titre}>
+		[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+		<li data-site="#ID_DASHBOARD_SITE"><a href="[(#URL_ACTION_AUTEUR{dashboard_parc,agent_maj/#ID_DASHBOARD_SITE})]">#TITRE</a></li>
+		]
+	</BOUCLE_file_agent>
+</ul>
+]
+
+</div>
+
+[(#AUTORISER{creer,dashboard_site})
+<p class="boutons">
+	<a class="btn" href="[(#URL_ECRIRE{dashboard_site,new=oui})]"><:dashboard:icone_creer_site:></a>
+</p>
+]
+
+
+[(#REM)
+	Le pilote des opérations de parc : il ne lit que ce que cette page lui
+	donne — des boutons, des cases, et des files d'adresses déjà signées.
+]
+<script src="[(#CHEMIN{javascript/dashboard_parc.js}|timestamp)]"></script>
+
+[(#REM)
+	Chart.js est embarqué dans le plugin, jamais appelé sur un CDN.
+]
+<script src="[(#CHEMIN{javascript/chart.umd.min.js}|timestamp)]"></script>
+<script src="[(#CHEMIN{javascript/dashboard_waf_graphes.js}|timestamp)]"></script>
+
+</BOUCLE_installe>
+<div class="dashboard-fiche dashboard-fiche-alerte">
+	<h2><:dashboard:titre_tables_absentes:></h2>
+	<p><:dashboard:explication_tables_absentes:></p>
+	[<p><:dashboard:tables_manquantes:> <code>(#VAL|dashboard_tables_absentes)</code></p>]
+	[(#AUTORISER{configurer,_dashboard})
+	<p class="boutons">
+		[(#BOUTON_ACTION{<:dashboard:action_installer:>,#URL_ACTION_AUTEUR{dashboard_installer,installer,#SELF},btn})]
+	</p>
+	]
+</div>
+<//B_installe>

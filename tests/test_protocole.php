@@ -1669,6 +1669,33 @@ verifier('la version en place est intacte', is_file($cible . '/paquet.xml'));
 
 dashagent_supprimer_repertoire($bac, true);
 
+echo "\n== La synchronisation de fond, cochée ou non ==\n";
+
+/* Une bascule a trois états, pas deux, et `dashboard_config()` n'en distingue
+   que deux : il traite la chaîne vide comme une absence et rend le défaut. Or
+   une case décochée vaut précisément la chaîne vide — elle se relirait donc
+   cochée, et le réglage serait impossible à éteindre.
+
+   Le défaut divergeait en plus entre les deux lecteurs : le génie lisait « on »,
+   le formulaire lisait vide. La case s'affichait décochée sur une install neuve
+   où la tâche tournait, et le premier enregistrement l'éteignait sans que
+   personne l'ait demandé. */
+
+$GLOBALS['dashboard_config_test'] = [];
+verifier('jamais réglée, la synchronisation de fond tourne', dashboard_sync_auto() === true);
+
+$GLOBALS['dashboard_config_test'] = ['sync_auto' => 'on'];
+verifier('cochée, elle tourne', dashboard_sync_auto() === true);
+
+$GLOBALS['dashboard_config_test'] = ['sync_auto' => ''];
+verifier('décochée, elle s’arrête — et le reste', dashboard_sync_auto() === false);
+
+$GLOBALS['dashboard_config_test'] = ['sync_auto' => 'non'];
+verifier('une valeur inattendue ne la rallume pas', dashboard_sync_auto() === false);
+
+$GLOBALS['dashboard_config_test'] = [];
+
+
 echo "\n== Relire un dépôt, et savoir ce qu'on a lu ==\n";
 
 /* SVP ne télécharge pas le catalogue : il appelle `copie_locale($url, 'modif')`,

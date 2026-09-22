@@ -2,8 +2,8 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.31`,
-`plugins/tourdecontrole_agent-1.0.23`.
+`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.32`,
+`plugins/tourdecontrole_agent-1.0.24`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
 dans le même commit que le changement de `version=` dans son `paquet.xml`. Un
@@ -192,7 +192,16 @@ Ce que SPIP dérive du préfixe, et qu'il faut donc renommer avec lui :
   `dashboard_reprendre_schema()`, sans quoi SPIP croit le plugin neuf et rejoue
   toutes ses migrations sur une base déjà à jour ;
 - le module de langue du manifeste `lang/paquet-<prefixe>_XX.php`, et ses clefs
-  `<prefixe>_nom`, `<prefixe>_slogan`, `<prefixe>_description`.
+  `<prefixe>_nom`, `<prefixe>_slogan`, `<prefixe>_description` ;
+- **la page de configuration `configurer_<prefixe>`**. SPIP n'affiche le bouton
+  « Configurer » de sa page *Gestion des plugins* qu'à cette condition :
+  `plugin_bouton_config()` compose l'exec depuis `strtolower($infos['prefix'])`,
+  et `prive/squelettes/inclure/cfg.html` ne rend le lien que si
+  `tester_url_ecrire` le trouve. Nos pages s'appelaient `configurer_dashboard`
+  et `configurer_dashagent` : le bouton n'a jamais pu apparaître, et rien ne le
+  disait. L'autorisation suit le même nom — `autoriser('configurer',
+  '_tourdecontrole')` —, sous les trois orthographes que la chaîne de résolution
+  essaie.
 
 Ce que SPIP ne dérive de rien, et qui a donc gardé son nom : **les fonctions
 internes et les filtres de squelette** (`dashboard_*`, `dashagent_*`), **les noms
@@ -346,6 +355,41 @@ Et, ceinture et bretelles, une fenêtre de jours se normalise au lieu de se
 supposer : `dashboard_waf_fenetre()` ramène zéro, le vide et le négatif à la
 fenêtre par défaut.
 
+## Une bascule a trois états, `dashboard_config()` n'en voit que deux
+
+`dashboard_config()` traite la chaîne vide comme une absence et rend le défaut.
+C'est juste pour un délai — un délai vide n'est pas un délai de zéro — et faux
+pour tout ce qui peut être **vidé exprès** : une case décochée vaut la chaîne
+vide, et se relirait donc cochée. Le réglage devient impossible à éteindre.
+
+Deux fois le même piège, à deux endroits :
+
+- l'adresse de SPIP Check, vidable pour n'offrir aucun dépôt
+  (`dashboard_url_check_source()`) ;
+- la synchronisation de fond (`dashboard_sync_auto()`), où s'ajoutait un défaut
+  qui divergeait selon le lecteur : le génie lisait « on », le formulaire lisait
+  vide. La case s'affichait décochée sur une install neuve où la tâche tournait
+  bel et bien, et **le premier enregistrement l'éteignait** sans que personne
+  l'ait demandé.
+
+La règle : pour un réglage qui peut être vidé, passer par `lire_config(…, null)`
+et distinguer les trois états — jamais réglé, réglé, vidé. Et n'avoir qu'un seul
+lecteur, que le formulaire et le génie appellent tous les deux : deux défauts
+écrits à deux endroits finissent toujours par diverger.
+
+## Le fil d'Ariane d'un objet sans rubrique
+
+Sans squelette à nous, SPIP retombe sur
+`prive/echafaudage/hierarchie/objet.sans_rubrique.html`, qui fabrique le lien de
+remontée **depuis le nom de la table** : `?exec=dashboard_sites`. Cette page
+n'existe pas — le parc a la sienne, `?exec=dashboard` — et l'intitulé venait de
+`texte_objets`, « Sites gérés », qui ne désigne rien d'atteignable.
+
+Le fond est choisi par `prive/squelettes/hierarchie/<type-page>`, et `type-page`
+vaut le nom de l'exec. D'où `prive/squelettes/hierarchie/dashboard_site.html`,
+qui rend la remontée vers le parc et le titre du site — `#INFO_TITRE`, qui
+échappe, parce que ce titre vient d'un site géré.
+
 ## Ce qui vient d'un site géré est inerte, toujours
 
 L'échappement de SPIP n'est pas une protection contre l'injection de balisage :
@@ -377,6 +421,16 @@ le rendu, charge utile à l'appui.
 1. **Une balise à accolades dans un argument composite** (`op/#ID/#GET{x}`)
    désorganise l'analyse : les balises voisines arrivent littéralement dans la
    sortie. Calculer l'argument à part avec `#SET`.
+
+   Variante rencontrée depuis, et qui ne pardonne pas : `#INFO_TITRE{dashboard_site,#ENV{id_dashboard_site}}`
+   — un argument **littéral** suivi d'une balise à accolades. SPIP perd le nom
+   de la balise en chemin (« Argument manquant dans la balise INFO_ ») et la
+   page entière tombe. L'échafaudage du core écrit
+   `#INFO_TITRE{#ENV{objet},#ENV{id_objet}}`, dont les deux arguments sont des
+   balises, et passe. Le remède est le même : passer par une boucle, ou calculer
+   à part. Aucun contrôle statique ne le voit — `#BOUTON_ACTION{libellé,#URL_ACTION_AUTEUR{…},btn}`
+   a la même forme et fonctionne —, c'est le parcours d'intégration qui l'a
+   attrapé, sur trois pages d'un coup.
 2. **Un filtre à accolades dans l'argument d'un autre filtre**
    (`|lien_ou_expose{…,#GET{x}|=={non},…}`) est relu comme la suite de la chaîne
    de filtres : SPIP cherche alors un filtre nommé `non,btn btn_secondaire`.

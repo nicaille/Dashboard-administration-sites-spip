@@ -12,7 +12,7 @@
 $racine = dirname(__DIR__);
 
 /**
- * Les dossiers de plugins portent leur version (`tourdecontrole-1.0.31`), pour qu'une
+ * Les dossiers de plugins portent leur version (`tourdecontrole-1.0.32`), pour qu'une
  * mise en ligne n'écrase pas la version précédente. On les retrouve donc par
  * préfixe, sans quoi ce fichier serait à retoucher à chaque montée de version.
  *
@@ -1151,6 +1151,74 @@ foreach (['false', 'true'] as $issue) {
  */
 verifier('l’absence de « termine » est traitée explicitement',
 	strpos($lecture, "array_key_exists('termine'") !== false);
+
+
+echo "\n== La page de configuration porte le nom du préfixe ==\n";
+
+/*
+ * SPIP affiche le bouton « Configurer » de sa page *Gestion des plugins* à une
+ * condition, et une seule : que l'exec `configurer_<prefixe>` existe.
+ * `plugin_bouton_config()` compose ce nom depuis `strtolower($infos['prefix'])`,
+ * et `prive/squelettes/inclure/cfg.html` ne rend le lien que si
+ * `#SCRIPT|tester_url_ecrire` répond.
+ *
+ * C'est une exception à la règle qui veut que nos noms restent en `dashboard_*`
+ * et `dashagent_*` : ce nom-là, SPIP le dérive, il ne nous appartient pas. Nos
+ * pages s'appelaient `configurer_dashboard` et `configurer_dashagent`, et le
+ * bouton n'a jamais pu apparaître — sans que rien ne le signale.
+ */
+foreach ($plugins as $plugin) {
+	$nom_court = basename($plugin);
+	$xml       = simplexml_load_file($plugin . '/paquet.xml');
+	$prefixe   = strtolower((string) $xml['prefix']);
+	$page      = $plugin . '/prive/squelettes/contenu/configurer_' . $prefixe . '.html';
+
+	verifier("$nom_court : la page configurer_$prefixe existe", is_file($page),
+		'sans elle, SPIP ne propose aucun bouton « Configurer »');
+
+	$menus = [];
+	foreach ($xml->menu as $menu) {
+		$menus[] = (string) $menu['nom'];
+	}
+	verifier("$nom_court : le menu de configuration désigne cette page",
+		in_array('configurer_' . $prefixe, $menus, true), implode(', ', $menus));
+
+	if (is_file($page)) {
+		verifier("$nom_court : la page refuse l’accès non autorisé",
+			strpos(file_get_contents($page), 'sinon_interdire_acces') !== false);
+	}
+}
+
+echo "\n== Configurer le parc reste un droit de webmestre ==\n";
+
+/*
+ * Le tableau de bord détient les secrets de tout le parc, et l'agent ouvre son
+ * site à distance : leurs pages de configuration ne sont pas des pages
+ * d'administration ordinaires. Un administrateur non webmestre n'y entre pas.
+ *
+ * SPIP essaie plusieurs noms pour un même contrôle, et lequel dépend de sa
+ * version : il suffit qu'une seule de ces fonctions soit plus permissive pour
+ * que la porte s'ouvre. On les relit donc toutes.
+ */
+$verifiees_conf = 0;
+foreach ($plugins as $plugin) {
+	foreach (fichiers($plugin, ['php']) as $fichier) {
+		if (strpos(basename($fichier), '_autorisations.php') === false) {
+			continue;
+		}
+		$source = file_get_contents($fichier);
+		preg_match_all('/function\s+(autoriser_\w*configurer\w*_dist)\s*\(/i', $source, $trouves);
+		foreach ($trouves[1] as $fonction) {
+			$corps = fonction_php($source, $fonction);
+			$verifiees_conf++;
+			verifier("$fonction exige le webmestre",
+				strpos($corps, "webmestre") !== false || strpos($corps, 'dashboard_qui_peut_agir') !== false,
+				trim(preg_replace('/\s+/', ' ', $corps)));
+		}
+	}
+}
+verifier('les autorisations de configuration ont bien été relues', $verifiees_conf >= 6,
+	$verifiees_conf . ' fonction(s)');
 
 
 echo "\n== Forcer une relecture de dépôt veut dire forcer ==\n";

@@ -1,0 +1,22 @@
+[(#REM)
+	Le fil d'Ariane de la fiche d'un site.
+
+	Sans ce squelette, SPIP retombe sur son échafaudage
+	`prive/echafaudage/hierarchie/objet.sans_rubrique.html`, qui fabrique le
+	lien à partir du nom de la table : `?exec=dashboard_sites`. Cette page
+	n'existe pas — le parc a la sienne, `?exec=dashboard` —, et l'intitulé en
+	venait de `texte_objets`, « Sites gérés », qui ne désigne rien
+	d'atteignable.
+
+	Le titre passe par une boucle, et non par
+	`#INFO_TITRE{dashboard_site,#ENV{id_dashboard_site}}` : mêler un argument
+	littéral et une balise à accolades désorganise l'analyse, pour un
+	« Argument manquant dans la balise INFO_ » qui emporte la page entière.
+	L'échafaudage du core s'en tire parce que ses deux arguments sont des
+	balises ; le nôtre avait un littéral en premier.
+]
+<!-- hierarchie -->
+<a href="[(#URL_ECRIRE{dashboard})]"><:dashboard:titre_dashboard:></a>
+<BOUCLE_site(DASHBOARD_SITES){id_dashboard_site}>
+&gt; <strong class="on">[(#TITRE|couper{80}|entites_html|sinon{<:ecrire:info_sans_titre:>})]</strong>
+</BOUCLE_site>
