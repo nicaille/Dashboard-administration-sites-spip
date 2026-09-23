@@ -15,22 +15,21 @@
 
 <h1 class="grostitre"><:dashboard:titre_journal_parc:></h1>
 
-[(#VAL|dashboard_tables_presentes|non)
-<div class="dashboard-fiche dashboard-fiche-alerte">
-	<h2><:dashboard:titre_tables_absentes:></h2>
-	<p><:dashboard:explication_tables_absentes:></p>
-</div>
-]
-[(#VAL|dashboard_tables_presentes|oui)
+<BOUCLE_installe(CONDITION){si #VAL|dashboard_tables_presentes}>
 
 [(#REM)
-	**Aucun crochet dans ce commentaire, et ce n'est pas un hasard.** Un
-	crochet ouvrant ou fermant posé dans un #REM imbriqué dans un bloc
-	optionnel casse le bloc englobant : SPIP perd le nom des deux balises et
-	rend tout le bloc littéralement, commentaire compris. Une paire
-	équilibrée ne sauve rien. Ici, on nomme les syntaxes, on ne les écrit
-	pas — la même règle que pour le commentaire qui contenait la syntaxe
-	qu'il déconseillait.
+	**Cette page passe par une boucle CONDITION, pas par un bloc optionnel,
+	et c'est la seule forme qui tienne.** Le contenu d'un bloc optionnel ne
+	supporte aucun crochet littéral : un crochet ouvrant casse le bloc — SPIP
+	perd le nom de la balise et rend tout le bloc en clair, commentaires
+	compris —, un crochet fermant le termine trop tôt. Or le formulaire
+	nomme ses champs d'après leurs colonnes, dont un tableau, et porte donc
+	des crochets en clair. Les trois autres pages du parc emploient déjà
+	cette boucle ; celle-ci avait innové, et le paragraphe que vous lisez
+	s'affichait sous le titre.
+
+	Ce qui suit la fermeture de la boucle, jusqu'au double slash, est la
+	branche rendue quand les tables manquent.
 
 	**Les paramètres d'URL portent le nom des colonnes, et ce n'est pas un
 	choix de style.** Le `?` de `{champ ?IN …}` ne teste pas la valeur qu'on
@@ -203,4 +202,9 @@
 	]
 	<p class="explication">[(#VAL|dashboard_journal_retention_libelle)]</p>
 </div>
-]
+</BOUCLE_installe>
+<div class="dashboard-fiche dashboard-fiche-alerte">
+	<h2><:dashboard:titre_tables_absentes:></h2>
+	<p><:dashboard:explication_tables_absentes:></p>
+</div>
+<//B_installe>

@@ -514,29 +514,39 @@ le rendu, charge utile à l'appui.
    jamais. Rien sur la page ne le dit : le bloc est là, son JSON aussi, seul le
    tracé manque.
 
-6. **Un crochet dans un `#REM` casse le bloc optionnel qui l'entoure.**
-   Ouvrant, fermant, et **même en paire équilibrée** : SPIP perd le nom des
-   deux balises et rend le bloc entier littéralement — le commentaire compris,
-   en pleine page, sous le titre. Éprouvé caractère par caractère : les
-   accolades passent, les backticks passent, les parenthèses passent, les
-   crochets non.
+6. **Le contenu d'un bloc optionnel ne supporte aucun crochet littéral.** Un
+   crochet **ouvrant** casse le bloc : SPIP perd le nom de la balise et rend
+   le bloc entier en clair — commentaires de squelette compris, en pleine
+   page, sous le titre. Un crochet **fermant** le termine trop tôt, et la
+   suite passe hors condition. Seuls comptent comme syntaxe les crochets qui
+   ouvrent ou ferment un bloc imbriqué.
 
-   Arrivé en citant du squelette compilé — une case de pile indexée — dans le
-   commentaire qui expliquait justement le piège du `?` des critères. C'est le
-   troisième de la série, après le commentaire de squelette qui contenait la
-   syntaxe qu'il déconseillait et le `?>` dans un commentaire PHP : **ici, on
-   nomme les syntaxes, on ne les écrit pas.**
+   La page du journal enveloppait tout son corps dans un tel bloc, alors que
+   son formulaire nomme un champ d'après une colonne à valeurs multiples —
+   donc avec des crochets. **Pour envelopper une page entière, c'est une
+   boucle CONDITION qu'il faut** (`{si #VAL|dashboard_tables_presentes}`), et
+   sa branche « sinon » ; les trois autres pages du parc le faisaient déjà,
+   seule celle-ci avait innové.
 
-   Aucune erreur, aucun message, une page par ailleurs normale — et les
-   contrôles d'intégration qui cherchaient « Argument manquant » ou
-   « erreur_squelette » n'y voyaient rien. Ce qui l'attrape maintenant côté
-   rendu ne cherche plus une erreur mais **une syntaxe de squelette qui atteint
-   le navigateur**, ce qui n'a aucune raison d'arriver.
+   Rien ne le signale : aucune erreur, une page qui fonctionne, ses filtres
+   qui filtrent — et trente lignes de prose technique au-dessus. Le contrôle
+   d'intégration cherchait « Argument manquant » et « erreur_squelette » : il
+   cherchait une erreur là où il n'y en a pas.
 
-`tests/test_structure.php` vérifie les six — le quatrième en refusant toute
-valeur d'attribut qui s'ouvre sur une parenthèse littérale, le cinquième tout
-`<script src>` rangé dans une branche « sinon », le sixième tout crochet dans
-un `#REM`. Il refuse aussi tout `#ARRAY{…#GET{…}}`, variante du premier.
+   **Ce piège-là ne se vérifie pas statiquement**, et l'essayer coûte des
+   faux positifs : un bloc optionnel s'écrit aussi `[texte(#BALISE)texte]`,
+   si bien qu'un crochet suivi d'autre chose qu'une parenthèse peut
+   parfaitement en ouvrir un — cinq squelettes sains du dépôt se sont fait
+   accuser. Ce qui l'attrape est dans `ouvrir()`, côté parcours : **une
+   syntaxe d'ouverture de balise qui atteint le navigateur**, sur chacune des
+   pages visitées. Aucun faux positif possible, et le contrôle couvre les
+   pages à venir sans qu'on y pense.
+
+`tests/test_structure.php` vérifie les cinq premiers — le quatrième en refusant
+toute valeur d'attribut qui s'ouvre sur une parenthèse littérale, le cinquième
+tout `<script src>` rangé dans une branche « sinon ». Il refuse aussi tout
+`#ARRAY{…#GET{…}}`, variante du premier. Le sixième appartient au parcours,
+pour la raison dite plus haut.
 
 ## Une case à cocher ne donne aucun droit
 

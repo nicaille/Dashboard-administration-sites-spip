@@ -69,7 +69,26 @@ async function ouvrir(page, titre, url) {
 	await page.goto(base + url, { waitUntil: 'domcontentloaded' });
 	const pb = await erreurs(page);
 	dit(titre, pb.length === 0, pb.join(' ; '));
-	return page.locator('body').innerText();
+	const texte = await page.locator('body').innerText();
+
+	/* Un bloc optionnel cassé ne lève aucune erreur : SPIP rend le bloc entier
+	   littéralement — commentaires de squelette compris — et la page reste par
+	   ailleurs fonctionnelle. Un crochet littéral dans le corps du bloc suffit,
+	   et le formulaire du journal en portait un, dans le nom d'un champ à
+	   valeurs multiples.
+
+	   Le contrôle est ici, et non sur la page où le défaut est né : il ne
+	   coûte rien, il ne peut pas se tromper — une syntaxe d'ouverture de balise
+	   n'a aucune raison d'atteindre le navigateur —, et il porte ainsi sur
+	   toutes les pages que le parcours visite. La vérification statique, elle,
+	   ne sait pas distinguer un crochet de texte d'un crochet qui ouvre un
+	   bloc de la forme `[texte(#BALISE)texte]`. */
+	const fuite = texte.indexOf('[(');
+	dit(`${titre} : aucune syntaxe de squelette n’atteint le navigateur`,
+		fuite === -1,
+		fuite === -1 ? '' : texte.slice(Math.max(0, fuite - 40), fuite + 100));
+
+	return texte;
 }
 
 /**
@@ -2246,21 +2265,6 @@ console.log('\n### Journal du parc');
 	dit('elle ne porte pas d’erreur de compilation',
 		!/Argument manquant|zbug|erreur_squelette|Boucle .* inconnue/i.test(corps),
 		corps.slice(0, 200));
-
-	/* Un bloc optionnel cassé ne lève aucune erreur : SPIP rend le bloc
-	   entier littéralement, commentaire de squelette compris, et la page
-	   reste par ailleurs normale. C'est ce qui est arrivé — un crochet dans
-	   un `#REM` imbriqué — et le contrôle d'au-dessus n'y voyait rien,
-	   puisqu'il ne cherche que des messages d'erreur.
-
-	   Deux marqueurs, parce qu'ils ratent des choses différentes : la
-	   syntaxe d'ouverture d'une balise, qui n'a aucune raison d'atteindre le
-	   navigateur, et un mot que seul le commentaire porte. */
-	dit('aucune syntaxe de squelette ne ressort telle quelle',
-		!corps.includes('[('),
-		corps.slice(Math.max(0, corps.indexOf('[(') - 60), corps.indexOf('[(') + 120));
-	dit('aucun commentaire de squelette ne s’affiche',
-		!/#REM|squelette compil|critere_IN_cas/i.test(corps));
 
 	/* Le formulaire de filtres, et ses cinq champs. */
 	for (const champ of ['id_dashboard_site[]', 'statut', 'operation', 'jours', 'id_auteur']) {
