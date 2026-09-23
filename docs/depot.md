@@ -124,14 +124,34 @@ php outils/generer-depot.php --url=https://exemple.org/depot --vers=_depot
 figure en toutes lettres dans le catalogue, puisque c'est par elle que les sites
 téléchargent les archives : on ne peut pas la deviner après coup.
 
-## Déclarer le dépôt sur un site géré
+## Déclarer le dépôt
 
-Sur chaque site du parc, muni de SVP : espace privé, **Plugins → Dépôts →
-Ajouter un dépôt**, puis coller l'adresse du catalogue :
+Le geste est le même des deux côtés, et il vaut d'être fait **aussi sur la
+tour de contrôle** : c'est le plugin qu'on met à jour le plus souvent, et
+celui pour lequel on finit sinon par recopier des fichiers à la main.
+
+Espace privé, muni de SVP : **Plugins → Dépôts → Ajouter un dépôt**, puis
+coller l'adresse du catalogue :
 
 ```
 https://<compte>.github.io/<dépôt>/plugins.xml
 ```
+
+Pour ce dépôt-ci :
+
+```
+https://nicaille.github.io/Dashboard-administration-sites-spip/plugins.xml
+```
+
+| Où | Ce qu'on installe |
+| --- | --- |
+| La tour de contrôle | *Tour de contrôle d'un parc de sites SPIP* |
+| Chaque site géré | *Tour de contrôle : agent* |
+
+Ensuite, *Gestion des plugins* propose les mises à jour comme pour n'importe
+quel plugin. Sur la tour, c'est le seul chemin sans FTP ; sur les sites gérés,
+c'est la tour elle-même qui prend le relais — bouton *Mettre à jour l'agent*
+de la vue d'ensemble.
 
 SVP vérifie l'adresse par une requête HEAD qui doit rendre **exactement 200**
 (`svp_verifier_adresse_depot()`) ; les redirections sont suivies, mais la page
@@ -141,6 +161,16 @@ Ensuite, plus rien à faire à la main : la tour de contrôle relit les dépôts
 tous les sites — bouton *Relire les dépôts de tout le parc* sur la vue
 d'ensemble — et signale les mises à jour disponibles comme pour n'importe quel
 autre plugin.
+
+### Si une version publiée n'apparaît pas
+
+Ce n'est presque jamais le catalogue. SVP garde une copie locale sous
+`IMG/distant/xml/`, dont il rafraîchit la date même quand il ne rapatrie rien :
+une copie plus récente que le catalogue publié fige la situation pour toujours,
+et le bouton *Relire les dépôts* rend `true` sans rien relire. Le remède et la
+mécanique sont dans la section « Relire les dépôts ne relisait rien » de
+`CLAUDE.md` — en résumé : effacer `IMG/distant/xml/plugins*.xml` à la main,
+puis relire. L'agent 1.0.22 le fait tout seul quand on force.
 
 ## Activer GitHub Pages, une fois
 

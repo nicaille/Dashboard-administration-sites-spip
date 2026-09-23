@@ -2,7 +2,7 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.35`,
+`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.36`,
 `plugins/tourdecontrole_agent-1.0.24`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
@@ -389,6 +389,39 @@ Le fond est choisi par `prive/squelettes/hierarchie/<type-page>`, et `type-page`
 vaut le nom de l'exec. D'où `prive/squelettes/hierarchie/dashboard_site.html`,
 qui rend la remontée vers le parc et le titre du site — `#INFO_TITRE`, qui
 échappe, parce que ce titre vient d'un site géré.
+
+## Un critère facultatif qui lit le contexte filtre ce qu'on ne lui a pas demandé
+
+La page du journal du parc a cinq filtres, et **aucun** n'emploie la forme
+simple `{statut ?}`. Ce n'est pas de l'uniformité : cette forme lit **le
+contexte**, où `statut`, `operation` ou `id_auteur` peuvent déjà valoir
+quelque chose qu'aucun lien n'a posé. La page filtrerait alors sur une valeur
+venue d'ailleurs, et rien ne le dirait — la liste serait simplement plus
+courte.
+
+Tous passent donc par `?IN` et un tableau calculé en PHP, qui ne dépend que de
+ce qu'on lui donne. Trois choses à savoir, aucune visible :
+
+- **le `?` d'un critère se place avant l'opérateur** : `{date ?> #GET{x}}`,
+  jamais `{date > #GET{x} ?}`. Écrit après, il est pris pour un caractère de
+  la valeur — c'est le même piège que `{champ = #GET{x} ?}`, déjà consigné
+  plus haut ;
+- **`?IN` exige un vrai tableau.** `critere_IN_cas()` pousse une valeur non
+  tableau telle quelle dans la liste : la chaîne « 3,7 » y devient un seul
+  identifiant valant littéralement « 3,7 », et la boucle ne rend rien. Sans
+  erreur, sans message, sur une page par ailleurs normale ;
+- **un tableau vide retire la condition**, ce qui fait de « aucun filtre » un
+  cas particulier du filtre plutôt qu'une branche à part.
+
+Et ce qui vient de l'URL **désigne, il n'autorise pas** — la même règle que
+les cases à cocher du parc. `dashboard_journal_sites()` passe chaque
+identifiant par `autoriser()`, sans quoi une adresse forgée donnerait à lire
+le journal d'un site qu'on n'a pas le droit de voir.
+
+Un filtre qui ne filtre rien ne se voit pas : la page s'affiche, la liste
+aussi. Le parcours d'intégration compare donc des **décomptes** — avec filtre
+contre sans —, et vérifie qu'un site inconnu ne rend aucune ligne. C'est la
+seule façon de distinguer « le filtre porte » de « le filtre est ignoré ».
 
 ## Ce qui vient d'un site géré est inerte, toujours
 

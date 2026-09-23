@@ -2232,6 +2232,87 @@ try {
 }
 
 
+console.log('\n### Journal du parc');
+
+/* Rien de ce qui suit n'est prouvé par l'analyse statique : le critère `?IN`
+   veut un tableau — une chaîne « 3,7 » y compterait pour un seul identifiant
+   sans que rien ne le dise —, le `?` d'un critère se place avant l'opérateur,
+   et `form_hidden` est ce qui empêche un formulaire GET de perdre son `exec`.
+   Seul le rendu tranche. */
+{
+	await ouvrir(page, 'la page du journal du parc s’ouvre', '/ecrire/?exec=dashboard_journal');
+
+	const corps = await page.locator('body').innerText();
+	dit('elle ne porte pas d’erreur de compilation',
+		!/Argument manquant|zbug|erreur_squelette|Boucle .* inconnue/i.test(corps),
+		corps.slice(0, 200));
+
+	/* Le formulaire de filtres, et ses cinq champs. */
+	for (const champ of ['sites[]', 'statut', 'operation', 'jours', 'auteur']) {
+		dit(`le filtre « ${champ} » est présent`,
+			(await page.locator(`[name="${champ}"]`).count()) === 1);
+	}
+
+	/* `form_hidden` : sans lui, un formulaire GET perd la chaîne de requête de
+	   son action, donc `exec`, et l'envoi retombe sur l'accueil du privé. */
+	const cache = await page.locator('form.formulaire_spip input[type=hidden][name="exec"]').count();
+	dit('le formulaire garde son exec en champ caché', cache === 1, `${cache} champ(s)`);
+
+	const lignes = await page.locator('#journal table.spip tbody tr').count();
+	dit('le journal du parc liste des opérations', lignes >= 1, `${lignes} ligne(s)`);
+
+	dit('la rétention est annoncée',
+		/conserv/i.test(corps) && /\d+\s*jours/.test(corps));
+
+	/* Le fil d'Ariane doit remonter au parc, et non à la page inexistante que
+	   fabrique l'échafaudage de SPIP depuis le nom de la table. */
+	const chemin = await page.locator('.chemin, #chemin, nav.chemin').first().innerText().catch(() => '');
+	dit('le fil d’Ariane remonte au parc', /parc|dashboard|contr/i.test(chemin), chemin.slice(0, 80));
+}
+
+console.log('\n### Journal du parc : les filtres filtrent vraiment');
+
+/* Un filtre qui ne filtre rien passerait inaperçu : la page s'afficherait, la
+   liste aussi. On compare donc des décomptes, et on force une ligne en erreur
+   pour que les deux ensembles diffèrent à coup sûr. */
+{
+	sqlEcrire(`INSERT INTO spip_dashboard_journal (id_dashboard_site, id_auteur, operation, statut, message, detail, duree, date)
+	           VALUES (1, 1, 'sync', 'erreur', 'panne de démonstration', '', 12, datetime('now'))`);
+
+	await page.goto(base + '/ecrire/?exec=dashboard_journal', { waitUntil: 'domcontentloaded' });
+	const tout = await page.locator('#journal table.spip tbody tr').count();
+
+	await page.goto(base + '/ecrire/?exec=dashboard_journal&statut=erreur', { waitUntil: 'domcontentloaded' });
+	const erreursSeules = await page.locator('#journal table.spip tbody tr').count();
+	dit('filtrer sur les erreurs réduit la liste', erreursSeules >= 1 && erreursSeules < tout,
+		`${erreursSeules} sur ${tout}`);
+
+	/* Le cas qui casse en silence : un identifiant de site passé en chaîne.
+	   Avec un tableau, la boucle rend les lignes du site ; avec une chaîne,
+	   elle n'en rend aucune — et la page reste parfaitement normale. */
+	await page.goto(base + '/ecrire/?exec=dashboard_journal&sites[]=1', { waitUntil: 'domcontentloaded' });
+	const unSite = await page.locator('#journal table.spip tbody tr').count();
+	dit('filtrer sur un site rend bien ses lignes', unSite >= 1, `${unSite} ligne(s)`);
+
+	/* Un site qui n'existe pas ne doit rien rendre — preuve que le filtre
+	   porte, et non qu'il est ignoré. */
+	await page.goto(base + '/ecrire/?exec=dashboard_journal&sites[]=99999', { waitUntil: 'domcontentloaded' });
+	const inexistant = await page.locator('#journal table.spip tbody tr').count();
+	dit('filtrer sur un site inconnu ne rend rien', inexistant === 0, `${inexistant} ligne(s)`);
+
+	/* Une période qui exclut tout, puis une qui inclut tout : c'est le critère
+	   `?>` sur une date, dont le `?` doit précéder l'opérateur. */
+	await page.goto(base + '/ecrire/?exec=dashboard_journal&jours=1', { waitUntil: 'domcontentloaded' });
+	const recent = await page.locator('#journal table.spip tbody tr').count();
+	dit('filtrer sur les 24 dernières heures rend des lignes', recent >= 1, `${recent} ligne(s)`);
+
+	/* Et le filtre d'opération, sur une valeur qu'on sait présente. */
+	await page.goto(base + '/ecrire/?exec=dashboard_journal&operation=sync', { waitUntil: 'domcontentloaded' });
+	const parOperation = await page.locator('#journal table.spip tbody tr').count();
+	dit('filtrer sur une opération rend des lignes', parOperation >= 1, `${parOperation} ligne(s)`);
+	dit('et en écarte d’autres', parOperation <= tout, `${parOperation} sur ${tout}`);
+}
+
 console.log('\n' + (echecs ? `=== ${echecs} ÉCHEC(S) ===` : '=== PARCOURS COMPLET SANS ERREUR ==='));
 await nav.close();
 process.exit(echecs ? 1 : 0);

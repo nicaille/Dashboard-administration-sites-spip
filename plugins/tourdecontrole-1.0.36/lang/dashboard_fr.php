@@ -28,6 +28,8 @@ $lang = [
 	'action_depots_parc' => 'Relire les dépôts de tout le parc',
 	'action_depots_selection' => 'Relire les dépôts de la sélection',
 	'action_core_maj_selection' => 'Mettre à jour SPIP sur la sélection',
+	'action_filtre_vider' => 'Tout afficher',
+	'action_filtrer' => 'Filtrer',
 	'action_loader_retirer' => 'Retirer du site',
 	'action_purger_selection' => 'Vider les caches de la sélection',
 	'action_push_activer' => 'Activer les notifications sur ce navigateur',
@@ -73,6 +75,7 @@ $lang = [
 	'base_maj_texte' => 'Les fichiers de ce site attendent une migration de leur base de données. Tant qu’elle n’est pas jouée, SPIP bloque l’espace privé du site géré derrière sa page de mise à niveau.',
 	'bilan_explication' => 'Ce compte rendu disparaît de lui-même au bout d’une heure ; le journal, plus bas, en garde la trace.',
 	'col_actions'    => 'Actions',
+	'col_auteur' => 'Par',
 	'col_cache'      => 'Cache',
 	'col_composant'  => 'Composant',
 	'col_date'       => 'Date',
@@ -147,6 +150,7 @@ $lang = [
 	'explication_autoriser_http' => 'À réserver au développement local : le secret partagé et les archives téléchargées circulent alors en clair. Le site géré doit en outre l’autoriser de son côté.',
 	'explication_chantier' => 'L’opération se déroule étape par étape. Vous pouvez quitter cette page : elle se poursuivra d’elle-même et son issue sera portée au journal.',
 	'explication_check' => 'SPIP Check compare les fichiers du site à l’archive officielle de sa version et examine les répertoires inscriptibles. C’est un outil ponctuel, déposé puis retiré — à la différence du spip_loader, qui reste. Le contrôle lui-même se conduit depuis le navigateur, sur le site : il n’accepte qu’un webmestre connecté là-bas.',
+	'explication_filtre_sites' => 'Aucun site sélectionné : tous. Plusieurs se choisissent avec Ctrl ou Cmd.',
 	'explication_generer_secret' => 'Le secret est affiché une seule fois après enregistrement : recopiez-le aussitôt dans la configuration de l’agent, sur le site géré.',
 	'explication_groupe'       => 'Facultatif : sert à regrouper les sites d’un même client ou d’un même hébergement.',
 	'explication_fraicheur_depots' => 'Le catalogue des versions disponibles vit sur le site géré, et ne se rafraîchit pas tout seul : sans cela le parc annonce « à jour » des sites qui ne le sont pas. Au-delà de ce délai, en secondes, la synchronisation le fait relire. Zéro coupe le rafraîchissement automatique, sans faire taire l’avertissement : l’âge s’apprécie alors sur un jour, et les mises à jour relisent le catalogue avant d’agir de toute façon.',
@@ -168,6 +172,13 @@ $lang = [
 
 	// I
 	'explication_waf' => 'Les chiffres du pare-feu applicatif du site géré : ce qu’il a bloqué, pour quels motifs, depuis quelles adresses. Rien n’est demandé au site tant que cet onglet n’est pas ouvert, et rien n’est conservé ici.',
+	'filtre_depuis_1' => 'Dernières 24 heures',
+	'filtre_depuis_30' => '30 derniers jours',
+	'filtre_depuis_7' => '7 derniers jours',
+	'filtre_depuis_toujours' => 'Depuis toujours',
+	'filtre_tous' => 'Tous',
+	'filtre_tous_auteurs' => 'Tous',
+	'filtre_toutes' => 'Toutes',
 	'icone_creer_site'    => 'Ajouter un site au parc',
 	'icone_modifier_site' => 'Modifier ce site',
 	'info_1_site'         => 'Un site géré',
@@ -178,6 +189,8 @@ $lang = [
 
 	// J
 	'jamais'        => 'jamais',
+	'journal_parc_vide' => 'Aucune opération ne correspond à ces filtres.',
+	'journal_retention' => 'Le journal est conservé @nb@ jours ; au-delà, la tâche d’entretien l’efface. Une absence ancienne n’est donc pas forcément un incident.',
 	'journal_vide'  => 'Aucune opération enregistrée.',
 
 	// L
@@ -188,6 +201,11 @@ $lang = [
 	'label_autoriser_http'     => 'Autoriser les agents en http non chiffré',
 	'label_base'               => 'Base de données',
 	'label_empreinte'          => 'Empreinte du secret enregistré :',
+	'label_filtre_auteur' => 'Lancé par',
+	'label_filtre_jours' => 'Période',
+	'label_filtre_operation' => 'Opération',
+	'label_filtre_sites' => 'Sites',
+	'label_filtre_statut' => 'Statut',
 	'label_generer_secret'     => 'Générer un nouveau secret partagé',
 	'label_groupe'             => 'Groupe',
 	'label_notes'              => 'Notes',
@@ -230,6 +248,7 @@ $lang = [
 
 	// N
 	'nav_explication' => 'Relever l’état du site, ou le retirer du parc. Le retirer n’agit que sur le tableau de bord : le site lui-même n’est pas touché.',
+	'nav_explication_journal' => 'Toutes les opérations du parc, du plus récent au plus ancien. Les filtres figurent dans l’adresse : un lien vers une recherche précise se transmet tel quel.',
 	'nav_parc'            => 'Vue d’ensemble du parc',
 	'nav_retour_parc'     => 'Retour au parc',
 	'nav_sites_en_erreur' => 'Sites injoignables',
@@ -283,6 +302,9 @@ $lang = [
 	'serveur_attente' => 'Ouvrez cet onglet pour interroger le site.',
 	'site_sans_nom'       => 'Site sans nom @id@',
 	'secret_configure'    => 'Un secret est enregistré pour ce site.',
+	'site_supprime' => 'site retiré du parc',
+	'statut_erreur' => 'En erreur',
+	'statut_ok' => 'Réussies',
 	'statut_pause'        => 'En pause',
 	'statut_poubelle'     => 'Retiré du parc',
 	'statut_supervise'    => 'Supervisé',
@@ -299,6 +321,9 @@ $lang = [
 	'titre_configurer'   => 'Tour de contrôle : configuration',
 	'tables_manquantes'  => 'Tables manquantes :',
 	'titre_check' => 'Contrôle d’intégrité (SPIP Check)',
+	'titre_filtres' => 'Filtrer',
+	'titre_journal_parc' => 'Journal du parc',
+	'titre_journal_resultats' => '@nb@ opération(s)',
 	'titre_loader' => 'Script d’installation (spip_loader.php)',
 	'titre_push' => 'Notifications du navigateur',
 	'titre_serveur' => 'Serveur',
