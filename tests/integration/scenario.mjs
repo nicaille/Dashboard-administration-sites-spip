@@ -20,6 +20,11 @@ const dit = (titre, ok, detail = '') => {
 	console.log(`  ${ok ? 'ok   ' : 'ÉCHEC'} ${titre}${detail ? ' — ' + detail : ''}`);
 };
 
+/* Combien de pages ont été relues contre les fuites de squelette. Un contrôle
+   qui perd son sujet ne le dit jamais : si ce nombre tombe, c'est que des
+   chargements ont cessé de passer par `aller()`. */
+let fuites = 0;
+
 /** Interroge la base du site installé. */
 const sql = (requete) => execFileSync('php', ['-r',
 	`$db=new SQLite3(getenv("BDD"));$r=$db->query(getenv("REQ"));$o=[];while($x=$r->fetchArray(SQLITE3_ASSOC))$o[]=$x;echo json_encode($o);`,
@@ -69,7 +74,42 @@ async function ouvrir(page, titre, url) {
 	await page.goto(base + url, { waitUntil: 'domcontentloaded' });
 	const pb = await erreurs(page);
 	dit(titre, pb.length === 0, pb.join(' ; '));
+	await sansFuite(page, titre);
 	return page.locator('body').innerText();
+}
+
+/**
+ * Refuse qu'une syntaxe de squelette atteigne le navigateur.
+ *
+ * Un bloc optionnel cassé ne lève aucune erreur : SPIP rend le bloc entier
+ * littéralement — commentaires de squelette compris — et la page reste par
+ * ailleurs fonctionnelle. Un seul crochet littéral dans le corps du bloc
+ * suffit, et le formulaire du journal en portait un, dans le nom d'un champ à
+ * valeurs multiples. Le contrôle qui cherchait « Argument manquant » n'y
+ * voyait rien : il cherchait une erreur là où il n'y en a pas.
+ *
+ * Le contrôle est ici plutôt que sur la page où le défaut est né : il ne coûte
+ * rien et il ne peut pas se tromper — une syntaxe d'ouverture de balise n'a
+ * aucune raison d'atteindre un navigateur. Il est appelé par `aller()`, donc
+ * sur **chaque** chargement de page du parcours, y compris ceux à venir.
+ *
+ * La vérification statique, elle, ne sait pas le faire : un bloc optionnel
+ * s'écrit aussi `[texte(#BALISE)texte]`, si bien qu'un crochet suivi d'autre
+ * chose qu'une parenthèse peut parfaitement en ouvrir un.
+ */
+async function sansFuite(page, ou) {
+	const texte = await page.locator('body').innerText();
+	const fuite = texte.indexOf('[(');
+	fuites++;
+	dit(`${ou} : aucune syntaxe de squelette n’atteint le navigateur`,
+		fuite === -1,
+		fuite === -1 ? '' : texte.slice(Math.max(0, fuite - 40), fuite + 100));
+}
+
+/** Va sur une page du site installé, et refuse qu'elle laisse fuir du squelette. */
+async function aller(page, url, attente = 'domcontentloaded') {
+	await page.goto(base + url, { waitUntil: attente });
+	await sansFuite(page, url.replace(/^\/ecrire\/\?exec=/, '').slice(0, 48));
 }
 
 /**
@@ -97,7 +137,7 @@ const page = await (await nav.newContext({ viewport: { width: 1500, height: 3000
 page.on('pageerror', (e) => dit('erreur JavaScript', false, e.message));
 
 console.log('\n### Connexion');
-await page.goto(base + '/spip.php?page=login', { waitUntil: 'domcontentloaded' });
+await aller(page, '/spip.php?page=login');
 await page.fill('input[name="var_login"]', 'admin');
 await page.fill('input[name="password"]', 'motdepasse-de-test-1234');
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('input[type=submit],button[type=submit]').last().click()]);
@@ -121,14 +161,14 @@ await ouvrir(page, 'formulaire de création', '/ecrire/?exec=dashboard_site&new=
 // refuse cette URL tant que l'exception n'est pas accordée. À poser avant la
 // création, puisque c'est la saisie du formulaire qui est validée.
 console.log('\n### Autorisation du http local');
-await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=configurer_tourdecontrole');
 await page.check('[name="autoriser_http"]');
 await page.locator('form input[type=submit]').first().click();
 await page.waitForLoadState('domcontentloaded').catch(() => {});
 await page.waitForTimeout(500);
 dit('http local autorisé', (await page.locator('body').innerText()).includes('enregistrée'));
 
-await page.goto(base + '/ecrire/?exec=dashboard_site&new=oui', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&new=oui');
 
 console.log('\n### Création d’un site');
 await page.fill('[name="titre"]', 'Site de test');
@@ -143,7 +183,7 @@ dit('site enregistré en base', sites.length === 1, JSON.stringify(sites));
 dit('secret chiffré, jamais en clair', sites[0]?.prefixe === 'c2:', 'préfixe ' + (sites[0]?.prefixe || '?'));
 
 console.log('\n### Appairage avec l’agent local');
-await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole_agent', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=configurer_tourdecontrole_agent');
 await page.check('[name="generer"]');
 for (const op of ['op_infos', 'op_purger', 'op_sauvegarde']) { await page.check(`[name="${op}"]`).catch(() => {}); }
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').last().click()]);
@@ -151,14 +191,14 @@ await page.waitForTimeout(500);
 const secret = ((await page.locator('body').innerText()).match(/([a-f0-9]{64})/) || [])[1];
 dit('secret de l’agent généré', !!secret);
 
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1&modifier=oui', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1&modifier=oui');
 await page.fill('[name="secret_clair"]', secret || '');
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').last().click()]);
 await page.waitForTimeout(500);
 dit('fiche appairée', (await erreurs(page)).length === 0);
 
 console.log('\n### Synchronisation signée');
-await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard');
 await bouton(page, 'Synchroniser');
 const etat = JSON.parse(sql('SELECT etat, version_spip, php_version, nb_plugins, substr(erreur,1,60) AS erreur FROM spip_dashboard_sites'))[0] || {};
 dit('site joignable', etat.etat === 'ok', etat.erreur || '');
@@ -166,11 +206,11 @@ dit('version du core remontée', /^\d+\.\d+\.\d+/.test(etat.version_spip || ''),
 dit('inventaire des plugins remonté', Number(etat.nb_plugins) > 0, etat.nb_plugins + ' plugins');
 
 console.log('\n### Opérations à distance');
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 const apresPurge = await bouton(page, 'Vider');
 dit('caches réellement vidés', /Caches vidés\s*:\s*\d+/.test(apresPurge), (apresPurge.match(/Caches vidés[^\n]{0,40}/) || [''])[0]);
 
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 const apresSauvegarde = await bouton(page, 'Sauvegarder la base');
 dit('sauvegarde créée et rapatriée', /rapatri/i.test(apresSauvegarde), (apresSauvegarde.match(/Sauvegarde[^\n]{0,80}/) || [''])[0]);
 
@@ -183,7 +223,7 @@ dit('sauvegarde enregistrée localement', sauvegardes.some((s) => s.statut === '
 const dossierSauvegardes = site + '/tmp/dashagent/sauvegardes';
 const surDisque = () => readdirSync(dossierSauvegardes).filter((n) => /\.sql\.gz$/.test(n));
 
-await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole_agent', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=configurer_tourdecontrole_agent');
 const tableauSauvegardes = page.locator('#sauvegardes');
 dit('le site géré liste ses sauvegardes',
 	(await tableauSauvegardes.locator('tbody tr').count()) === surDisque().length
@@ -242,7 +282,7 @@ writeFileSync(optionsChemin, optionsAvant + "\ndefine('_DASHAGENT_SAUVEGARDE_BUD
    main. */
 await page.waitForTimeout(2500);
 
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 const apresDecoupee = await bouton(page, 'Sauvegarder la base');
 // Le libellé du bouton commence lui aussi par « Sauvegarde… » : c'est la ligne
 // du compte rendu qu'on veut, celle qui porte le poids entre parenthèses.
@@ -288,12 +328,12 @@ try {
 }
 
 console.log('\n### Mise à jour d’un plugin');
-await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole_agent', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=configurer_tourdecontrole_agent');
 await page.check('[name="op_plugin_maj"]').catch(() => {});
 await page.locator('form input[type=submit]').last().click();
 await page.waitForTimeout(700);
 
-await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard');
 await bouton(page, 'Synchroniser');
 
 console.log('\n### Vue d’ensemble : relire les dépôts du parc');
@@ -303,12 +343,12 @@ console.log('\n### Vue d’ensemble : relire les dépôts du parc');
 // relève l'inventaire — qui n'y touchera donc pas. Couper le rafraîchissement
 // ne fait pas taire l'avertissement : c'est le cas où plus rien ne rajeunit le
 // catalogue, et l'âge s'apprécie alors sur la validité par défaut d'un jour.
-await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=configurer_tourdecontrole');
 await page.fill('[name="fraicheur_depots"]', '0');
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').last().click()]);
 await page.waitForTimeout(500);
 sqlEcrire("UPDATE spip_depots SET maj = datetime('now', '-3 days')");
-await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard');
 await bouton(page, 'Synchroniser');
 
 const fraicheur = page.locator('#depots');
@@ -331,7 +371,7 @@ await page.waitForTimeout(2500);
 
 const relu = JSON.parse(sql("SELECT maj FROM spip_depots ORDER BY maj DESC LIMIT 1"))[0].maj;
 dit('le catalogue a bien été relu', (Date.now() - Date.parse(relu.replace(' ', 'T'))) < 10 * 60 * 1000, relu);
-await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard');
 dit('plus de catalogue périmé après le tour du parc',
 	(await page.locator('#depots.dashboard-depots-perimes').count()) === 0,
 	(await page.locator('#depots').innerText()).replace(/\s+/g, ' ').trim());
@@ -347,7 +387,7 @@ dit('plus de catalogue périmé après le tour du parc',
 // n'oppose donc pas les deux moteurs, il vérifie l'invariant qui compte —
 // après un tour, le dépôt est daté, et le tour s'achève.
 sqlEcrire("UPDATE spip_depots SET maj = datetime('now', '-2 days')");
-await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard');
 const avantSecondTour = JSON.parse(sql('SELECT maj FROM spip_depots ORDER BY id_depot LIMIT 1'))[0].maj;
 await page.locator('[data-parc-action="depots"]:not([data-parc-selection])').click();
 await page.waitForFunction(() => /Termin|suivant/.test(
@@ -401,7 +441,7 @@ if (copies.length) {
 	dit('la copie locale a bien été falsifiée', falsifie !== vrai);
 
 	sqlEcrire("UPDATE spip_depots SET maj = datetime('now', '-2 days')");
-	await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+	await aller(page, '/ecrire/?exec=dashboard');
 	await page.locator('[data-parc-action="depots"]:not([data-parc-selection])').click();
 	await page.waitForFunction(() => /Termin|suivant/.test(
 		(document.querySelector('.dashboard-depots-avancement') || {}).textContent || ''), null, { timeout: 60000 }).catch(() => {});
@@ -467,7 +507,7 @@ if (await badgeMaj.count()) {
 	sqlEcrire("INSERT INTO spip_dashboard_plugins"
 		+ " (id_dashboard_site, prefixe, nom, version, version_disponible, maj_disponible, distribue)"
 		+ " VALUES (1, 'ZZZDEUX', 'Deuxieme <svg onload=alert(1)> plugin', '1.0.0', '2.0.0', 'oui', 'non')");
-	await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+	await aller(page, '/ecrire/?exec=dashboard');
 
 	const badgeDeux = page.locator('td .dashboard-survol').first();
 	const listeDeux = badgeDeux.locator('.dashboard-survol-liste');
@@ -489,16 +529,16 @@ if (await badgeMaj.count()) {
 		(await listeDeux.innerHTML()).replace(/\s+/g, ' ').slice(0, 120));
 
 	sqlEcrire("DELETE FROM spip_dashboard_plugins WHERE prefixe = 'ZZZDEUX'");
-	await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+	await aller(page, '/ecrire/?exec=dashboard');
 }
 
 // Rendre au parc son rafraîchissement automatique pour la suite du parcours.
-await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=configurer_tourdecontrole');
 await page.fill('[name="fraicheur_depots"]', '86400');
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').last().click()]);
 await page.waitForTimeout(500);
 
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 
 const ligneMaj = page.locator('tr', { hasText: 'ZZZTEST' });
 dit('mise à jour proposée pour ZZZTEST', await ligneMaj.count() > 0);
@@ -635,7 +675,7 @@ for (const [nom, url] of [
 	['configuration', '/ecrire/?exec=configurer_tourdecontrole'],
 	['configuration de l’agent', '/ecrire/?exec=configurer_tourdecontrole_agent'],
 ]) {
-	await page.goto(base + url, { waitUntil: 'domcontentloaded' });
+	await aller(page, url);
 	const trouves = await artefacts(page);
 	dit(`${nom} : rien d’étranger à l’écran`, trouves.length === 0, trouves.join(' | '));
 }
@@ -645,7 +685,7 @@ console.log('\n### Habillage repris du privé');
 // Les boutons du plugin doivent être ceux du thème : sans `.btn`, ils héritent
 // du style des `button` nus, dont le texte est blanc — d'où des libellés
 // invisibles sur les fonds clairs qu'on leur donnait.
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 const classesBoutons = await page.locator('form.bouton_action_post button').evaluateAll(
 	(b) => b.map((n) => n.className));
 dit('des actions sont proposées', classesBoutons.length > 3, classesBoutons.length + ' boutons');
@@ -682,7 +722,7 @@ const filtres = page.locator('.dashboard-filtres a, .dashboard-filtres .on');
 dit('trois vues pour la liste des plugins', (await filtres.count()) === 3,
 	(await filtres.count()) + ' vues');
 const compte = async (url) => {
-	await page.goto(base + url, { waitUntil: 'domcontentloaded' });
+	await aller(page, url);
 	return page.locator('#panneau-plugins tbody tr').count();
 };
 const tous = await compte('/ecrire/?exec=dashboard_site&id_dashboard_site=1&vue=tous');
@@ -706,7 +746,7 @@ dit('les deux vues se partagent la liste', installes + livres === tous,
 	installes + ' + ' + livres + ' = ' + tous);
 
 console.log('\n### Onglets « Plugins » et « PHP »');
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 const panneauPlugins = page.locator('#panneau-plugins');
 const panneauPhp = page.locator('#panneau-php');
 // Trois onglets, quatre quand le site géré a le plugin SPIP WAF : celui-là
@@ -772,7 +812,7 @@ dit('aucune extension PHP dans l’onglet « Plugins »',
  * on inspecte toutes les URL d'action plutôt qu'un bouton à la fois.
  */
 async function urlsDActions(page, nom, url) {
-	await page.goto(base + url, { waitUntil: 'domcontentloaded' });
+	await aller(page, url);
 	const liens = await page.locator('form.bouton_action_post').evaluateAll(
 		(f) => f.map((form) => form.getAttribute('action') || ''));
 	// Les URL de retour portent une ancre en minuscules (`%23plugins`) : ce
@@ -813,7 +853,7 @@ console.log('\n### Onglet « Serveur »');
 
 // L'onglet est refusé tant que le site géré ne l'a pas explicitement autorisé :
 // c'est la plus indiscrète des permissions, et elle s'accorde à part.
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 const appelsServeur = [];
 page.on('response', (r) => {
 	if (/action=dashboard_serveur/.test(r.url())) { appelsServeur.push(r.status()); }
@@ -826,14 +866,14 @@ await page.waitForTimeout(2500);
 const refus = await page.locator('[data-serveur-bloc="resume"]').innerText();
 dit('consultation refusée tant qu’elle n’est pas autorisée', /désactivée|autoris/i.test(refus), refus.trim().slice(0, 90));
 
-await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole_agent', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=configurer_tourdecontrole_agent');
 await page.check('[name="op_serveur"]').catch(() => {});
 await page.locator('form input[type=submit]').last().click();
 await page.waitForTimeout(700);
 dit('consultation autorisée sur le site géré',
 	await page.locator('[name="op_serveur"]').isChecked().catch(() => false));
 
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 await page.locator('#onglet-serveur').click();
 await page.waitForTimeout(3000);
 
@@ -945,14 +985,14 @@ const coreCible = process.env.CORE_CIBLE || '4.4.99';
 // _DASHAGENT_ARCHIVES_HTTP dans son mes_options.php. Deux accords distincts.
 // Sur le site géré, la mise à jour du core est refusée par défaut : c'est une
 // case à cocher à part, et le test la coche comme le ferait l'administrateur.
-await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole_agent', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=configurer_tourdecontrole_agent');
 await page.check('[name="op_core_maj"]').catch(() => {});
 await page.locator('form input[type=submit]').last().click();
 await page.waitForTimeout(700);
 dit('mise à jour du core autorisée sur le site géré',
 	await page.locator('[name="op_core_maj"]').isChecked().catch(() => false));
 
-await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=configurer_tourdecontrole');
 await page.fill('[name="url_archives_spip"]', base + '/core-archives/');
 await page.fill('[name="versions_manuelles"]', `4.4 = ${coreCible}`);
 // Zéro seconde de validité : une sauvegarde neuve est exigée, ce qui vérifie
@@ -965,9 +1005,9 @@ dit('dépôt d’archives de core configuré', (await page.locator('body').inner
 
 // Le retard de core est décidé à la synchronisation : il faut la rejouer pour
 // que la nouvelle version cible soit prise en compte.
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 await bouton(page, 'Synchroniser');
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 await urlsDActions(page, 'fiche du site, mise à jour du core proposée',
 	'/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 const boutonCore = page.locator('#core form.bouton_action_post button').first();
@@ -1015,7 +1055,7 @@ dit('le chantier est enregistré comme réussi', chantier.statut === 'ok', JSON.
 // Le bilan prend le relais de l'encadré : sans lui, la page ne montrerait plus
 // rien une fois l'opération finie, et c'est pourtant là que se dit l'essentiel —
 // par exemple qu'une base attend encore sa migration.
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 const bilan = page.locator('#bilan');
 dit('le compte rendu du chantier terminé est affiché', (await bilan.count()) === 1);
 dit('le bilan dit ce que le chantier a conclu',
@@ -1054,7 +1094,7 @@ dit('secret de l’agent préservé', (lu('config/mes_options.php') || '').inclu
 
 // Le site tourne désormais sur les fichiers déployés : s'il ne répondait plus,
 // la mise à jour aurait « réussi » en cassant le site.
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 dit('l’espace privé répond encore après le remplacement', (await erreurs(page)).length === 0,
 	(await erreurs(page)).join(' ; '));
 // « la page contient 4.4.99 » ne prouverait rien : le badge « 4.4.23 → 4.4.99 »
@@ -1114,7 +1154,7 @@ const injections = [
 
 for (const [quoi, requete] of injections) {
 	sqlEcrire(requete);
-	await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'networkidle' });
+	await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1', 'networkidle');
 	const execute = await page.evaluate(() => { const n = window.__xss || 0; window.__xss = 0; return n; });
 	const vif = (await page.content()).includes('<svg onload=');
 	const ok = (execute === 0 && !vif);
@@ -1127,12 +1167,12 @@ infos.serveur = infos.serveur || {};
 infos.serveur.memory_limit = charge;
 if (Array.isArray(infos.procures) && infos.procures[0]) { infos.procures[0].nom = charge; }
 sqlEcrire(`UPDATE spip_dashboard_sites SET infos='${JSON.stringify(infos).replace(/'/g, "''")}' WHERE id_dashboard_site=1`);
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'networkidle' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1', 'networkidle');
 dit('inerte : inventaire mémorisé',
 	(await page.evaluate(() => window.__xss || 0)) === 0 && !(await page.content()).includes('<svg onload='));
 
 // Et la vue d'ensemble, qui affiche les mêmes champs pour tout le parc.
-await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'networkidle' });
+await aller(page, '/ecrire/?exec=dashboard', 'networkidle');
 dit('inerte : vue d’ensemble du parc',
 	(await page.evaluate(() => window.__xss || 0)) === 0 && !(await page.content()).includes('<svg onload='));
 
@@ -1146,7 +1186,7 @@ dit('la synchronisation a rétabli un inventaire propre',
 // Le lien public d'un site, dans le tableau du parc : ses parenthèses sortaient
 // telles quelles, et le navigateur relisait « (https://…) » comme une adresse
 // relative — le lien ramenait sur l'espace privé du parc.
-await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard');
 const lienPublic = page.locator('a.dashboard-lien-public').first();
 if (await lienPublic.count()) {
 	const href = (await lienPublic.getAttribute('href')) || '';
@@ -1191,16 +1231,16 @@ if (!wafInstalle) {
 			+ ` '/spip.php?page=x&q=${'A'.repeat(40)}', 'curl/8.5', '')`);
 	}
 
-	await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole_agent', { waitUntil: 'domcontentloaded' });
+	await aller(page, '/ecrire/?exec=configurer_tourdecontrole_agent');
 	await page.check('[name="op_waf"]').catch(() => {});
 	await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').last().click()]);
 	await page.waitForTimeout(600);
 
 	// L'inventaire doit d'abord apprendre que le site a ce plugin : c'est lui qui
 	// décide de l'apparition de l'onglet.
-	await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+	await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 	await bouton(page, 'Synchroniser');
-	await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+	await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 
 	dit('l’onglet SPIP WAF apparaît sur un site qui a le plugin',
 		(await page.locator('#onglet-waf').count()) === 1);
@@ -1231,7 +1271,7 @@ if (!wafInstalle) {
 	sqlEcrire("INSERT INTO spip_waf_events (date_event, ip, type, reason, trigger_info, method, uri, ua, extra)"
 		+ " VALUES (datetime('now'), '203.0.113.99', 'BLOCKED', 'XSS', '', 'GET',"
 		+ " '/spip.php?q=<svg onload=\"window.__xss=1\">', '<svg onload=\"window.__xss=1\">', '')");
-	await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+	await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 	await page.locator('#onglet-waf').click();
 	await page.waitForTimeout(4000);
 	dit('une charge utile enregistrée par le pare-feu reste inerte',
@@ -1241,7 +1281,7 @@ if (!wafInstalle) {
 
 	/* La tendance. Elle vient de notre base, remplie à la synchronisation : une
 	   synchro est donc nécessaire avant qu'il y ait quoi que ce soit à tracer. */
-	await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+	await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 	await page.locator('form.bouton_action_post button', { hasText: 'Synchroniser' }).first().click();
 	await page.waitForLoadState('domcontentloaded');
 	await page.waitForTimeout(2000);
@@ -1249,7 +1289,7 @@ if (!wafInstalle) {
 	const jours = JSON.parse(sql('SELECT COUNT(*) AS n FROM spip_dashboard_waf_jours'))[0].n;
 	dit('la synchronisation range l’activité du WAF jour par jour', Number(jours) > 0, `${jours} journée(s)`);
 
-	await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+	await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 	await page.locator('#onglet-waf').click();
 	await page.waitForTimeout(1500);
 
@@ -1304,7 +1344,7 @@ if (!wafInstalle) {
 	}
 
 	// Et la tendance du parc, sur la vue d'ensemble.
-	await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+	await aller(page, '/ecrire/?exec=dashboard');
 	await page.waitForTimeout(1200);
 	const grapheParc = page.locator('#waf [data-dashboard-waf-graphe]');
 	dit('la vue d’ensemble porte la tendance du parc', (await grapheParc.count()) === 1);
@@ -1350,7 +1390,7 @@ if (!wafInstalle) {
 
 console.log('\n### Actions groupées sur la vue d’ensemble');
 
-await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard');
 
 const cases = page.locator('[data-parc-site]');
 dit('chaque site du tableau porte une case à cocher', (await cases.count()) >= 1,
@@ -1425,7 +1465,7 @@ dit('la synchronisation groupée a bien atteint le site', syncApres > '2020-01-0
 // s'il disparaît. Le même contrôle que la purge d'un seul site, en groupe.
 const temoinCache = site + '/tmp/cache/zz-parc-temoin.txt';
 writeFileSync(temoinCache, 'temoin');
-await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard');
 await page.locator('[data-parc-tout]').check();
 await page.waitForTimeout(200);
 await page.locator('[data-parc-action="purger"]').click();
@@ -1437,7 +1477,7 @@ dit('la purge groupée a bien vidé le cache du site', !existsSync(temoinCache))
 
 console.log('\n### La vue d’ensemble : version de l’agent, et dépôts groupés');
 
-await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard');
 
 /* La version de l'agent, sous le nom du site : c'est la question qu'on se pose
    en premier quand le parc se comporte mal — lequel répond encore avec un agent
@@ -1468,7 +1508,7 @@ await page.waitForTimeout(300);
 dit('un site coché la rend cliquable', !(await depotsSelection.isDisabled()));
 
 sqlEcrire("UPDATE spip_depots SET maj = datetime('now', '-3 days')");
-await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard');
 await page.locator('[data-parc-site="1"]').check();
 await page.locator('.dashboard-parc-groupe [data-parc-action="depots"][data-parc-selection="oui"]').click();
 await page.waitForFunction(() => /Termin|suivant|relu/.test(
@@ -1481,7 +1521,7 @@ dit('la relecture ciblée date le dépôt du site coché',
 
 console.log('\n### Navigation : fil d’Ariane et retour au parc');
 
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 const ariane = (await page.locator('#chemin').first().innerText().catch(() => '')) || '';
 dit('le fil d’Ariane remonte au parc, pas à une page inexistante',
 	ariane.includes('Parc de sites SPIP') && !ariane.includes('Sites gérés'),
@@ -1500,7 +1540,7 @@ console.log('\n### Gestion des plugins : le bouton « Configurer »');
    préfixe du plugin, pas celui de nos fonctions. Nos pages s'appelaient
    `configurer_dashboard` et `configurer_dashagent` : le bouton n'apparaissait
    nulle part, et rien ne le disait. */
-await page.goto(base + '/ecrire/?exec=admin_plugin', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=admin_plugin');
 const liens = await page.locator('a[href*="configurer_tourdecontrole"]').count();
 dit('la page Gestion des plugins propose les deux boutons « Configurer »',
 	liens >= 2, liens + ' lien(s)');
@@ -1521,7 +1561,7 @@ const agentCible = process.env.AGENT_CIBLE || '';
 writeFileSync(site + '/zzztest-archives/paquets.xml',
 	readFileSync(site + '/zzztest-archives/paquets-agent.xml', 'utf8'));
 sqlEcrire("UPDATE spip_depots SET maj = datetime('now', '-3 days')");
-await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard');
 await page.locator('[data-parc-action="depots"]:not([data-parc-selection])').click();
 await page.waitForFunction(() => /Termin|suivant/.test(
 	(document.querySelector('#depots [data-parc-avancement]') || {}).textContent || ''),
@@ -1535,7 +1575,7 @@ dit('la parution est arrivée jusqu’à l’inventaire',
 	agentAvant.version_disponible === agentCible,
 	`${agentAvant.version || '?'} → ${agentAvant.version_disponible || '(aucune)'}`);
 
-await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard');
 const boutonAgent = page.locator('[data-parc-action="agent_maj"]');
 dit('un bouton propose de mettre à jour l’agent du parc', (await boutonAgent.count()) === 1);
 
@@ -1589,7 +1629,7 @@ if (await boutonAgent.count()) {
 
 	// Et surtout : l'agent répond encore. Un plugin qui se remplace lui-même
 	// peut très bien avoir laissé le site sur le carreau.
-	await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+	await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 	await bouton(page, 'Synchroniser');
 	const apres = JSON.parse(sql(
 		'SELECT etat, agent_version FROM spip_dashboard_sites WHERE id_dashboard_site = 1'))[0];
@@ -1599,7 +1639,7 @@ if (await boutonAgent.count()) {
 
 	// Un second passage ne doit rien refaire : plus de version supérieure, donc
 	// plus de chantier — et surtout plus de sauvegarde sur chaque site du parc.
-	await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+	await aller(page, '/ecrire/?exec=dashboard');
 	dit('le bouton disparaît une fois le parc à jour',
 		(await page.locator('[data-parc-action="agent_maj"]').count()) === 0);
 }
@@ -1620,13 +1660,13 @@ writeFileSync(loaderSource,
 	+ "    public const DATE = '2026-09-04 06:44:10';\n\n"
 	+ "    public const NAME = 'spip_loader.phar';\n}\n");
 
-await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=configurer_tourdecontrole');
 await page.fill('[name="url_spip_loader"]', base + '/core-archives/spip_loader.txt');
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').first().click()]);
 await page.waitForTimeout(600);
 
 // L'opération est refusée tant que le site géré ne l'a pas accordée.
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 dit('l’encadré du spip_loader est présent', (await page.locator('#loader').count()) === 1);
 // Un lien de navigation vers le script du site, pas une action : un `a`, qui
 // s'ouvre à côté. Son adresse se construit sur l'URL publique du site géré.
@@ -1645,12 +1685,12 @@ dit('le dépôt est refusé tant que le site ne l’autorise pas',
 	existsSync(site + '/spip_loader.php') ? 'fichier déposé malgré le refus' : 'refus');
 
 // Accordée, l'opération dépose le fichier à la racine.
-await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole_agent', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=configurer_tourdecontrole_agent');
 await page.check('[name="op_loader"]').catch(() => {});
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').last().click()]);
 await page.waitForTimeout(600);
 
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 await page.locator('[data-dashboard-loader-etat]').click();
 await page.waitForTimeout(2000);
 dit('l’état du spip_loader distant est lisible',
@@ -1688,12 +1728,12 @@ dit('l’ancien spip_loader est conservé',
 
 // Et ce qui n'est pas un spip_loader ne s'installe pas.
 writeFileSync(site + '/core-archives/faux.txt', "<?php\nunlink(__FILE__);\n");
-await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=configurer_tourdecontrole');
 await page.fill('[name="url_spip_loader"]', base + '/core-archives/faux.txt');
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').first().click()]);
 await page.waitForTimeout(600);
 const avantFaux = readFileSync(site + '/spip_loader.php', 'utf8');
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 page.once('dialog', (d) => d.accept());
 await page.locator('#loader form.bouton_action_post button').first().click();
 await page.waitForLoadState('domcontentloaded').catch(() => {});
@@ -1706,12 +1746,12 @@ dit('un fichier qui n’est pas un spip_loader est refusé',
 /* Le retrait du spip_loader : c'est le fichier le plus dangereux d'un site SPIP,
    et il n'a de raison d'être que le jour où l'on s'en sert. Supprimé pour les
    mêmes raisons que le spip_check, et retéléchargeable d'un clic. */
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
-await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
+await aller(page, '/ecrire/?exec=configurer_tourdecontrole');
 await page.fill('[name="url_spip_loader"]', base + '/core-archives/spip_loader.txt');
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').first().click()]);
 await page.waitForTimeout(600);
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 page.once('dialog', (d) => d.accept());
 await page.locator('#loader form.bouton_action_post').first().locator('button').click();
 await page.waitForLoadState('domcontentloaded').catch(() => {});
@@ -1719,7 +1759,7 @@ await page.waitForTimeout(2500);
 dit('le spip_loader est de nouveau en place avant le test de retrait',
 	existsSync(site + '/spip_loader.php'));
 
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 page.once('dialog', (d) => d.accept());
 await page.locator('#loader form.bouton_action_post').last().locator('button').click();
 await page.waitForLoadState('domcontentloaded').catch(() => {});
@@ -1761,14 +1801,14 @@ writeFileSync(checkSource,
 	+ "function spipCheckToolVersion(): string {\n\treturn '2.4.0';\n}\n\n"
 	+ "function spipCheckEdition(): string {\n\treturn 'complete';\n}\n");
 
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 dit('l’encadré de SPIP Check est présent', (await page.locator('#check').count()) === 1);
 
 /* Le réglage porte une adresse par défaut, celle de la forge. On la vide le
    temps de vérifier le cas contraire : sans adresse, aucun bouton de dépôt —
    une fonction qui échouerait ne se propose pas. Ce cas se produit pour de bon
    dès qu'un parc préfère un miroir et efface la valeur avant de la remplacer. */
-await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=configurer_tourdecontrole');
 dit('le réglage porte l’adresse de la forge par défaut',
 	/git\.spip\.net/.test(await page.inputValue('[name="url_spip_check"]')),
 	await page.inputValue('[name="url_spip_check"]'));
@@ -1776,18 +1816,18 @@ await page.fill('[name="url_spip_check"]', '');
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').first().click()]);
 await page.waitForTimeout(600);
 
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 dit('sans adresse réglée, aucun dépôt n’est proposé',
 	(await page.locator('#check form.bouton_action_post').count()) === 0
 		&& /adresse de téléchargement/i.test(await page.locator('#check').innerText()),
 	(await page.locator('#check').innerText()).replace(/\s+/g, ' ').slice(0, 80));
 
-await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=configurer_tourdecontrole');
 await page.fill('[name="url_spip_check"]', base + '/core-archives/spip_check.txt');
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').first().click()]);
 await page.waitForTimeout(600);
 
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 // Un lien de navigation vers l'outil chez le site géré, pas une action.
 const lienCheck = page.locator('#check a.btn[target="_blank"]');
 dit('un lien mène au spip_check du site',
@@ -1806,12 +1846,12 @@ dit('le dépôt est refusé tant que le site ne l’autorise pas',
 		&& !existsSync(site + '/spip_check.php'),
 	existsSync(site + '/spip_check.php') ? 'fichier déposé malgré le refus' : 'refus');
 
-await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole_agent', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=configurer_tourdecontrole_agent');
 await page.check('[name="op_check"]').catch(() => {});
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').last().click()]);
 await page.waitForTimeout(600);
 
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 await page.locator('[data-dashboard-check-etat]').click();
 await page.waitForTimeout(2000);
 const avantDepot = (await page.locator('#check [data-check-bloc="etat"]').innerText()).replace(/\s+/g, ' ');
@@ -1856,12 +1896,12 @@ dit('un second dépôt ne laisse pas d’ancien fichier caché',
 // bien qu'il soit du PHP et qu'il parle de SPIP.
 writeFileSync(site + '/core-archives/faux-check.txt',
 	"<?php\n// spip_loader.php\n$spip_loader_version = '3.1.2';\necho 'SPIP';\n");
-await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=configurer_tourdecontrole');
 await page.fill('[name="url_spip_check"]', base + '/core-archives/faux-check.txt');
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').first().click()]);
 await page.waitForTimeout(600);
 const avantFauxCheck = readFileSync(site + '/spip_check.php', 'utf8');
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 page.once('dialog', (d) => d.accept());
 await page.locator('#check form.bouton_action_post').first().locator('button').click();
 await page.waitForLoadState('domcontentloaded').catch(() => {});
@@ -1874,7 +1914,7 @@ dit('un fichier qui n’est pas un spip_check est refusé',
 /* Le retrait : cet outil n'a jamais eu vocation à rester. Supprimé, pas écarté
    sous un nom caché — il se retélécharge d'un clic, et un nom commençant par un
    point est ce qu'un contrôle d'intégrité signale comme dissimulation. */
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 await page.locator('#check form.bouton_action_post').last().locator('button').click();
 await page.waitForLoadState('domcontentloaded').catch(() => {});
 await page.waitForTimeout(2000);
@@ -1937,14 +1977,14 @@ sqlEcrire("UPDATE spip_dashboard_sites SET url_agent = '" + urlGardien + "' WHER
 
 // Sans identifiants enregistrés, la synchronisation échoue — et le message le
 // dit, plutôt que de laisser croire à une panne de l'agent.
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 await bouton(page, 'Synchroniser');
 const apres401 = JSON.parse(sql('SELECT etat, erreur FROM spip_dashboard_sites WHERE id_dashboard_site = 1'))[0];
 dit('sans identifiants, le site est en erreur', apres401.etat === 'erreur', apres401.etat);
 dit('le 401 est rapporté tel quel', /401/.test(apres401.erreur), (apres401.erreur || '').slice(0, 80));
 
 // On les renseigne par le formulaire, comme le ferait un humain.
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1&modifier=oui', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1&modifier=oui');
 dit('le formulaire garde l’adresse du gardien',
 	(await page.inputValue('[name="url_agent"]')) === urlGardien,
 	await page.inputValue('[name="url_agent"]'));
@@ -1962,7 +2002,7 @@ dit('le mot de passe porte sa marque de stockage',
 
 // Et le franchissement réel de la porte.
 sqlEcrire("UPDATE spip_dashboard_sites SET date_sync_ok = '2020-01-01 00:00:00'");
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 await bouton(page, 'Synchroniser');
 const apresAuth = JSON.parse(sql(
 	'SELECT etat, date_sync_ok, version_spip FROM spip_dashboard_sites WHERE id_dashboard_site = 1'))[0];
@@ -1972,7 +2012,7 @@ dit('avec les identifiants, la synchronisation passe le htpasswd',
 dit('et l’inventaire est bien celui du site', /^\d+\./.test(apresAuth.version_spip || ''), apresAuth.version_spip);
 
 // Le formulaire ne réaffiche jamais le mot de passe.
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1&modifier=oui', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1&modifier=oui');
 dit('le mot de passe n’est jamais réinjecté dans le formulaire',
 	(await page.inputValue('[name="auth_pass_clair"]')) === ''
 		&& !(await page.locator('body').innerHTML()).includes('ouvre-toi'));
@@ -1983,7 +2023,7 @@ dit('un enregistrement sans rien saisir conserve le mot de passe',
 	(JSON.parse(sql('SELECT auth_pass FROM spip_dashboard_sites WHERE id_dashboard_site = 1'))[0].auth_pass || '') !== '');
 
 // Le retrait des identifiants referme la porte.
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1&modifier=oui', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1&modifier=oui');
 await page.check('[name="auth_retirer"]');
 await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form input[type=submit]').last().click()]);
 await page.waitForTimeout(800);
@@ -1993,7 +2033,7 @@ dit('le retrait efface les deux champs',
 	`user=${retire.auth_user || '(vide)'} pass=${(retire.auth_pass || '(vide)').slice(0, 3)}`);
 // Et la porte se referme pour de bon : sans identifiants, le gardien refuse.
 sqlEcrire("UPDATE spip_dashboard_sites SET url_agent = '" + urlGardien + "' WHERE id_dashboard_site = 1");
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 await bouton(page, 'Synchroniser');
 dit('après retrait, le site redevient injoignable',
 	JSON.parse(sql('SELECT etat FROM spip_dashboard_sites WHERE id_dashboard_site = 1'))[0].etat === 'erreur');
@@ -2041,7 +2081,7 @@ console.log('\n### Le pavé de mise à jour du core, en haut de la fiche');
    l'autorisation « operer ». On vérifie ici sa position dans le document : un
    encadré présent mais relégué en bas est exactement le défaut qu'on corrige,
    et aucune assertion de présence ne l'aurait vu. */
-await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
 {
 	const ordre = await page.evaluate(() => {
 		const blocs = Array.from(document.querySelectorAll('.dashboard-fiche'));
@@ -2062,7 +2102,7 @@ await page.goto(base + '/ecrire/?exec=dashboard_site&id_dashboard_site=1', { wai
 
 console.log('\n### Mettre à jour SPIP sur la sélection');
 
-await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=dashboard');
 {
 	const bouton = await page.locator('[data-parc-action="core_maj"]').count();
 	dit('le bouton de mise à jour du core est dans la barre groupée', bouton === 1, bouton + ' bouton(s)');
@@ -2090,7 +2130,7 @@ await page.goto(base + '/ecrire/?exec=dashboard', { waitUntil: 'domcontentloaded
 
 console.log('\n### Alertes : réglages et notifications');
 
-await page.goto(base + '/ecrire/?exec=configurer_tourdecontrole', { waitUntil: 'domcontentloaded' });
+await aller(page, '/ecrire/?exec=configurer_tourdecontrole');
 {
 	dit('le formulaire porte la bascule des alertes',
 		(await page.locator('[name="alerte_active"]').count()) === 1);
@@ -2288,7 +2328,7 @@ console.log('\n### Journal du parc : chaque filtre porte vraiment');
 	           VALUES (1, 1, 'sync', 'erreur', 'panne de démonstration', '', 12, datetime('now'))`);
 
 	const compter = async (params) => {
-		await page.goto(base + '/ecrire/?exec=dashboard_journal' + params, { waitUntil: 'domcontentloaded' });
+		await aller(page, '/ecrire/?exec=dashboard_journal' + params);
 		return page.locator('#journal table.spip tbody tr').count();
 	};
 
@@ -2338,6 +2378,13 @@ console.log('\n### Journal du parc : chaque filtre porte vraiment');
 	const croise = await compter('&statut=erreur&id_dashboard_site[]=99999');
 	dit('deux filtres se cumulent', croise === 0, `${croise} ligne(s)`);
 }
+
+/* La couverture du contrôle anti-fuite, dite en clair. Elle ne tient qu'à une
+   chose : que les chargements de page passent par `aller()`. Un `page.goto()`
+   direct ajouté plus tard sortirait du filet sans que rien ne le signale — le
+   parcours resterait vert en ayant cessé de regarder une page. Le plancher est
+   donc affirmé, comme n'importe quel autre contrôle. */
+dit('le contrôle anti-fuite couvre tout le parcours', fuites >= 80, fuites + ' page(s) relue(s)');
 
 console.log('\n' + (echecs ? `=== ${echecs} ÉCHEC(S) ===` : '=== PARCOURS COMPLET SANS ERREUR ==='));
 await nav.close();

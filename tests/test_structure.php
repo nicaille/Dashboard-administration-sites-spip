@@ -707,6 +707,19 @@ foreach ($plugins as $plugin) {
 			);
 		}
 
+		// Un piège de plus, qui n'a **pas** sa place ici : le contenu d'un bloc
+		// optionnel ne supporte aucun crochet littéral — un crochet ouvrant
+		// casse le bloc, un crochet fermant le termine trop tôt. La règle est
+		// sûre, sa vérification statique ne l'est pas : un bloc optionnel
+		// s'écrit aussi `[texte(#BALISE)texte]`, si bien qu'un crochet suivi
+		// d'autre chose qu'une parenthèse peut parfaitement en ouvrir un.
+		// Cinq squelettes sains du dépôt se faisaient ainsi accuser.
+		//
+		// C'est le parcours d'intégration qui le voit, et sans ambiguïté :
+		// une syntaxe de squelette qui atteint le navigateur n'a aucune
+		// raison d'être là. Le contrôle est posé dans `ouvrir()`, donc sur
+		// toutes les pages visitées, et non sur celle où le défaut est né.
+
 		// Une valeur d'attribut qui commence par « (# » : les parenthèses y sont
 		// du texte, et sortent telles quelles. C'est ce qui donnait
 		// href="(https://exemple.org/)", que le navigateur relit comme une
@@ -723,6 +736,7 @@ foreach ($plugins as $plugin) {
 		);
 	}
 }
+
 
 echo "\n== Filtres appelés par les squelettes ==\n";
 

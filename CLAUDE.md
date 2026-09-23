@@ -2,7 +2,7 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.36`,
+`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.37`,
 `plugins/tourdecontrole_agent-1.0.24`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
@@ -476,7 +476,7 @@ autre chose que `''`.
 `tests/test_protocole.php` vérifie le filtre, `tests/integration/scenario.mjs`
 le rendu, charge utile à l'appui.
 
-## Cinq pièges du compilateur, tous rencontrés
+## Six pièges du compilateur, tous rencontrés
 
 1. **Une balise à accolades dans un argument composite** (`op/#ID/#GET{x}`)
    désorganise l'analyse : les balises voisines arrivent littéralement dans la
@@ -514,10 +514,39 @@ le rendu, charge utile à l'appui.
    jamais. Rien sur la page ne le dit : le bloc est là, son JSON aussi, seul le
    tracé manque.
 
-`tests/test_structure.php` vérifie les cinq — le quatrième en refusant toute
-valeur d'attribut qui s'ouvre sur une parenthèse littérale, le cinquième tout
-`<script src>` rangé dans une branche « sinon ». Il refuse aussi tout
-`#ARRAY{…#GET{…}}`, variante du premier.
+6. **Le contenu d'un bloc optionnel ne supporte aucun crochet littéral.** Un
+   crochet **ouvrant** casse le bloc : SPIP perd le nom de la balise et rend
+   le bloc entier en clair — commentaires de squelette compris, en pleine
+   page, sous le titre. Un crochet **fermant** le termine trop tôt, et la
+   suite passe hors condition. Seuls comptent comme syntaxe les crochets qui
+   ouvrent ou ferment un bloc imbriqué.
+
+   La page du journal enveloppait tout son corps dans un tel bloc, alors que
+   son formulaire nomme un champ d'après une colonne à valeurs multiples —
+   donc avec des crochets. **Pour envelopper une page entière, c'est une
+   boucle CONDITION qu'il faut** (`{si #VAL|dashboard_tables_presentes}`), et
+   sa branche « sinon » ; les trois autres pages du parc le faisaient déjà,
+   seule celle-ci avait innové.
+
+   Rien ne le signale : aucune erreur, une page qui fonctionne, ses filtres
+   qui filtrent — et trente lignes de prose technique au-dessus. Le contrôle
+   d'intégration cherchait « Argument manquant » et « erreur_squelette » : il
+   cherchait une erreur là où il n'y en a pas.
+
+   **Ce piège-là ne se vérifie pas statiquement**, et l'essayer coûte des
+   faux positifs : un bloc optionnel s'écrit aussi `[texte(#BALISE)texte]`,
+   si bien qu'un crochet suivi d'autre chose qu'une parenthèse peut
+   parfaitement en ouvrir un — cinq squelettes sains du dépôt se sont fait
+   accuser. Ce qui l'attrape est dans `ouvrir()`, côté parcours : **une
+   syntaxe d'ouverture de balise qui atteint le navigateur**, sur chacune des
+   pages visitées. Aucun faux positif possible, et le contrôle couvre les
+   pages à venir sans qu'on y pense.
+
+`tests/test_structure.php` vérifie les cinq premiers — le quatrième en refusant
+toute valeur d'attribut qui s'ouvre sur une parenthèse littérale, le cinquième
+tout `<script src>` rangé dans une branche « sinon ». Il refuse aussi tout
+`#ARRAY{…#GET{…}}`, variante du premier. Le sixième appartient au parcours,
+pour la raison dite plus haut.
 
 ## Une case à cocher ne donne aucun droit
 
