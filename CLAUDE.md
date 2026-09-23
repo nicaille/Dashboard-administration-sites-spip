@@ -2,7 +2,7 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.36`,
+`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.37`,
 `plugins/tourdecontrole_agent-1.0.24`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
@@ -476,7 +476,7 @@ autre chose que `''`.
 `tests/test_protocole.php` vérifie le filtre, `tests/integration/scenario.mjs`
 le rendu, charge utile à l'appui.
 
-## Cinq pièges du compilateur, tous rencontrés
+## Six pièges du compilateur, tous rencontrés
 
 1. **Une balise à accolades dans un argument composite** (`op/#ID/#GET{x}`)
    désorganise l'analyse : les balises voisines arrivent littéralement dans la
@@ -514,10 +514,29 @@ le rendu, charge utile à l'appui.
    jamais. Rien sur la page ne le dit : le bloc est là, son JSON aussi, seul le
    tracé manque.
 
-`tests/test_structure.php` vérifie les cinq — le quatrième en refusant toute
+6. **Un crochet dans un `#REM` casse le bloc optionnel qui l'entoure.**
+   Ouvrant, fermant, et **même en paire équilibrée** : SPIP perd le nom des
+   deux balises et rend le bloc entier littéralement — le commentaire compris,
+   en pleine page, sous le titre. Éprouvé caractère par caractère : les
+   accolades passent, les backticks passent, les parenthèses passent, les
+   crochets non.
+
+   Arrivé en citant du squelette compilé — une case de pile indexée — dans le
+   commentaire qui expliquait justement le piège du `?` des critères. C'est le
+   troisième de la série, après le commentaire de squelette qui contenait la
+   syntaxe qu'il déconseillait et le `?>` dans un commentaire PHP : **ici, on
+   nomme les syntaxes, on ne les écrit pas.**
+
+   Aucune erreur, aucun message, une page par ailleurs normale — et les
+   contrôles d'intégration qui cherchaient « Argument manquant » ou
+   « erreur_squelette » n'y voyaient rien. Ce qui l'attrape maintenant côté
+   rendu ne cherche plus une erreur mais **une syntaxe de squelette qui atteint
+   le navigateur**, ce qui n'a aucune raison d'arriver.
+
+`tests/test_structure.php` vérifie les six — le quatrième en refusant toute
 valeur d'attribut qui s'ouvre sur une parenthèse littérale, le cinquième tout
-`<script src>` rangé dans une branche « sinon ». Il refuse aussi tout
-`#ARRAY{…#GET{…}}`, variante du premier.
+`<script src>` rangé dans une branche « sinon », le sixième tout crochet dans
+un `#REM`. Il refuse aussi tout `#ARRAY{…#GET{…}}`, variante du premier.
 
 ## Une case à cocher ne donne aucun droit
 

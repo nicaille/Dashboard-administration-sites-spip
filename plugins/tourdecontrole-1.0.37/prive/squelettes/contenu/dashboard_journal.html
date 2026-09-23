@@ -24,17 +24,25 @@
 [(#VAL|dashboard_tables_presentes|oui)
 
 [(#REM)
+	**Aucun crochet dans ce commentaire, et ce n'est pas un hasard.** Un
+	crochet ouvrant ou fermant posé dans un #REM imbriqué dans un bloc
+	optionnel casse le bloc englobant : SPIP perd le nom des deux balises et
+	rend tout le bloc littéralement, commentaire compris. Une paire
+	équilibrée ne sauve rien. Ici, on nomme les syntaxes, on ne les écrit
+	pas — la même règle que pour le commentaire qui contenait la syntaxe
+	qu'il déconseillait.
+
 	**Les paramètres d'URL portent le nom des colonnes, et ce n'est pas un
 	choix de style.** Le `?` de `{champ ?IN …}` ne teste pas la valeur qu'on
 	lui passe : il teste la variable d'environnement **portant le nom du
-	champ**. Le squelette compilé le dit sans ambiguïté :
+	champ**. Le squelette compilé va chercher la case `id_dashboard_site` de
+	la pile de contexte, et ne pose son `sql_in` que si elle est remplie.
 
-	    ($Pile[0]['id_dashboard_site'] ?? null) ? sql_in(…, $in) : ''
-
-	Avec une URL en `sites[]`, la condition regardait donc `id_dashboard_site`,
-	ne le trouvait pas, et **retirait le filtre** : la page rendait le parc
-	entier. Sans erreur, sans message — une liste complète a exactement l'air
-	d'une liste non filtrée. Trois filtres sur cinq étaient morts ainsi.
+	Quand l'URL nommait ses sites autrement, la condition cherchait donc
+	`id_dashboard_site`, ne le trouvait pas, et **retirait le filtre** : la
+	page rendait le parc entier. Sans erreur, sans message — une liste
+	complète a exactement l'air d'une liste non filtrée. Trois filtres sur
+	cinq étaient morts ainsi.
 
 	Deux autres exigences de `?IN`, aussi silencieuses :
 

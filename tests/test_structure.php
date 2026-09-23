@@ -707,6 +707,24 @@ foreach ($plugins as $plugin) {
 			);
 		}
 
+		// Un crochet — ouvrant ou fermant, et même en paire équilibrée — posé
+		// dans un #REM casse le bloc optionnel qui l'entoure : SPIP perd le nom
+		// des deux balises et rend tout le bloc littéralement, le commentaire
+		// compris, en pleine page. Aucune erreur, aucun message ; c'est une
+		// page normale sur laquelle un paragraphe de code source s'est invité.
+		//
+		// Arrivé en citant du squelette compilé — une case de pile indexée —
+		// dans le commentaire qui expliquait le piège du « ? » des critères.
+		// Même travers que le commentaire contenant la syntaxe qu'il
+		// déconseillait : ici, on nomme les syntaxes, on ne les écrit pas.
+		foreach (rem_blocs($source) as $rem) {
+			verifier(
+				"$affiche : aucun crochet dans un #REM",
+				!preg_match('/[\\[\\]]/', $rem),
+				premiere_occurrence('/[\\[\\]]/', $rem)
+			);
+		}
+
 		// Une valeur d'attribut qui commence par « (# » : les parenthèses y sont
 		// du texte, et sortent telles quelles. C'est ce qui donnait
 		// href="(https://exemple.org/)", que le navigateur relit comme une
@@ -722,6 +740,41 @@ foreach ($plugins as $plugin) {
 			premiere_occurrence($attribut, $source)
 		);
 	}
+}
+
+/**
+ * Rend le corps de chaque bloc `#REM` d'un squelette.
+ *
+ * Le bloc se ferme sur le premier crochet fermant de son niveau ; on suit donc
+ * la profondeur plutôt que de chercher le premier « ] » venu, sans quoi un
+ * commentaire contenant lui-même des crochets serait rendu tronqué — et c'est
+ * précisément le cas qu'on veut attraper.
+ *
+ * @param string $source
+ * @return array
+ */
+function rem_blocs($source) {
+	$blocs = [];
+	$depart = 0;
+	while (($ouvre = strpos($source, '[(#REM)', $depart)) !== false) {
+		$i = $ouvre + strlen('[(#REM)');
+		$profondeur = 0;
+		while ($i < strlen($source)) {
+			if ($source[$i] === '[') {
+				$profondeur++;
+			} elseif ($source[$i] === ']') {
+				if ($profondeur === 0) {
+					break;
+				}
+				$profondeur--;
+			}
+			$i++;
+		}
+		$blocs[] = substr($source, $ouvre + strlen('[(#REM)'), $i - $ouvre - strlen('[(#REM)'));
+		$depart = $i + 1;
+	}
+
+	return $blocs;
 }
 
 echo "\n== Filtres appelés par les squelettes ==\n";

@@ -2247,6 +2247,21 @@ console.log('\n### Journal du parc');
 		!/Argument manquant|zbug|erreur_squelette|Boucle .* inconnue/i.test(corps),
 		corps.slice(0, 200));
 
+	/* Un bloc optionnel cassé ne lève aucune erreur : SPIP rend le bloc
+	   entier littéralement, commentaire de squelette compris, et la page
+	   reste par ailleurs normale. C'est ce qui est arrivé — un crochet dans
+	   un `#REM` imbriqué — et le contrôle d'au-dessus n'y voyait rien,
+	   puisqu'il ne cherche que des messages d'erreur.
+
+	   Deux marqueurs, parce qu'ils ratent des choses différentes : la
+	   syntaxe d'ouverture d'une balise, qui n'a aucune raison d'atteindre le
+	   navigateur, et un mot que seul le commentaire porte. */
+	dit('aucune syntaxe de squelette ne ressort telle quelle',
+		!corps.includes('[('),
+		corps.slice(Math.max(0, corps.indexOf('[(') - 60), corps.indexOf('[(') + 120));
+	dit('aucun commentaire de squelette ne s’affiche',
+		!/#REM|squelette compil|critere_IN_cas/i.test(corps));
+
 	/* Le formulaire de filtres, et ses cinq champs. */
 	for (const champ of ['id_dashboard_site[]', 'statut', 'operation', 'jours', 'id_auteur']) {
 		dit(`le filtre « ${champ} » est présent`,
