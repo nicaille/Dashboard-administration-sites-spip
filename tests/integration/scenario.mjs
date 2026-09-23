@@ -2232,6 +2232,113 @@ try {
 }
 
 
+console.log('\n### Journal du parc');
+
+/* Rien de ce qui suit n'est prouvé par l'analyse statique : le critère `?IN`
+   veut un tableau — une chaîne « 3,7 » y compterait pour un seul identifiant
+   sans que rien ne le dise —, le `?` d'un critère se place avant l'opérateur,
+   et `form_hidden` est ce qui empêche un formulaire GET de perdre son `exec`.
+   Seul le rendu tranche. */
+{
+	await ouvrir(page, 'la page du journal du parc s’ouvre', '/ecrire/?exec=dashboard_journal');
+
+	const corps = await page.locator('body').innerText();
+	dit('elle ne porte pas d’erreur de compilation',
+		!/Argument manquant|zbug|erreur_squelette|Boucle .* inconnue/i.test(corps),
+		corps.slice(0, 200));
+
+	/* Le formulaire de filtres, et ses cinq champs. */
+	for (const champ of ['id_dashboard_site[]', 'statut', 'operation', 'jours', 'id_auteur']) {
+		dit(`le filtre « ${champ} » est présent`,
+			(await page.locator(`[name="${champ}"]`).count()) === 1);
+	}
+
+	/* `form_hidden` : sans lui, un formulaire GET perd la chaîne de requête de
+	   son action, donc `exec`, et l'envoi retombe sur l'accueil du privé. */
+	const cache = await page.locator('form.formulaire_spip input[type=hidden][name="exec"]').count();
+	dit('le formulaire garde son exec en champ caché', cache === 1, `${cache} champ(s)`);
+
+	const lignes = await page.locator('#journal table.spip tbody tr').count();
+	dit('le journal du parc liste des opérations', lignes >= 1, `${lignes} ligne(s)`);
+
+	dit('la rétention est annoncée',
+		/conserv/i.test(corps) && /\d+\s*jours/.test(corps));
+
+	/* Le fil d'Ariane doit remonter au parc, et non à la page inexistante que
+	   fabrique l'échafaudage de SPIP depuis le nom de la table. */
+	const chemin = await page.locator('.chemin, #chemin, nav.chemin').first().innerText().catch(() => '');
+	dit('le fil d’Ariane remonte au parc', /parc|dashboard|contr/i.test(chemin), chemin.slice(0, 80));
+}
+
+console.log('\n### Journal du parc : chaque filtre porte vraiment');
+
+/* Un filtre ignoré ne se voit pas : la page s'affiche, la liste aussi. Pire,
+   un contrôle « ce filtre rend des lignes » passe au vert alors que le filtre
+   est mort — il rend *toutes* les lignes.
+
+   La seule direction qui discrimine est l'inverse : une valeur qui ne peut
+   rien désigner doit rendre **zéro** ligne. Un filtre mort en rendrait
+   cinquante. C'est ainsi qu'on a découvert que le `?` de `{champ ?IN …}` teste
+   la variable d'environnement portant le nom du **champ**, et non la valeur
+   qu'on lui passe : avec une URL en `sites[]`, la condition cherchait
+   `id_dashboard_site`, ne le trouvait pas, et retirait le filtre. Trois
+   filtres sur cinq étaient morts ainsi. */
+{
+	sqlEcrire(`INSERT INTO spip_dashboard_journal (id_dashboard_site, id_auteur, operation, statut, message, detail, duree, date)
+	           VALUES (1, 1, 'sync', 'erreur', 'panne de démonstration', '', 12, datetime('now'))`);
+
+	const compter = async (params) => {
+		await page.goto(base + '/ecrire/?exec=dashboard_journal' + params, { waitUntil: 'domcontentloaded' });
+		return page.locator('#journal table.spip tbody tr').count();
+	};
+
+	const tout = await compter('');
+	dit('sans filtre, le journal liste des opérations', tout >= 2, `${tout} ligne(s)`);
+
+	/* Pour chacun des cinq filtres : une valeur impossible doit tout écarter.
+	   C'est le contrôle qui a manqué, et celui qui coûte le moins cher. */
+	const impossibles = [
+		['site inconnu', '&id_dashboard_site[]=99999'],
+		['statut inventé', '&statut=nimportequoi'],
+		['opération inconnue', '&operation=nimportequoi'],
+		['auteur inconnu', '&id_auteur=99999'],
+	];
+	for (const [quoi, params] of impossibles) {
+		const n = await compter(params);
+		dit(`un ${quoi} ne rend aucune ligne`, n === 0, `${n} ligne(s) sur ${tout}`);
+	}
+
+	/* Et dans l'autre sens : une valeur qui existe doit rendre quelque chose,
+	   sans quoi le filtre serait simplement cassé dans l'autre direction. */
+	const possibles = [
+		['site connu', '&id_dashboard_site[]=1'],
+		['statut erreur', '&statut=erreur'],
+		['opération sync', '&operation=sync'],
+	];
+	for (const [quoi, params] of possibles) {
+		const n = await compter(params);
+		dit(`un ${quoi} rend des lignes`, n >= 1, `${n} ligne(s)`);
+	}
+
+	/* Le statut doit en outre *réduire* : s'il rend autant que sans filtre,
+	   c'est qu'il ne porte pas. Le journal contient des lignes « ok » et la
+	   ligne en erreur qu'on vient d'insérer. */
+	const erreursSeules = await compter('&statut=erreur');
+	dit('filtrer sur les erreurs réduit la liste', erreursSeules < tout,
+		`${erreursSeules} sur ${tout}`);
+
+	/* La période : le critère est inconditionnel, donc son plancher doit
+	   mordre. Une fenêtre d'un jour garde ce qu'on vient d'insérer ; la même
+	   requête ne doit pas rendre davantage que sans filtre. */
+	const recent = await compter('&jours=1');
+	dit('la fenêtre d’un jour rend des lignes', recent >= 1, `${recent} ligne(s)`);
+	dit('et n’en invente pas', recent <= tout, `${recent} sur ${tout}`);
+
+	/* Deux filtres à la fois : ils doivent se cumuler, pas s'annuler. */
+	const croise = await compter('&statut=erreur&id_dashboard_site[]=99999');
+	dit('deux filtres se cumulent', croise === 0, `${croise} ligne(s)`);
+}
+
 console.log('\n' + (echecs ? `=== ${echecs} ÉCHEC(S) ===` : '=== PARCOURS COMPLET SANS ERREUR ==='));
 await nav.close();
 process.exit(echecs ? 1 : 0);

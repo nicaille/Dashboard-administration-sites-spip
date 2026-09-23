@@ -2,7 +2,7 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.35`,
+`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.36`,
 `plugins/tourdecontrole_agent-1.0.24`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
@@ -389,6 +389,66 @@ Le fond est choisi par `prive/squelettes/hierarchie/<type-page>`, et `type-page`
 vaut le nom de l'exec. D'où `prive/squelettes/hierarchie/dashboard_site.html`,
 qui rend la remontée vers le parc et le titre du site — `#INFO_TITRE`, qui
 échappe, parce que ce titre vient d'un site géré.
+
+## Un critère facultatif qui lit le contexte filtre ce qu'on ne lui a pas demandé
+
+La page du journal du parc a cinq filtres, et **aucun** n'emploie la forme
+simple `{statut ?}`. Ce n'est pas de l'uniformité : cette forme lit **le
+contexte**, où `statut`, `operation` ou `id_auteur` peuvent déjà valoir
+quelque chose qu'aucun lien n'a posé. La page filtrerait alors sur une valeur
+venue d'ailleurs, et rien ne le dirait — la liste serait simplement plus
+courte.
+
+Tous passent donc par `?IN` et un tableau calculé en PHP, qui ne dépend que de
+ce qu'on lui donne. Trois choses à savoir, aucune visible :
+
+- **le `?` d'un critère se place avant l'opérateur**, jamais après : écrit
+  après, il est pris pour un caractère de la valeur — le même piège que
+  `{champ = #GET{x} ?}`, déjà consigné plus haut ;
+- **et ce `?` ne teste pas la valeur qu'on lui passe.** Il teste la variable
+  d'environnement portant le nom **du champ**. Le squelette compilé le dit
+  sans ambiguïté :
+
+      ($Pile[0]['id_dashboard_site'] ?? null) ? sql_in(…, $in) : ''
+
+  Avec une URL en `sites[]`, la condition cherchait `id_dashboard_site`, ne le
+  trouvait pas, et **retirait le filtre** : la page rendait le parc entier.
+  Trois filtres sur cinq étaient morts ainsi, et un seul contrôle l'a vu. D'où
+  la règle : **le paramètre d'URL porte le nom de la colonne**, ou le critère
+  se passe du `?` et pose une valeur toujours vraie — c'est le choix fait pour
+  la période, dont la condition testerait `date`, que l'URL ne porte pas ;
+- **`?IN` exige un vrai tableau.** `critere_IN_cas()` pousse une valeur non
+  tableau telle quelle dans la liste : la chaîne « 3,7 » y devient un seul
+  identifiant valant littéralement « 3,7 », et la boucle ne rend rien. Sans
+  erreur, sans message, sur une page par ailleurs normale ;
+- **un tableau vide retire la condition**, ce qui fait de « aucun filtre » un
+  cas particulier du filtre plutôt qu'une branche à part.
+
+Et ce qui vient de l'URL **désigne, il n'autorise pas** — la même règle que
+les cases à cocher du parc. `dashboard_journal_sites()` passe chaque
+identifiant par `autoriser()`, sans quoi une adresse forgée donnerait à lire
+le journal d'un site qu'on n'a pas le droit de voir.
+
+Un filtre qui ne filtre rien ne se voit pas : la page s'affiche, la liste
+aussi. Pire, un contrôle « ce filtre rend des lignes » **passe au vert sur un
+filtre mort** — il rend toutes les lignes. La seule direction qui discrimine
+est l'inverse : **une valeur impossible doit rendre zéro ligne**. Le parcours
+d'intégration l'éprouve pour chacun des cinq filtres, et c'est ce contrôle-là
+qui a mis au jour les trois filtres morts.
+
+Corollaire, et il vaut au-delà d'ici : quand on écrit un contrôle sur un
+filtre, écrire d'abord celui qui échouerait si le filtre n'existait pas.
+
+## `?>` dans un commentaire PHP ferme la balise PHP
+
+Y compris dans un commentaire `//`. Tout ce qui suit sort du code, et
+l'accolade de la fonction n'est jamais refermée — pour un « Unclosed '{' »
+signalé quatre-vingts lignes plus bas, sur une fonction sans rapport.
+
+Arrivé en voulant *expliquer* la forme conditionnelle d'un critère. C'est le
+même travers que le commentaire de squelette qui contenait la syntaxe qu'il
+déconseillait : **ici, on nomme les syntaxes, on ne les écrit pas.** `php -l`
+l'attrape, mais son message ne désigne pas le coupable.
 
 ## Ce qui vient d'un site géré est inerte, toujours
 

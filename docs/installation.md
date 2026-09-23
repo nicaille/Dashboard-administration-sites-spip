@@ -3,6 +3,9 @@
 ## Pré-requis
 
 - SPIP 4.1 à 4.4 des deux côtés, PHP 7.4 ou plus récent ;
+- le plugin **SVP** — livré avec SPIP — pour installer et mettre à jour par le
+  dépôt, des deux côtés. Facultatif si l'on préfère copier les fichiers à la
+  main, mais c'est lui qui rend les mises à jour automatiques ;
 - **HTTPS avec un certificat valide** sur chaque site géré : la vérification du
   certificat n'est pas contournable, et c'est voulu ;
 - l'extension PHP `zip` sur les sites gérés, pour les mises à jour ;
@@ -14,8 +17,30 @@ Aucun accès SSH, FTP ou base distante n'est nécessaire.
 
 ## 1. Le site tour de contrôle
 
-Copier `plugins/tourdecontrole-<version>` dans le répertoire `plugins/` du site qui pilotera le
-parc, puis l'activer dans *Configuration → Gestion des plugins*.
+**Par le dépôt, de préférence.** Le plugin se publie sur un dépôt SVP ; l'y
+déclarer une fois suffit, et les versions suivantes se proposent ensuite dans
+*Gestion des plugins* comme celles de n'importe quel plugin. Plus de copie de
+fichiers à chaque mise à jour — et c'est un fichier oublié qui fait qu'un
+correctif n'arrive jamais.
+
+Sur le site qui pilotera le parc, muni du plugin **SVP** (livré avec SPIP) :
+*Configuration → Plugins → Dépôts → Ajouter un dépôt*, puis coller l'adresse
+du catalogue :
+
+```
+https://nicaille.github.io/Dashboard-administration-sites-spip/plugins.xml
+```
+
+Puis *Gestion des plugins* → chercher « Tour de contrôle » → installer, et
+activer.
+
+Voir [Dépôt de plugins](depot.md) pour ce que le dépôt fait, ce qu'il ne fait
+pas — il ne signe rien — et comment en publier un pour son propre parc.
+
+**Sans SVP, ou sans accès sortant**, la copie de fichiers reste valable :
+déposer `plugins/tourdecontrole-<version>` dans le répertoire `plugins/` du
+site, puis l'activer dans *Configuration → Gestion des plugins*. Il faudra
+recommencer à chaque version.
 
 Ce site doit être **au moins aussi protégé que le plus sensible des sites qu'il
 administre** : il détient tous les secrets du parc. Voir [Sécurité](securite.md).
@@ -38,7 +63,17 @@ voir [Exploitation](exploitation.md#être-prévenu-sans-venir-regarder).
 
 ## 2. Chaque site géré
 
-Copier `plugins/tourdecontrole_agent-<version>` dans son répertoire `plugins/`, puis l'activer.
+Même chose pour l'agent, et le dépôt y gagne encore : c'est le plugin qu'on
+met à jour sur quarante sites à la fois. Déclarer le dépôt sur le site (SVP,
+*Plugins → Dépôts → Ajouter un dépôt*, même adresse qu'au-dessus), puis
+installer et activer « Tour de contrôle : agent ».
+
+Une fois l'agent en place et appairé, **la tour se charge du reste** : le
+bouton *Mettre à jour l'agent* de la vue d'ensemble déploie les versions
+suivantes sur tout le parc, sans y retourner à la main.
+
+Sans SVP, copier `plugins/tourdecontrole_agent-<version>` dans son répertoire
+`plugins/`, puis l'activer.
 
 Tant qu'aucun secret n'est configuré, **l'agent refuse toutes les requêtes** :
 installer le plugin n'ouvre rien par lui-même.

@@ -378,11 +378,18 @@
 
 </div>
 
-[(#AUTORISER{creer,dashboard_site})
 <p class="boutons">
+	[(#REM)
+		Le journal du parc, en lien plutôt qu'en encadré : il se pagine et se
+		filtre, et la vue d'ensemble est déjà dense. Un vrai lien de
+		navigation reste un `<a class="btn …">` — seul ce qui change l'état
+		d'un site passe par un formulaire POST.
+	]
+	<a class="btn btn_secondaire" href="[(#URL_ECRIRE{dashboard_journal})]"><:dashboard:titre_journal_parc:></a>
+	[(#AUTORISER{creer,dashboard_site})
 	<a class="btn" href="[(#URL_ECRIRE{dashboard_site,new=oui})]"><:dashboard:icone_creer_site:></a>
+	]
 </p>
-]
 
 
 [(#REM)

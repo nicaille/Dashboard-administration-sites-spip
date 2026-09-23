@@ -1147,3 +1147,250 @@ function dashboard_alerte_apercu($rien = '') {
 
 	return (string) $message['court'];
 }
+
+/**
+ * Les sites retenus par le filtre du journal, en tableau d'identifiants.
+ *
+ * Le critère `?IN` de SPIP a une exigence qui ne se voit pas : une valeur qui
+ * n'est **pas un tableau** est poussée telle quelle dans la liste
+ * (`critere_IN_cas()`, la branche `is_array()`). Lui donner la chaîne « 3,7 »
+ * chercherait donc un identifiant valant littéralement « 3,7 », et la boucle
+ * ne rendrait rien — sans erreur, sans message. D'où un vrai tableau.
+ *
+ * Tableau vide = aucun filtre : `?IN` laisse alors passer tout le monde, la
+ * condition étant retirée quand l'argument est vide.
+ *
+ * Les identifiants sont filtrés par l'autorisation, et pas seulement validés :
+ * une adresse forgée ne doit pas donner à lire le journal d'un site qu'on n'a
+ * pas le droit de voir. C'est la même règle que pour les files d'actions du
+ * parc — ce qui vient de l'URL désigne, il n'autorise pas.
+ *
+ * @filtre
+ * @param string|array $choix Ce que porte l'URL
+ * @return array
+ */
+function dashboard_journal_sites($choix = '') {
+	include_spip('inc/autoriser');
+
+	if (is_array($choix)) {
+		$demandes = $choix;
+	} else {
+		$demandes = preg_split('/[\s,]+/', (string) $choix, -1, PREG_SPLIT_NO_EMPTY);
+	}
+
+	$retenus = [];
+	foreach ($demandes as $id) {
+		$id = (int) $id;
+		if ($id > 0 && autoriser('voir', 'dashboard_site', $id)) {
+			$retenus[] = $id;
+		}
+	}
+
+	$retenus = array_values(array_unique($retenus));
+
+	// Voir `dashboard_journal_liste()` : demandé mais vide doit rendre une
+	// liste vide, pas le parc entier. Zéro ne désigne aucun site.
+	if (!$retenus && $demandes) {
+		return [0];
+	}
+
+	return $retenus;
+}
+
+/**
+ * La date plancher du filtre, au format que SQL comprend.
+ *
+ * Toujours une date, jamais une chaîne vide : voir ci-dessous.
+ *
+ * @filtre
+ * @param string $choix Nombre de jours, ou date
+ * @return string
+ */
+function dashboard_journal_depuis($choix = '') {
+	// Le critère de période est **inconditionnel**. Sa forme conditionnelle
+	// testerait la variable d'environnement `date`, que l'URL ne porte pas :
+	// la condition serait retirée et le filtre ne jouerait jamais. On pose
+	// donc toujours un plancher, et l'époque zéro quand rien n'est demandé.
+	//
+	// Et l'on n'écrit pas ici la syntaxe de cette forme conditionnelle : la
+	// séquence qui ferme une balise PHP ferme aussi un commentaire `//`, et
+	// tout ce qui suit sort du code. C'est ce qui vient d'arriver — accolade
+	// jamais refermée, « Unclosed '{' » signalé quatre-vingts lignes plus
+	// bas, sur une fonction sans rapport.
+	$plancher = '1970-01-01 00:00:00';
+
+	$choix = trim((string) $choix);
+	if ($choix === '') {
+		return $plancher;
+	}
+
+	// Un nombre de jours — la forme qu'emploient les liens de la page.
+	if (ctype_digit($choix)) {
+		$jours = max(1, min(3650, (int) $choix));
+
+		return date('Y-m-d H:i:s', time() - ($jours * 86400));
+	}
+
+	// Une date saisie à la main. Refusée plutôt que devinée si elle ne se lit
+	// pas : un plancher mal compris masquerait des lignes sans le dire.
+	$horodatage = strtotime($choix);
+
+	return $horodatage ? date('Y-m-d H:i:s', $horodatage) : $plancher;
+}
+
+/**
+ * Les opérations réellement présentes dans le journal, pour peupler le choix.
+ *
+ * On lit ce qui existe plutôt que d'énumérer ce qui pourrait exister : une
+ * liste figée proposerait des filtres qui ne rendent jamais rien, et tairait
+ * une opération ajoutée depuis.
+ *
+ * @filtre
+ * @param string $rien
+ * @return array
+ */
+function dashboard_journal_operations($rien = '') {
+	if (!dashboard_tables_presentes()) {
+		return [];
+	}
+
+	$lignes = sql_allfetsel(
+		'DISTINCT operation',
+		'spip_dashboard_journal',
+		'',
+		'',
+		'operation'
+	);
+
+	return array_values(array_filter(array_column($lignes, 'operation')));
+}
+
+/**
+ * Une valeur de filtre, rendue en tableau pour le critère `?IN`.
+ *
+ * Tous les filtres du journal passent par `?IN`, et pas seulement ceux qui
+ * acceptent plusieurs valeurs. La raison n'est pas l'uniformité : le critère
+ * facultatif simple — `{statut ?}` — lit **le contexte**, où `statut`,
+ * `id_auteur` ou `operation` peuvent déjà valoir quelque chose sans qu'on
+ * l'ait demandé. La page filtrerait alors sur une valeur qu'aucun lien n'a
+ * posée, et rien ne le dirait. `?IN` sur un tableau qu'on a nous-même calculé
+ * ne dépend que de ce qu'on lui donne.
+ *
+ * @param string|array $choix
+ * @param array $permises Valeurs acceptées ; toutes si le tableau est vide
+ * @return array
+ */
+function dashboard_journal_liste($choix, $permises = [], $sentinelle = '__aucun__') {
+	if (is_array($choix)) {
+		$demandes = $choix;
+	} else {
+		$demandes = preg_split('/[\s,]+/', (string) $choix, -1, PREG_SPLIT_NO_EMPTY);
+	}
+
+	$retenus = [];
+	foreach ($demandes as $valeur) {
+		$valeur = trim((string) $valeur);
+		if ($valeur === '') {
+			continue;
+		}
+		if ($permises && !in_array($valeur, $permises, true)) {
+			continue;
+		}
+		$retenus[] = $valeur;
+	}
+
+	$retenus = array_values(array_unique($retenus));
+
+	// **Demandé mais vide n'est pas « rien demandé ».** Un tableau vide retire
+	// la condition `?IN`, donc afficherait *tout* — l'inverse exact de ce qu'on
+	// veut quand l'utilisateur a nommé des sites qu'il n'a pas le droit de
+	// voir, ou une valeur qui n'existe pas. La sentinelle ne correspond à
+	// rien, et la liste ressort vide comme elle le doit.
+	//
+	// Trouvé par le parcours d'intégration : `?sites[]=99999` rendait
+	// cinquante lignes. Rien sur la page ne le disait — une liste complète a
+	// exactement l'air d'une liste non filtrée.
+	if (!$retenus && $demandes) {
+		return [$sentinelle];
+	}
+
+	return $retenus;
+}
+
+/**
+ * Les statuts retenus par le filtre.
+ *
+ * @filtre
+ * @param string|array $choix
+ * @return array
+ */
+function dashboard_journal_statuts($choix = '') {
+	return dashboard_journal_liste($choix, ['ok', 'erreur']);
+}
+
+/**
+ * Les opérations retenues par le filtre, validées contre ce qui existe.
+ *
+ * @filtre
+ * @param string|array $choix
+ * @return array
+ */
+function dashboard_journal_filtre_operations($choix = '') {
+	return dashboard_journal_liste($choix, dashboard_journal_operations());
+}
+
+/**
+ * Les auteurs retenus par le filtre.
+ *
+ * @filtre
+ * @param string|array $choix
+ * @return array
+ */
+function dashboard_journal_auteurs($choix = '') {
+	$demandes = dashboard_journal_liste($choix, [], '0');
+
+	$retenus = [];
+	foreach ($demandes as $valeur) {
+		if (ctype_digit((string) $valeur) && (int) $valeur > 0) {
+			$retenus[] = (int) $valeur;
+		}
+	}
+
+	// Même règle : un auteur demandé mais inexploitable ne doit pas ouvrir le
+	// journal en grand.
+	if (!$retenus && $demandes) {
+		return [0];
+	}
+
+	return $retenus;
+}
+
+/**
+ * Le libellé qui annonce la rétention, décompte compris.
+ *
+ * En PHP et non dans le squelette : une chaîne de langue à argument écrite
+ * dans un `#SET` rend une chaîne vide, et `#ARRAY{nb,#GET{x}}` ajoute un
+ * niveau d'accolades que l'analyse ne suit plus — « Argument manquant dans la
+ * balise SET », et la page entière tombe.
+ *
+ * @filtre
+ * @param string $rien
+ * @return string
+ */
+function dashboard_journal_retention_libelle($rien = '') {
+	return _T('dashboard:journal_retention', ['nb' => dashboard_journal_retention()]);
+}
+
+/**
+ * Combien de jours le journal est-il conservé ?
+ *
+ * Affiché avec la liste : sans cela, la purge d'entretien se confond avec un
+ * trou, et l'on cherche une panne là où il n'y a qu'une rétention.
+ *
+ * @filtre
+ * @param string $rien
+ * @return int
+ */
+function dashboard_journal_retention($rien = '') {
+	return max(1, (int) dashboard_config('retention_journal', 180));
+}

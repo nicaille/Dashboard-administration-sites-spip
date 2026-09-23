@@ -1,7 +1,7 @@
 <paquet
 	prefix="tourdecontrole"
 	categorie="maintenance"
-	version="1.0.35"
+	version="1.0.36"
 	etat="test"
 	compatibilite="[4.1.0;4.*]"
 	schema="1.0.9"
@@ -26,5 +26,6 @@
 	<necessite nom="php" compatibilite="[7.4.0;[" />
 
 	<menu nom="dashboard" titre="dashboard:titre_dashboard" parent="menu_edition" icone="images/dashboard-16.svg" />
+	<menu nom="dashboard_journal" titre="dashboard:titre_journal_parc" parent="menu_edition" icone="images/dashboard-16.svg" />
 	<menu nom="configurer_tourdecontrole" titre="dashboard:titre_configurer" parent="menu_configuration" icone="images/dashboard-16.svg" />
 </paquet>

@@ -28,6 +28,8 @@ $lang = [
 	'action_depots_parc' => 'Refresh the whole fleet’s repositories',
 	'action_depots_selection' => 'Refresh the selection’s repositories',
 	'action_core_maj_selection' => 'Upgrade SPIP on the selection',
+	'action_filtre_vider' => 'Show all',
+	'action_filtrer' => 'Filter',
 	'action_loader_retirer' => 'Remove from the site',
 	'action_purger_selection' => 'Clear the selection’s caches',
 	'action_push_activer' => 'Enable notifications on this browser',
@@ -73,6 +75,7 @@ $lang = [
 	'base_maj_texte' => 'This site’s files expect a database migration. Until it is applied, SPIP keeps the managed site’s private area behind its upgrade page.',
 	'bilan_explication' => 'This report clears itself after an hour; the journal below keeps the record.',
 	'col_actions'    => 'Actions',
+	'col_auteur' => 'By',
 	'col_cache'      => 'Cache',
 	'col_composant'  => 'Component',
 	'col_date'       => 'Date',
@@ -147,6 +150,7 @@ $lang = [
 	'explication_autoriser_http' => 'For local development only: the shared secret and the downloaded archives then travel in the clear. The managed site must allow it on its side too.',
 	'explication_chantier' => 'The operation runs step by step. You may leave this page: it carries on by itself and its outcome is recorded in the log.',
 	'explication_check' => 'SPIP Check compares the site’s files with the official archive of its version and examines writable directories. It is a one-off tool, dropped then removed — unlike spip_loader, which stays. The check itself is run from a browser, on the site: it only accepts a webmaster logged in there.',
+	'explication_filtre_sites' => 'No site selected means all of them. Pick several with Ctrl or Cmd.',
 	'explication_generer_secret' => 'The secret is displayed once after saving: copy it straight into the agent settings on the managed site.',
 	'explication_groupe'       => 'Optional: groups sites belonging to the same client or the same hosting.',
 	'explication_fraicheur_depots' => 'The catalogue of available versions lives on the managed site and never refreshes by itself: without this, the fleet reports sites as up to date when they are not. Past this delay, in seconds, syncing has it re-read. Zero turns the automatic refresh off without silencing the warning: staleness is then judged against one day, and updates re-read the catalogue before acting anyway.',
@@ -168,6 +172,13 @@ $lang = [
 
 	// I
 	'explication_waf' => 'The managed site’s application firewall figures: what it blocked, for which reasons, from which addresses. Nothing is asked of the site until this tab is opened, and nothing is kept here.',
+	'filtre_depuis_1' => 'Last 24 hours',
+	'filtre_depuis_30' => 'Last 30 days',
+	'filtre_depuis_7' => 'Last 7 days',
+	'filtre_depuis_toujours' => 'All time',
+	'filtre_tous' => 'All',
+	'filtre_tous_auteurs' => 'Anyone',
+	'filtre_toutes' => 'All',
 	'icone_creer_site'    => 'Add a site to the fleet',
 	'icone_modifier_site' => 'Edit this site',
 	'info_1_site'         => 'One managed site',
@@ -178,6 +189,8 @@ $lang = [
 
 	// J
 	'jamais'        => 'never',
+	'journal_parc_vide' => 'No operation matches these filters.',
+	'journal_retention' => 'The log is kept for @nb@ days; beyond that, the housekeeping task deletes it. An old gap is not necessarily an incident.',
 	'journal_vide'  => 'No operation recorded yet.',
 
 	// L
@@ -188,6 +201,11 @@ $lang = [
 	'label_autoriser_http'     => 'Allow agents over plain http',
 	'label_base'               => 'Database',
 	'label_empreinte'          => 'Fingerprint of the stored secret:',
+	'label_filtre_auteur' => 'Started by',
+	'label_filtre_jours' => 'Period',
+	'label_filtre_operation' => 'Operation',
+	'label_filtre_sites' => 'Sites',
+	'label_filtre_statut' => 'Status',
 	'label_generer_secret'     => 'Generate a new shared secret',
 	'label_groupe'             => 'Group',
 	'label_notes'              => 'Notes',
@@ -230,6 +248,7 @@ $lang = [
 
 	// N
 	'nav_explication' => 'Take stock of the site, or remove it from the fleet. Removing it only affects the dashboard: the site itself is untouched.',
+	'nav_explication_journal' => 'Every fleet operation, newest first. Filters live in the address: a link to a precise search can be passed on as is.',
 	'nav_parc'            => 'Fleet overview',
 	'nav_retour_parc'     => 'Back to the fleet',
 	'nav_sites_en_erreur' => 'Unreachable sites',
@@ -283,6 +302,9 @@ $lang = [
 	'serveur_attente' => 'Open this tab to query the site.',
 	'site_sans_nom'       => 'Unnamed site @id@',
 	'secret_configure'    => 'A secret is stored for this site.',
+	'site_supprime' => 'site removed from the fleet',
+	'statut_erreur' => 'Failed',
+	'statut_ok' => 'Succeeded',
 	'statut_pause'        => 'Paused',
 	'statut_poubelle'     => 'Removed from the fleet',
 	'statut_supervise'    => 'Supervised',
@@ -299,6 +321,9 @@ $lang = [
 	'titre_configurer'   => 'Control tower: settings',
 	'tables_manquantes'  => 'Missing tables:',
 	'titre_check' => 'Integrity check (SPIP Check)',
+	'titre_filtres' => 'Filter',
+	'titre_journal_parc' => 'Fleet log',
+	'titre_journal_resultats' => '@nb@ operation(s)',
 	'titre_loader' => 'Installer script (spip_loader.php)',
 	'titre_push' => 'Browser notifications',
 	'titre_serveur' => 'Server',

@@ -1,0 +1,198 @@
+[(#REM)
+	Le journal du parc : toutes les opérations, tous sites confondus, du plus
+	récent au plus ancien.
+
+	Le journal d'un site tient déjà au bas de sa fiche. Ce qui manquait est la
+	lecture transversale — « qu'est-ce qui s'est passé cette nuit ? » ne se
+	répond pas en ouvrant quarante fiches.
+
+	Page à part plutôt qu'encadré sur le parc : un journal se pagine, se filtre
+	et se transmet par son adresse. Les filtres vivent donc dans l'URL, et un
+	lien vers une recherche précise se colle dans un courriel.
+]
+[(#AUTORISER{voir, dashboard_site}|sinon_interdire_acces)]
+<link rel="stylesheet" href="[(#CHEMIN{css/dashboard.css}|timestamp|direction_css)]" type="text/css" />
+
+<h1 class="grostitre"><:dashboard:titre_journal_parc:></h1>
+
+[(#VAL|dashboard_tables_presentes|non)
+<div class="dashboard-fiche dashboard-fiche-alerte">
+	<h2><:dashboard:titre_tables_absentes:></h2>
+	<p><:dashboard:explication_tables_absentes:></p>
+</div>
+]
+[(#VAL|dashboard_tables_presentes|oui)
+
+[(#REM)
+	**Les paramètres d'URL portent le nom des colonnes, et ce n'est pas un
+	choix de style.** Le `?` de `{champ ?IN …}` ne teste pas la valeur qu'on
+	lui passe : il teste la variable d'environnement **portant le nom du
+	champ**. Le squelette compilé le dit sans ambiguïté :
+
+	    ($Pile[0]['id_dashboard_site'] ?? null) ? sql_in(…, $in) : ''
+
+	Avec une URL en `sites[]`, la condition regardait donc `id_dashboard_site`,
+	ne le trouvait pas, et **retirait le filtre** : la page rendait le parc
+	entier. Sans erreur, sans message — une liste complète a exactement l'air
+	d'une liste non filtrée. Trois filtres sur cinq étaient morts ainsi.
+
+	Deux autres exigences de `?IN`, aussi silencieuses :
+
+	- il veut un **vrai tableau**. Une chaîne « 3,7 » y compte pour un seul
+	  identifiant (`critere_IN_cas()`, la branche `is_array()`) ;
+	- un tableau **vide** retire la condition. « Aucun filtre » est donc le
+	  tableau vide, et « filtre sans résultat possible » une sentinelle qui ne
+	  correspond à rien — sans quoi demander un site interdit montrerait tout.
+
+	La période ne peut pas suivre cette voie : sa condition testerait `date`,
+	que l'URL ne porte pas. Son critère est donc **inconditionnel**, et le
+	plancher vaut l'époque zéro quand aucune période n'est demandée.
+]
+#SET{sites,#ENV{id_dashboard_site}|dashboard_journal_sites}
+#SET{statuts,#ENV{statut}|dashboard_journal_statuts}
+#SET{operations,#ENV{operation}|dashboard_journal_filtre_operations}
+#SET{auteurs,#ENV{id_auteur}|dashboard_journal_auteurs}
+#SET{depuis,#ENV{jours}|dashboard_journal_depuis}
+
+<div class="dashboard-fiche" id="filtres">
+	<h2><:dashboard:titre_filtres:></h2>
+
+	[(#REM)
+		Un formulaire en GET : les filtres doivent finir dans l'adresse, pas
+		dans une session. Le navigateur jette la chaîne de requête de l'action
+		d'un formulaire GET — d'où `form_hidden`, qui la rend en champs
+		cachés, sans quoi `exec` se perdrait et la page se rechargerait sur
+		l'accueil du privé.
+
+		Les champs sont enveloppés comme le veut le thème du privé —
+		`div.formulaire_spip > div.editer > label + champ` —, faute de quoi un
+		`select` reste celui du navigateur.
+	]
+	<form method="get" action="[(#URL_ECRIRE{dashboard_journal})]" class="formulaire_spip">
+		[(#URL_ECRIRE{dashboard_journal}|form_hidden)]
+
+		<div class="editer">
+			<label for="filtre_sites"><:dashboard:label_filtre_sites:></label>
+			<select name="id_dashboard_site[]" id="filtre_sites" multiple="multiple" size="6">
+				<BOUCLE_choix_sites(DASHBOARD_SITES){statut != poubelle}{par titre}>
+				[(#AUTORISER{voir,dashboard_site,#ID_DASHBOARD_SITE})
+				<option value="#ID_DASHBOARD_SITE"[ (#ID_DASHBOARD_SITE|in_any{#GET{sites}}|oui)selected="selected"]>[(#TITRE|couper{60}|entites_html)]</option>
+				]
+				</BOUCLE_choix_sites>
+			</select>
+			<p class="explication"><:dashboard:explication_filtre_sites:></p>
+		</div>
+
+		<div class="editer">
+			<label for="filtre_statut"><:dashboard:label_filtre_statut:></label>
+			<select name="statut" id="filtre_statut">
+				<option value=""><:dashboard:filtre_tous:></option>
+				<option value="ok"[ (#ENV{statut}|=={ok}|oui)selected="selected"]><:dashboard:statut_ok:></option>
+				<option value="erreur"[ (#ENV{statut}|=={erreur}|oui)selected="selected"]><:dashboard:statut_erreur:></option>
+			</select>
+		</div>
+
+		<div class="editer">
+			<label for="filtre_operation"><:dashboard:label_filtre_operation:></label>
+			<select name="operation" id="filtre_operation">
+				<option value=""><:dashboard:filtre_toutes:></option>
+				<BOUCLE_choix_operations(DATA){source table, #VAL|dashboard_journal_operations}>
+				<option value="[(#VALEUR|entites_html)]"[ (#ENV{operation}|=={#VALEUR}|oui)selected="selected"]>[(#VALEUR|dashboard_libelle_operation)]</option>
+				</BOUCLE_choix_operations>
+			</select>
+		</div>
+
+		<div class="editer">
+			<label for="filtre_jours"><:dashboard:label_filtre_jours:></label>
+			<select name="jours" id="filtre_jours">
+				<option value=""><:dashboard:filtre_depuis_toujours:></option>
+				<option value="1"[ (#ENV{jours}|=={1}|oui)selected="selected"]><:dashboard:filtre_depuis_1:></option>
+				<option value="7"[ (#ENV{jours}|=={7}|oui)selected="selected"]><:dashboard:filtre_depuis_7:></option>
+				<option value="30"[ (#ENV{jours}|=={30}|oui)selected="selected"]><:dashboard:filtre_depuis_30:></option>
+			</select>
+		</div>
+
+		<div class="editer">
+			<label for="filtre_auteur"><:dashboard:label_filtre_auteur:></label>
+			<select name="id_auteur" id="filtre_auteur">
+				<option value=""><:dashboard:filtre_tous_auteurs:></option>
+				<BOUCLE_choix_auteurs(AUTEURS){statut !=5poubelle}{par nom}>
+				<option value="#ID_AUTEUR"[ (#ENV{id_auteur}|=={#ID_AUTEUR}|oui)selected="selected"]>[(#NOM|couper{40}|entites_html)]</option>
+				</BOUCLE_choix_auteurs>
+			</select>
+		</div>
+
+		<p class="boutons">
+			<input type="submit" class="btn" value="<:dashboard:action_filtrer:>" />
+			<a class="btn btn_secondaire" href="[(#URL_ECRIRE{dashboard_journal})]"><:dashboard:action_filtre_vider:></a>
+		</p>
+	</form>
+</div>
+
+<div class="dashboard-fiche" id="journal">
+	<B_journal>
+	<h2>[(#VAL{dashboard:titre_journal_resultats}|_T{#ARRAY{nb,#TOTAL_BOUCLE}})]</h2>
+	<table class="spip liste">
+		<thead><tr>
+			<th scope="col"><:dashboard:col_date:></th>
+			<th scope="col"><:dashboard:col_site:></th>
+			<th scope="col"><:dashboard:col_operation:></th>
+			<th scope="col"><:dashboard:col_statut:></th>
+			<th scope="col"><:dashboard:col_auteur:></th>
+			<th scope="col"><:dashboard:col_message:></th>
+		</tr></thead>
+		<tbody>
+		<BOUCLE_journal(DASHBOARD_JOURNAL)
+			{id_dashboard_site ?IN #GET{sites}}
+			{statut ?IN #GET{statuts}}
+			{operation ?IN #GET{operations}}
+			{id_auteur ?IN #GET{auteurs}}
+			{date > #GET{depuis}}
+			{par date}{inverse}{pagination 50}>
+			<tr class="dashboard-journal-#STATUT">
+				<td>[(#DATE|affdate_heure)]</td>
+				<td>
+					[(#REM)
+						Ce qui suit `</BOUCLE_x>` n'est pas la suite du
+						squelette : jusqu'au `<//B_x>`, c'est ce que SPIP rend
+						quand la boucle n'a rien trouvé. Un site effacé depuis
+						laisse ses lignes de journal derrière lui — la purge
+						les emporte, pas la suppression.
+					]
+					<BOUCLE_site_ligne(DASHBOARD_SITES){id_dashboard_site}>
+					<a href="[(#URL_ECRIRE{dashboard_site,id_dashboard_site=#ID_DASHBOARD_SITE})]">[(#TITRE|couper{40}|entites_html)]</a>
+					</BOUCLE_site_ligne>
+					<em><:dashboard:site_supprime:></em>
+					<//B_site_ligne>
+				</td>
+				<td>[(#OPERATION|dashboard_libelle_operation)]</td>
+				<td>#STATUT</td>
+				<td>
+					<BOUCLE_auteur_ligne(AUTEURS){id_auteur}>[(#NOM|couper{30}|entites_html)]</BOUCLE_auteur_ligne>
+					&mdash;
+					<//B_auteur_ligne>
+				</td>
+				<td>[(#MESSAGE|couper{200})]</td>
+			</tr>
+		</BOUCLE_journal>
+		</tbody>
+	</table>
+	[<nav class="pagination" role="navigation">(#PAGINATION{page_precedent_suivant})</nav>]
+	</B_journal>
+	<h2><:dashboard:titre_journal_parc:></h2>
+	<p class="petition"><:dashboard:journal_parc_vide:></p>
+	<//B_journal>
+
+	[(#REM)
+		La rétention se dit, sinon la purge d'entretien se confond avec un
+		trou : on cherche une panne là où il n'y a qu'un ménage.
+
+		Le libellé se compose en PHP parce que le décompte vient d'une
+		fonction : une chaîne de langue à argument ne se calcule pas dans un
+		SET, et y glisser une balise à accolades ajoute un niveau que
+		l'analyse ne suit plus. Le détail est dans CLAUDE.md — on ne l'écrit
+		pas ici, un commentaire de squelette étant compilé comme le reste.
+	]
+	<p class="explication">[(#VAL|dashboard_journal_retention_libelle)]</p>
+</div>
+]

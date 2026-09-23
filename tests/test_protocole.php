@@ -2029,6 +2029,60 @@ verifier('un titre démesuré est coupé',
 verifier('un titre ordinaire passe tel quel',
 	dashboard_alerte_nom('Mairie de Saint-Étienne') === 'Mairie de Saint-Étienne');
 
+echo "\n== Journal du parc : demandé mais vide n'est pas « rien demandé » ==\n";
+
+/*
+ * Le défaut que ce contrôle garde, trouvé par le parcours d'intégration et non
+ * par la lecture : le critère `?IN` **retire la condition** quand son tableau
+ * est vide. Un filtre dont aucune valeur ne survit — un site qu'on n'a pas le
+ * droit de voir, un statut inventé — n'affichait donc pas « rien », mais
+ * *tout*. Exactement l'inverse de ce qu'on veut, et invisible : une liste
+ * complète a l'air d'une liste non filtrée.
+ *
+ * La sentinelle ne correspond à rien, et la liste ressort vide comme elle le
+ * doit. C'est une fonction pure : elle n'avait aucune raison d'attendre un
+ * navigateur pour se vérifier.
+ */
+verifier('rien demandé : aucun filtre', dashboard_journal_liste('') === []);
+verifier('rien demandé, tableau vide : aucun filtre', dashboard_journal_liste([]) === []);
+verifier('une valeur permise passe', dashboard_journal_liste('ok', ['ok', 'erreur']) === ['ok']);
+verifier('deux valeurs permises passent',
+	dashboard_journal_liste('ok,erreur', ['ok', 'erreur']) === ['ok', 'erreur']);
+verifier('une valeur interdite ne rend pas la liste vide',
+	dashboard_journal_liste('bidon', ['ok', 'erreur']) === ['__aucun__'],
+	implode(',', dashboard_journal_liste('bidon', ['ok', 'erreur'])));
+verifier('une valeur permise et une interdite : seule la permise',
+	dashboard_journal_liste('ok,bidon', ['ok', 'erreur']) === ['ok']);
+verifier('les doublons sont réduits',
+	dashboard_journal_liste('ok,ok,ok', ['ok']) === ['ok']);
+
+verifier('un statut inventé ne montre pas tout',
+	dashboard_journal_statuts('inconnu') === ['__aucun__']);
+verifier('un statut valide filtre', dashboard_journal_statuts('erreur') === ['erreur']);
+verifier('aucun statut demandé : aucun filtre', dashboard_journal_statuts('') === []);
+
+verifier('un auteur inexploitable ne montre pas tout',
+	dashboard_journal_auteurs('zéro') === [0], implode(',', dashboard_journal_auteurs('zéro')));
+verifier('un auteur valide filtre', dashboard_journal_auteurs('12') === [12]);
+verifier('aucun auteur demandé : aucun filtre', dashboard_journal_auteurs('') === []);
+verifier('un auteur négatif ne montre pas tout', dashboard_journal_auteurs('-3') === [0]);
+
+/* La période : une chaîne vide ne doit pas devenir un plancher, sans quoi la
+   page n'afficherait plus rien du tout. */
+/* Le plancher est **toujours** posé : le critère de période est
+   inconditionnel, faute de quoi sa condition testerait une variable que l'URL
+   ne porte pas et le filtre ne jouerait jamais. */
+verifier('aucune période demandée : plancher à l’époque zéro',
+	dashboard_journal_depuis('') === '1970-01-01 00:00:00');
+verifier('une période illisible retombe sur l’époque zéro',
+	dashboard_journal_depuis('avant-hier peut-être') === '1970-01-01 00:00:00');
+$plancher = dashboard_journal_depuis('7');
+verifier('sept jours donnent une date',
+	(bool) preg_match('/^\d{4}-\d{2}-\d{2} /', $plancher), $plancher);
+verifier('et cette date est bien dans le passé', strtotime($plancher) < time());
+verifier('une période démesurée est bornée',
+	strtotime(dashboard_journal_depuis('99999')) > (time() - (3651 * 86400)));
+
 echo "\n----------------------------------------\n";
 echo ($total - $echecs) . " / $total vérifications passées\n";
 
