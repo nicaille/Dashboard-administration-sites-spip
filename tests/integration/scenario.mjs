@@ -2248,7 +2248,7 @@ console.log('\n### Journal du parc');
 		corps.slice(0, 200));
 
 	/* Le formulaire de filtres, et ses cinq champs. */
-	for (const champ of ['sites[]', 'statut', 'operation', 'jours', 'auteur']) {
+	for (const champ of ['id_dashboard_site[]', 'statut', 'operation', 'jours', 'id_auteur']) {
 		dit(`le filtre « ${champ} » est présent`,
 			(await page.locator(`[name="${champ}"]`).count()) === 1);
 	}
