@@ -1186,7 +1186,15 @@ function dashboard_journal_sites($choix = '') {
 		}
 	}
 
-	return array_values(array_unique($retenus));
+	$retenus = array_values(array_unique($retenus));
+
+	// Voir `dashboard_journal_liste()` : demandé mais vide doit rendre une
+	// liste vide, pas le parc entier. Zéro ne désigne aucun site.
+	if (!$retenus && $demandes) {
+		return [0];
+	}
+
+	return $retenus;
 }
 
 /**
@@ -1261,7 +1269,7 @@ function dashboard_journal_operations($rien = '') {
  * @param array $permises Valeurs acceptées ; toutes si le tableau est vide
  * @return array
  */
-function dashboard_journal_liste($choix, $permises = []) {
+function dashboard_journal_liste($choix, $permises = [], $sentinelle = '__aucun__') {
 	if (is_array($choix)) {
 		$demandes = $choix;
 	} else {
@@ -1280,7 +1288,22 @@ function dashboard_journal_liste($choix, $permises = []) {
 		$retenus[] = $valeur;
 	}
 
-	return array_values(array_unique($retenus));
+	$retenus = array_values(array_unique($retenus));
+
+	// **Demandé mais vide n'est pas « rien demandé ».** Un tableau vide retire
+	// la condition `?IN`, donc afficherait *tout* — l'inverse exact de ce qu'on
+	// veut quand l'utilisateur a nommé des sites qu'il n'a pas le droit de
+	// voir, ou une valeur qui n'existe pas. La sentinelle ne correspond à
+	// rien, et la liste ressort vide comme elle le doit.
+	//
+	// Trouvé par le parcours d'intégration : `?sites[]=99999` rendait
+	// cinquante lignes. Rien sur la page ne le disait — une liste complète a
+	// exactement l'air d'une liste non filtrée.
+	if (!$retenus && $demandes) {
+		return [$sentinelle];
+	}
+
+	return $retenus;
 }
 
 /**
@@ -1313,11 +1336,19 @@ function dashboard_journal_filtre_operations($choix = '') {
  * @return array
  */
 function dashboard_journal_auteurs($choix = '') {
+	$demandes = dashboard_journal_liste($choix, [], '0');
+
 	$retenus = [];
-	foreach (dashboard_journal_liste($choix) as $valeur) {
+	foreach ($demandes as $valeur) {
 		if (ctype_digit((string) $valeur) && (int) $valeur > 0) {
 			$retenus[] = (int) $valeur;
 		}
+	}
+
+	// Même règle : un auteur demandé mais inexploitable ne doit pas ouvrir le
+	// journal en grand.
+	if (!$retenus && $demandes) {
+		return [0];
 	}
 
 	return $retenus;
