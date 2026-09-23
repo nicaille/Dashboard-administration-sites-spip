@@ -22,6 +22,9 @@
  *
  *     php cron.php [--duree=120] [--tours=20] [--taches=a,b] [--verbeux]
  *
+ * Là où la tâche planifiée n'accepte qu'un chemin — OVH mutualisé —, les
+ * mêmes options se posent dans un `cron.conf` voisin. Voir `cron_reglages()`.
+ *
  * `--duree` borne le temps total en secondes, `--tours` le nombre d'appels à
  * `cron()` — les deux, parce qu'un tour qui ne trouve rien à faire ne coûte
  * rien et que le temps ne le bornerait donc pas. Le script s'arrête de
@@ -54,7 +57,7 @@ if (PHP_SAPI !== 'cli') {
 	exit(1);
 }
 
-$options = cron_options($argv ?? []);
+$options = cron_options(array_merge(cron_reglages(__FILE__), $argv ?? []));
 
 $racine = cron_racine(__DIR__);
 if ($racine === '') {
@@ -128,7 +131,6 @@ if ($forcees) {
 // mille en vingt-cinq secondes lors du premier essai. Le nombre de tours borne
 // ce que le temps ne borne pas.
 while (time() < $echeance && $tours < $options['tours']) {
-	$tours++;
 
 	// La file compare les dates des travaux à `$_SERVER['REQUEST_TIME']`, et
 	// non à `time()`. Posée une fois pour toutes à l'amorçage, cette « heure »
@@ -139,20 +141,47 @@ while (time() < $echeance && $tours < $options['tours']) {
 	// web la question ne se pose pas : un hit, une requête, une heure.
 	$_SERVER['REQUEST_TIME'] = time();
 
-	$attente = queue_sleep_time_to_next_job(true);
+	$prochain = cron_prochain();
+	$attente  = ($prochain === null) ? null : ($prochain - time());
 
-	// `null` n'est pas « rien à faire » : c'est « je ne sais pas », le fichier
-	// d'échéance n'ayant pas encore été écrit. On va voir plutôt que de
-	// conclure — et `null > 0` étant faux, s'en remettre au test suffirait
-	// à passer outre sans l'avoir décidé.
-	//
-	// Quand des tâches sont forcées, la question ne se pose pas : on les
-	// rejoue quoi que dise l'échéance, c'est tout l'objet de `--taches`.
-	if (!$forcees && $attente !== null && $attente > 0) {
-		cron_dire($options, 'rien à faire, prochain travail dans ' . $attente . ' s');
+	// On redit à SPIP ce que la base vient de nous apprendre : sa statique
+	// ment dans un processus qui dure, et `queue_schedule()` s'en sert pour
+	// décider si elle daigne travailler. Sans cette injection, la file sortait
+	// sans rien faire alors que des travaux étaient échus — cinquante tours en
+	// sept secondes, et pas un seul génie exécuté.
+	if ($prochain !== null) {
+		queue_sleep_time_to_next_job($prochain);
+	}
+
+	// `null` : aucune tâche planifiée du tout. Cela n'arrive que sur un SPIP
+	// sans génie — il n'y a alors rien à attendre, et rien à faire.
+	if (!$forcees && $attente === null) {
+		cron_dire($options, 'aucune tâche planifiée');
 		break;
 	}
 
+	// Quand des tâches sont forcées, l'échéance ne nous concerne pas : on les
+	// rejoue quoi qu'elle dise, c'est tout l'objet de `--taches`.
+	if (!$forcees && $attente > 0) {
+		$reste = $echeance - time();
+
+		// **On attend, au lieu de rendre la main.** C'est à cela que sert une
+		// durée : le script sortait en annonçant « prochain travail dans 120 s »
+		// alors qu'il lui restait cinq minutes de budget, et ne faisait plus
+		// rien de l'heure. Sur un hébergeur qui ne déclenche qu'une fois par
+		// heure, une tâche déclarée toutes les deux minutes n'y passait donc
+		// qu'une seule fois, quand le budget en permettait plusieurs.
+		if ($attente < $reste - 1) {
+			cron_dire($options, 'prochain travail dans ' . $attente . ' s, on patiente');
+			sleep($attente + 1);
+			continue;
+		}
+
+		cron_dire($options, 'rien à faire avant ' . $attente . ' s, au-delà du budget');
+		break;
+	}
+
+	$tours++;
 	cron_dire($options, 'tour ' . $tours . ' (attente ' . var_export($attente, true) . ')');
 
 	// Un génie tiers qui explose ne doit pas emporter les nôtres. SPIP réinsère
@@ -187,6 +216,92 @@ cron_dire($options, $tours . ' tour(s) en ' . (time() - $depart) . ' s');
 // remonter dans son rapport. Un cron muet qui échoue tous les jours est pire
 // que pas de cron du tout.
 exit($interrompus ? 1 : 0);
+
+/**
+ * Dans combien de secondes le prochain travail planifié ?
+ *
+ * On interroge la base plutôt que `queue_sleep_time_to_next_job()`, et ce
+ * n'est pas de la défiance : **cette fonction-là ment dans un processus qui
+ * dure.** `queue_update_next_job_time()` garde la date du prochain travail
+ * dans une statique (`static $next`) qu'elle ne recalcule que si elle est
+ * nulle, puis la réécrit dans son fichier d'échéance. Sous le web la question
+ * ne se pose pas — un processus par requête, donc une statique neuve à chaque
+ * fois. Dans une boucle en ligne de commande, elle gèle à sa première valeur,
+ * qui devient une date passée, et la file se déclare « en retard » pour
+ * toujours.
+ *
+ * Observé en vrai : vingt tours en une seconde, sans un seul travail échu.
+ * C'est la même famille que l'heure figée de `$_SERVER['REQUEST_TIME']`.
+ *
+ * `queue_schedule()` s'en sert aussi pour un test d'entrée — elle sort sans
+ * rien faire quand la statique annonce un travail futur. Il ne suffit donc pas
+ * de lire la vérité en base pour soi : il faut la **redire à SPIP** avant
+ * chaque appel, sans quoi la file se croit à jour et ne travaille pas.
+ *
+ * @return int|null Horodatage absolu du prochain travail, null si rien n'est planifié
+ */
+function cron_prochain() {
+	include_spip('inc/queue');
+	include_spip('base/abstract_sql');
+
+	$date = sql_getfetsel(
+		'date',
+		'spip_jobs',
+		'status=' . intval(_JQ_SCHEDULED),
+		'',
+		'date',
+		'0,1'
+	);
+
+	if (!$date) {
+		return null;
+	}
+
+	return strtotime($date);
+}
+
+/**
+ * Lit les réglages d'un fichier voisin, pour les hébergeurs sans arguments.
+ *
+ * Certaines tâches planifiées n'acceptent **qu'un chemin de fichier** — celles
+ * des hébergements mutualisés d'OVH, notamment. Impossible d'y écrire
+ * `cron.php --duree=300` : la ligne ne prend que `www/cron.php`.
+ *
+ * On lit donc les mêmes options dans un fichier portant le nom du script suivi
+ * de `.conf`. Pour un `cron.php` posé à la racine, ce sera `cron.conf` à côté :
+ *
+ *     # une option par ligne, le tiret double est facultatif
+ *     duree=300
+ *     tours=200
+ *
+ * Ce que la ligne de commande passe l'emporte, quand les deux existent : un
+ * essai à la main ne doit pas être contredit par un fichier oublié là.
+ *
+ * Le fichier ne contient que des durées et des noms de tâches — rien qui doive
+ * rester secret, ce qui compte puisqu'il vit dans l'espace web.
+ *
+ * @param string $script Chemin du script courant
+ * @return array Arguments, au format de la ligne de commande
+ */
+function cron_reglages($script) {
+	$fichier = preg_replace('/\.php$/i', '', (string) $script) . '.conf';
+	if (!is_readable($fichier)) {
+		return [];
+	}
+
+	$arguments = [];
+	foreach (file($fichier, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $ligne) {
+		$ligne = trim($ligne);
+		// Les commentaires et les lignes vides, pour qu'un fichier de réglages
+		// puisse s'expliquer lui-même.
+		if ($ligne === '' || $ligne[0] === '#' || $ligne[0] === ';') {
+			continue;
+		}
+		$arguments[] = (strpos($ligne, '--') === 0) ? $ligne : ('--' . $ligne);
+	}
+
+	return $arguments;
+}
 
 /**
  * Lit les options de la ligne de commande.

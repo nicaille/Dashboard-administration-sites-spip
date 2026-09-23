@@ -2,7 +2,7 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.34`,
+`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.35`,
 `plugins/tourdecontrole_agent-1.0.24`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
@@ -782,6 +782,30 @@ Trois défauts trouvés en l'éprouvant sur un SPIP 4.4 réel, aucun deviné :
 `_DIRECT_CRON_FORCE` se pose **sous garde** : SPIP la définit lui-même quand
 la file déborde.
 
+### La file de travaux ment dans un processus qui dure
+
+Deux statiques, et la même cause que l'heure figée : SPIP suppose un processus
+par requête.
+
+`queue_update_next_job_time()` garde la date du prochain travail dans un
+`static $next` qu'elle ne recalcule que s'il est nul, puis la réécrit dans son
+fichier d'échéance. Dans une boucle en ligne de commande, elle gèle à sa
+première valeur, qui devient une date passée : la file se déclare « en retard »
+indéfiniment. Observé en vrai — cinquante tours en sept secondes, sans un seul
+travail échu.
+
+Et le remède naïf — lire l'échéance en base pour soi — **ne suffit pas** :
+`queue_schedule()` consulte la même statique pour un test d'entrée, et sort
+sans rien faire quand elle annonce un travail futur. Il faut donc lire la
+vérité en base **et la redire à SPIP** par
+`queue_sleep_time_to_next_job($horodatage)`, dont l'argument non booléen écrit
+la statique. Sans cette injection, le script tournait en rond pendant que le
+génie qu'il croyait lancer n'était jamais appelé.
+
+Comment on l'a su, plutôt que deviné : le génie replanifie son propre travail à
++120 s quand il a tourné. Relire la date en base après le passage dit donc, sans
+ambiguïté, s'il a été exécuté.
+
 ### Un hébergeur qui ne descend pas sous l'heure
 
 Une seule tâche en souffre, `dashboard_chantiers`, déclarée à deux minutes —
@@ -794,9 +818,15 @@ deux minutes rendait l'attente positive. Le budget `--duree` n'était jamais
 consommé — soixante secondes de chantier par heure, puis cinquante-neuf
 minutes de sommeil.
 
-D'où `--taches`, qui force les tâches nommées à chaque tour sans regarder leur
-échéance. `cron($taches)` les met en file **dès que possible**
-(`inc_genie_dist()`), ce qui est exactement le levier cherché.
+La bonne réponse n'est pas de forcer, c'est **d'attendre** : si l'échéance tient
+dans le budget restant, le script dort jusqu'à elle au lieu de sortir. Avec
+cinq minutes de budget et une tâche à deux minutes, un déclenchement horaire
+donne trois passages au lieu d'un — et sans aucun argument, ce qui compte chez
+un hébergeur dont la tâche planifiée n'accepte qu'un chemin de fichier. Les
+options se posent alors dans un `<script>.conf` voisin.
+
+`--taches` reste, pour marteler une tâche précise : `cron($taches)` la met en
+file **dès que possible** (`inc_genie_dist()`).
 
 Deux choses apprises en l'éprouvant :
 

@@ -1,0 +1,38 @@
+# Réglages du cron en ligne de commande.
+#
+# À copier à côté de cron.php, en le renommant d'après lui : pour un
+# « cron.php » posé à la racine, ce fichier s'appelle « cron.conf ».
+# Pour un « cron-spip.php », ce sera « cron-spip.conf ».
+#
+# Il n'existe que pour les hébergeurs dont la tâche planifiée n'accepte
+# qu'un chemin de fichier, sans arguments — OVH mutualisé, notamment.
+# Partout ailleurs, la ligne de commande suffit, et l'emporte sur ce
+# fichier quand les deux existent.
+#
+# Une option par ligne. Le tiret double est facultatif.
+
+# Temps total accordé au passage, en secondes.
+#
+# C'est le réglage qui compte quand l'hébergeur ne déclenche qu'une fois
+# par heure : le script attend l'échéance du prochain travail tant qu'elle
+# tient dans ce budget, au lieu de rendre la main. Une tâche déclarée
+# toutes les deux minutes passe ainsi deux fois dans un budget de cinq
+# minutes, au lieu d'une seule.
+#
+# À choisir plus court que ce que l'hébergeur accorde à une tâche
+# planifiée : s'il la tue, son rapport le dira.
+duree=300
+
+# Nombre maximal d'appels à la file. Le temps ne borne pas un tour qui ne
+# trouve rien à faire, d'où cette seconde borne.
+tours=200
+
+# Décommenter pour que le passage raconte ce qu'il fait, sur la sortie
+# d'erreur. Utile une fois, à l'installation ; à recommenter ensuite si
+# l'hébergeur poste les rapports par courriel.
+# verbeux
+
+# Tâches à rejouer à chaque tour sans attendre leur échéance. Rarement
+# nécessaire depuis que le script sait patienter ; à réserver aux tâches
+# courtes et sans effet quand il n'y a rien à faire.
+# taches=dashboard_chantiers
