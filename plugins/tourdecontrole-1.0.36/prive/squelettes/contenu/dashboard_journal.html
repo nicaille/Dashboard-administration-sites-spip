@@ -24,27 +24,34 @@
 [(#VAL|dashboard_tables_presentes|oui)
 
 [(#REM)
-	Tous les filtres passent par `?IN` et un tableau calculé en PHP, y compris
-	ceux qui n'acceptent qu'une valeur. Deux raisons, et la seconde est la
-	vraie :
+	**Les paramètres d'URL portent le nom des colonnes, et ce n'est pas un
+	choix de style.** Le `?` de `{champ ?IN …}` ne teste pas la valeur qu'on
+	lui passe : il teste la variable d'environnement **portant le nom du
+	champ**. Le squelette compilé le dit sans ambiguïté :
 
-	- `{champ = #GET{x} ?}` ne rend rien facultatif — le `?` est pris pour un
-	  caractère de la valeur. Le `?` d'un critère se place **avant
-	  l'opérateur** : `{champ ?IN …}` ;
-	- le critère facultatif simple — `{statut ?}` — lit **le contexte**, où
-	  `statut`, `operation` ou `id_auteur` peuvent déjà valoir quelque chose
-	  sans qu'aucun lien ne l'ait demandé. La page filtrerait sur une valeur
-	  qu'on n'a pas posée, et rien ne le dirait.
+	    ($Pile[0]['id_dashboard_site'] ?? null) ? sql_in(…, $in) : ''
 
-	Et `?IN` exige un vrai tableau : une chaîne « 3,7 » y compterait pour un
-	seul identifiant (`critere_IN_cas()`, la branche `is_array()`), et la
-	boucle ne rendrait rien — sans erreur ni message. Un tableau vide, lui,
-	retire la condition : « aucun filtre » n'est qu'un cas particulier.
+	Avec une URL en `sites[]`, la condition regardait donc `id_dashboard_site`,
+	ne le trouvait pas, et **retirait le filtre** : la page rendait le parc
+	entier. Sans erreur, sans message — une liste complète a exactement l'air
+	d'une liste non filtrée. Trois filtres sur cinq étaient morts ainsi.
+
+	Deux autres exigences de `?IN`, aussi silencieuses :
+
+	- il veut un **vrai tableau**. Une chaîne « 3,7 » y compte pour un seul
+	  identifiant (`critere_IN_cas()`, la branche `is_array()`) ;
+	- un tableau **vide** retire la condition. « Aucun filtre » est donc le
+	  tableau vide, et « filtre sans résultat possible » une sentinelle qui ne
+	  correspond à rien — sans quoi demander un site interdit montrerait tout.
+
+	La période ne peut pas suivre cette voie : sa condition testerait `date`,
+	que l'URL ne porte pas. Son critère est donc **inconditionnel**, et le
+	plancher vaut l'époque zéro quand aucune période n'est demandée.
 ]
-#SET{sites,#ENV{sites}|dashboard_journal_sites}
+#SET{sites,#ENV{id_dashboard_site}|dashboard_journal_sites}
 #SET{statuts,#ENV{statut}|dashboard_journal_statuts}
 #SET{operations,#ENV{operation}|dashboard_journal_filtre_operations}
-#SET{auteurs,#ENV{auteur}|dashboard_journal_auteurs}
+#SET{auteurs,#ENV{id_auteur}|dashboard_journal_auteurs}
 #SET{depuis,#ENV{jours}|dashboard_journal_depuis}
 
 <div class="dashboard-fiche" id="filtres">
@@ -66,7 +73,7 @@
 
 		<div class="editer">
 			<label for="filtre_sites"><:dashboard:label_filtre_sites:></label>
-			<select name="sites[]" id="filtre_sites" multiple="multiple" size="6">
+			<select name="id_dashboard_site[]" id="filtre_sites" multiple="multiple" size="6">
 				<BOUCLE_choix_sites(DASHBOARD_SITES){statut != poubelle}{par titre}>
 				[(#AUTORISER{voir,dashboard_site,#ID_DASHBOARD_SITE})
 				<option value="#ID_DASHBOARD_SITE"[ (#ID_DASHBOARD_SITE|in_any{#GET{sites}}|oui)selected="selected"]>[(#TITRE|couper{60}|entites_html)]</option>
@@ -107,10 +114,10 @@
 
 		<div class="editer">
 			<label for="filtre_auteur"><:dashboard:label_filtre_auteur:></label>
-			<select name="auteur" id="filtre_auteur">
+			<select name="id_auteur" id="filtre_auteur">
 				<option value=""><:dashboard:filtre_tous_auteurs:></option>
 				<BOUCLE_choix_auteurs(AUTEURS){statut !=5poubelle}{par nom}>
-				<option value="#ID_AUTEUR"[ (#ENV{auteur}|=={#ID_AUTEUR}|oui)selected="selected"]>[(#NOM|couper{40}|entites_html)]</option>
+				<option value="#ID_AUTEUR"[ (#ENV{id_auteur}|=={#ID_AUTEUR}|oui)selected="selected"]>[(#NOM|couper{40}|entites_html)]</option>
 				</BOUCLE_choix_auteurs>
 			</select>
 		</div>
@@ -140,7 +147,7 @@
 			{statut ?IN #GET{statuts}}
 			{operation ?IN #GET{operations}}
 			{id_auteur ?IN #GET{auteurs}}
-			{date ?> #GET{depuis}}
+			{date > #GET{depuis}}
 			{par date}{inverse}{pagination 50}>
 			<tr class="dashboard-journal-#STATUT">
 				<td>[(#DATE|affdate_heure)]</td>

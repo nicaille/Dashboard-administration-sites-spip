@@ -2069,9 +2069,13 @@ verifier('un auteur négatif ne montre pas tout', dashboard_journal_auteurs('-3'
 
 /* La période : une chaîne vide ne doit pas devenir un plancher, sans quoi la
    page n'afficherait plus rien du tout. */
-verifier('aucune période demandée : pas de plancher', dashboard_journal_depuis('') === '');
-verifier('une période illisible ne pose pas de plancher',
-	dashboard_journal_depuis('avant-hier peut-être') === '');
+/* Le plancher est **toujours** posé : le critère de période est
+   inconditionnel, faute de quoi sa condition testerait une variable que l'URL
+   ne porte pas et le filtre ne jouerait jamais. */
+verifier('aucune période demandée : plancher à l’époque zéro',
+	dashboard_journal_depuis('') === '1970-01-01 00:00:00');
+verifier('une période illisible retombe sur l’époque zéro',
+	dashboard_journal_depuis('avant-hier peut-être') === '1970-01-01 00:00:00');
 $plancher = dashboard_journal_depuis('7');
 verifier('sept jours donnent une date',
 	(bool) preg_match('/^\d{4}-\d{2}-\d{2} /', $plancher), $plancher);

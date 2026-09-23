@@ -1200,17 +1200,28 @@ function dashboard_journal_sites($choix = '') {
 /**
  * La date plancher du filtre, au format que SQL comprend.
  *
- * Rend une chaîne vide quand aucune période n'est demandée : le critère
- * facultatif la laisse alors tomber.
+ * Toujours une date, jamais une chaîne vide : voir ci-dessous.
  *
  * @filtre
  * @param string $choix Nombre de jours, ou date
  * @return string
  */
 function dashboard_journal_depuis($choix = '') {
+	// Le critère de période est **inconditionnel**. Sa forme conditionnelle
+	// testerait la variable d'environnement `date`, que l'URL ne porte pas :
+	// la condition serait retirée et le filtre ne jouerait jamais. On pose
+	// donc toujours un plancher, et l'époque zéro quand rien n'est demandé.
+	//
+	// Et l'on n'écrit pas ici la syntaxe de cette forme conditionnelle : la
+	// séquence qui ferme une balise PHP ferme aussi un commentaire `//`, et
+	// tout ce qui suit sort du code. C'est ce qui vient d'arriver — accolade
+	// jamais refermée, « Unclosed '{' » signalé quatre-vingts lignes plus
+	// bas, sur une fonction sans rapport.
+	$plancher = '1970-01-01 00:00:00';
+
 	$choix = trim((string) $choix);
 	if ($choix === '') {
-		return '';
+		return $plancher;
 	}
 
 	// Un nombre de jours — la forme qu'emploient les liens de la page.
@@ -1224,7 +1235,7 @@ function dashboard_journal_depuis($choix = '') {
 	// pas : un plancher mal compris masquerait des lignes sans le dire.
 	$horodatage = strtotime($choix);
 
-	return $horodatage ? date('Y-m-d H:i:s', $horodatage) : '';
+	return $horodatage ? date('Y-m-d H:i:s', $horodatage) : $plancher;
 }
 
 /**

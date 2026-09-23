@@ -2270,47 +2270,73 @@ console.log('\n### Journal du parc');
 	dit('le fil d’Ariane remonte au parc', /parc|dashboard|contr/i.test(chemin), chemin.slice(0, 80));
 }
 
-console.log('\n### Journal du parc : les filtres filtrent vraiment');
+console.log('\n### Journal du parc : chaque filtre porte vraiment');
 
-/* Un filtre qui ne filtre rien passerait inaperçu : la page s'afficherait, la
-   liste aussi. On compare donc des décomptes, et on force une ligne en erreur
-   pour que les deux ensembles diffèrent à coup sûr. */
+/* Un filtre ignoré ne se voit pas : la page s'affiche, la liste aussi. Pire,
+   un contrôle « ce filtre rend des lignes » passe au vert alors que le filtre
+   est mort — il rend *toutes* les lignes.
+
+   La seule direction qui discrimine est l'inverse : une valeur qui ne peut
+   rien désigner doit rendre **zéro** ligne. Un filtre mort en rendrait
+   cinquante. C'est ainsi qu'on a découvert que le `?` de `{champ ?IN …}` teste
+   la variable d'environnement portant le nom du **champ**, et non la valeur
+   qu'on lui passe : avec une URL en `sites[]`, la condition cherchait
+   `id_dashboard_site`, ne le trouvait pas, et retirait le filtre. Trois
+   filtres sur cinq étaient morts ainsi. */
 {
 	sqlEcrire(`INSERT INTO spip_dashboard_journal (id_dashboard_site, id_auteur, operation, statut, message, detail, duree, date)
 	           VALUES (1, 1, 'sync', 'erreur', 'panne de démonstration', '', 12, datetime('now'))`);
 
-	await page.goto(base + '/ecrire/?exec=dashboard_journal', { waitUntil: 'domcontentloaded' });
-	const tout = await page.locator('#journal table.spip tbody tr').count();
+	const compter = async (params) => {
+		await page.goto(base + '/ecrire/?exec=dashboard_journal' + params, { waitUntil: 'domcontentloaded' });
+		return page.locator('#journal table.spip tbody tr').count();
+	};
 
-	await page.goto(base + '/ecrire/?exec=dashboard_journal&statut=erreur', { waitUntil: 'domcontentloaded' });
-	const erreursSeules = await page.locator('#journal table.spip tbody tr').count();
-	dit('filtrer sur les erreurs réduit la liste', erreursSeules >= 1 && erreursSeules < tout,
+	const tout = await compter('');
+	dit('sans filtre, le journal liste des opérations', tout >= 2, `${tout} ligne(s)`);
+
+	/* Pour chacun des cinq filtres : une valeur impossible doit tout écarter.
+	   C'est le contrôle qui a manqué, et celui qui coûte le moins cher. */
+	const impossibles = [
+		['site inconnu', '&id_dashboard_site[]=99999'],
+		['statut inventé', '&statut=nimportequoi'],
+		['opération inconnue', '&operation=nimportequoi'],
+		['auteur inconnu', '&id_auteur=99999'],
+	];
+	for (const [quoi, params] of impossibles) {
+		const n = await compter(params);
+		dit(`un ${quoi} ne rend aucune ligne`, n === 0, `${n} ligne(s) sur ${tout}`);
+	}
+
+	/* Et dans l'autre sens : une valeur qui existe doit rendre quelque chose,
+	   sans quoi le filtre serait simplement cassé dans l'autre direction. */
+	const possibles = [
+		['site connu', '&id_dashboard_site[]=1'],
+		['statut erreur', '&statut=erreur'],
+		['opération sync', '&operation=sync'],
+	];
+	for (const [quoi, params] of possibles) {
+		const n = await compter(params);
+		dit(`un ${quoi} rend des lignes`, n >= 1, `${n} ligne(s)`);
+	}
+
+	/* Le statut doit en outre *réduire* : s'il rend autant que sans filtre,
+	   c'est qu'il ne porte pas. Le journal contient des lignes « ok » et la
+	   ligne en erreur qu'on vient d'insérer. */
+	const erreursSeules = await compter('&statut=erreur');
+	dit('filtrer sur les erreurs réduit la liste', erreursSeules < tout,
 		`${erreursSeules} sur ${tout}`);
 
-	/* Le cas qui casse en silence : un identifiant de site passé en chaîne.
-	   Avec un tableau, la boucle rend les lignes du site ; avec une chaîne,
-	   elle n'en rend aucune — et la page reste parfaitement normale. */
-	await page.goto(base + '/ecrire/?exec=dashboard_journal&sites[]=1', { waitUntil: 'domcontentloaded' });
-	const unSite = await page.locator('#journal table.spip tbody tr').count();
-	dit('filtrer sur un site rend bien ses lignes', unSite >= 1, `${unSite} ligne(s)`);
+	/* La période : le critère est inconditionnel, donc son plancher doit
+	   mordre. Une fenêtre d'un jour garde ce qu'on vient d'insérer ; la même
+	   requête ne doit pas rendre davantage que sans filtre. */
+	const recent = await compter('&jours=1');
+	dit('la fenêtre d’un jour rend des lignes', recent >= 1, `${recent} ligne(s)`);
+	dit('et n’en invente pas', recent <= tout, `${recent} sur ${tout}`);
 
-	/* Un site qui n'existe pas ne doit rien rendre — preuve que le filtre
-	   porte, et non qu'il est ignoré. */
-	await page.goto(base + '/ecrire/?exec=dashboard_journal&sites[]=99999', { waitUntil: 'domcontentloaded' });
-	const inexistant = await page.locator('#journal table.spip tbody tr').count();
-	dit('filtrer sur un site inconnu ne rend rien', inexistant === 0, `${inexistant} ligne(s)`);
-
-	/* Une période qui exclut tout, puis une qui inclut tout : c'est le critère
-	   `?>` sur une date, dont le `?` doit précéder l'opérateur. */
-	await page.goto(base + '/ecrire/?exec=dashboard_journal&jours=1', { waitUntil: 'domcontentloaded' });
-	const recent = await page.locator('#journal table.spip tbody tr').count();
-	dit('filtrer sur les 24 dernières heures rend des lignes', recent >= 1, `${recent} ligne(s)`);
-
-	/* Et le filtre d'opération, sur une valeur qu'on sait présente. */
-	await page.goto(base + '/ecrire/?exec=dashboard_journal&operation=sync', { waitUntil: 'domcontentloaded' });
-	const parOperation = await page.locator('#journal table.spip tbody tr').count();
-	dit('filtrer sur une opération rend des lignes', parOperation >= 1, `${parOperation} ligne(s)`);
-	dit('et en écarte d’autres', parOperation <= tout, `${parOperation} sur ${tout}`);
+	/* Deux filtres à la fois : ils doivent se cumuler, pas s'annuler. */
+	const croise = await compter('&statut=erreur&id_dashboard_site[]=99999');
+	dit('deux filtres se cumulent', croise === 0, `${croise} ligne(s)`);
 }
 
 console.log('\n' + (echecs ? `=== ${echecs} ÉCHEC(S) ===` : '=== PARCOURS COMPLET SANS ERREUR ==='));
