@@ -2,7 +2,7 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.33`,
+`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.34`,
 `plugins/tourdecontrole_agent-1.0.24`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
@@ -781,6 +781,39 @@ Trois défauts trouvés en l'éprouvant sur un SPIP 4.4 réel, aucun deviné :
 
 `_DIRECT_CRON_FORCE` se pose **sous garde** : SPIP la définit lui-même quand
 la file déborde.
+
+### Un hébergeur qui ne descend pas sous l'heure
+
+Une seule tâche en souffre, `dashboard_chantiers`, déclarée à deux minutes —
+le filet qui reprend une mise à jour abandonnée pendant que le site géré est à
+mi-chemin. Les trois autres sont à six ou vingt-quatre heures.
+
+Mais le retard horaire n'était pas le pire : **le script sortait de sa boucle**
+dès que la file annonçait n'avoir plus rien d'échu, et la tâche replanifiée à
+deux minutes rendait l'attente positive. Le budget `--duree` n'était jamais
+consommé — soixante secondes de chantier par heure, puis cinquante-neuf
+minutes de sommeil.
+
+D'où `--taches`, qui force les tâches nommées à chaque tour sans regarder leur
+échéance. `cron($taches)` les met en file **dès que possible**
+(`inc_genie_dist()`), ce qui est exactement le levier cherché.
+
+Deux choses apprises en l'éprouvant :
+
+- **un nom sans `genie/<nom>.php` tue le passage.** La file appelle
+  `charger_fonction($nom, 'genie', false)`, dont le troisième argument à faux
+  veut dire « meurs si tu ne trouves pas » : SPIP rend sa page d'erreur HTML
+  sur la sortie standard, que l'hébergeur poste par courriel, et aucune tâche
+  suivante ne passe. Le script vérifie donc d'abord avec le même appel en mode
+  tolérant, et ignore un nom inconnu en le disant ;
+- **une tâche forcée qui n'a rien à faire rend la main tout de suite**, et
+  consommerait les tours prévus dans la seconde. Une pause d'une seconde entre
+  deux tours forcés rend au budget de temps son sens — et elle ne s'applique
+  qu'aux tours forcés, un tour immédiat sans forçage signifiant qu'il reste du
+  travail échu.
+
+La mesure, sur un SPIP réel, est ce qui tranche : vingt tours forcés, vingt
+passages du génie ; sans l'option, deux tours et aucun passage.
 
 ## Le serveur intégré de PHP n'est pas exempt d'opcache
 

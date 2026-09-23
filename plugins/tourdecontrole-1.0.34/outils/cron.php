@@ -20,13 +20,25 @@
  *
  * Usage :
  *
- *     php cron.php [--duree=120] [--tours=20] [--verbeux]
+ *     php cron.php [--duree=120] [--tours=20] [--taches=a,b] [--verbeux]
  *
  * `--duree` borne le temps total en secondes, `--tours` le nombre d'appels à
  * `cron()` — les deux, parce qu'un tour qui ne trouve rien à faire ne coûte
  * rien et que le temps ne le bornerait donc pas. Le script s'arrête de
  * lui-même dès que la file annonce n'avoir plus rien d'échu. Choisir une durée
  * plus courte que ce que l'hébergeur accorde à une tâche planifiée.
+ *
+ * `--taches` **force** les tâches nommées à chaque tour, au lieu d'attendre
+ * leur échéance. C'est la réponse à un hébergeur qui ne descend pas sous
+ * l'heure — OVH mutualisé, notamment. Une tâche déclarée toutes les deux
+ * minutes n'y passerait qu'une fois par heure : la forcer permet à un seul
+ * déclenchement horaire de la rejouer pendant toute la durée accordée.
+ *
+ *     php cron.php --duree=300 --taches=dashboard_chantiers
+ *
+ * À réserver aux tâches qu'on sait courtes et sans effet quand il n'y a rien
+ * à faire. `dashboard_chantiers` est le cas d'espèce : elle rend la main
+ * aussitôt tant qu'aucune mise à jour n'a été laissée en plan.
  *
  * Le fichier vit dans l'espace web — une tâche planifiée d'hébergeur ne sait
  * exécuter que ce qui s'y trouve. Il refuse donc tout autre SAPI que la ligne
@@ -84,6 +96,33 @@ $echeance = $depart + $options['duree'];
 $tours = 0;
 $interrompus = 0;
 
+// Les tâches forcées, au format qu'attend `cron()` : nom => période. La
+// période ne sert qu'à composer l'argument « date du dernier passage » donné
+// au génie ; nos tâches l'ignorent, mais la clef doit exister.
+//
+// Un nom sans `genie/<nom>.php` derrière lui **tue le passage** : la file
+// appelle `charger_fonction($nom, 'genie', false)`, dont le troisième argument
+// à faux veut dire « meurs si tu ne trouves pas ». SPIP rend alors sa page
+// d'erreur HTML sur la sortie standard — que l'hébergeur poste par courriel —
+// et aucune des tâches suivantes ne passe. On vérifie donc d'abord, avec le
+// même appel mais en mode tolérant.
+$forcees = [];
+foreach ($options['taches'] as $tache) {
+	if (!charger_fonction($tache, 'genie', true)) {
+		fwrite(STDERR, '[cron] tâche inconnue, ignorée : ' . $tache
+			. " (aucun genie/$tache.php)\n");
+		continue;
+	}
+	$forcees[$tache] = 60;
+}
+
+if ($options['taches'] && !$forcees) {
+	fwrite(STDERR, "[cron] aucune des tâches demandées n'existe : rien à forcer.\n");
+}
+if ($forcees) {
+	cron_dire($options, 'tâches forcées : ' . implode(', ', array_keys($forcees)));
+}
+
 // Deux bornes, et non une seule. Le temps ne suffit pas : un tour qui ne trouve
 // rien à faire coûte une milliseconde, et la boucle en a enchaîné soixante-huit
 // mille en vingt-cinq secondes lors du premier essai. Le nombre de tours borne
@@ -106,7 +145,10 @@ while (time() < $echeance && $tours < $options['tours']) {
 	// d'échéance n'ayant pas encore été écrit. On va voir plutôt que de
 	// conclure — et `null > 0` étant faux, s'en remettre au test suffirait
 	// à passer outre sans l'avoir décidé.
-	if ($attente !== null && $attente > 0) {
+	//
+	// Quand des tâches sont forcées, la question ne se pose pas : on les
+	// rejoue quoi que dise l'échéance, c'est tout l'objet de `--taches`.
+	if (!$forcees && $attente !== null && $attente > 0) {
 		cron_dire($options, 'rien à faire, prochain travail dans ' . $attente . ' s');
 		break;
 	}
@@ -120,12 +162,22 @@ while (time() < $echeance && $tours < $options['tours']) {
 	// dès le premier essai — le génie de SVP a levé une `ValueError` sur un
 	// catalogue injoignable, et sans cette reprise la synchronisation du parc
 	// n'aurait jamais eu lieu.
+	$avant = time();
 	try {
-		cron();
+		cron($forcees);
 	} catch (Throwable $e) {
 		fwrite(STDERR, '[cron] travail interrompu : ' . get_class($e) . ' — '
 			. $e->getMessage() . ' (' . $e->getFile() . ':' . $e->getLine() . ")\n");
 		$interrompus++;
+	}
+
+	// Une tâche forcée qui n'a rien à faire rend la main tout de suite : sans
+	// cette pause, les tours prévus seraient tous consommés dans la seconde et
+	// le budget de temps ne servirait à rien. On ne dort pas au-delà de
+	// l'échéance, et jamais sans tâche forcée — là, un tour immédiat signifie
+	// qu'il reste du travail échu.
+	if ($forcees && (time() - $avant) < 1 && time() < ($echeance - 1)) {
+		sleep(1);
 	}
 }
 
@@ -140,16 +192,24 @@ exit($interrompus ? 1 : 0);
  * Lit les options de la ligne de commande.
  *
  * @param array $argv
- * @return array{duree: int, tours: int, verbeux: bool}
+ * @return array{duree: int, tours: int, taches: array, verbeux: bool}
  */
 function cron_options($argv) {
-	$options = ['duree' => 120, 'tours' => 20, 'verbeux' => false];
+	$options = ['duree' => 120, 'tours' => 20, 'taches' => [], 'verbeux' => false];
 
 	foreach ($argv as $argument) {
 		if (preg_match('/^--duree=(\d+)$/', (string) $argument, $m)) {
 			$options['duree'] = max(1, (int) $m[1]);
 		} elseif (preg_match('/^--tours=(\d+)$/', (string) $argument, $m)) {
 			$options['tours'] = max(1, (int) $m[1]);
+		} elseif (preg_match('/^--taches=(.+)$/', (string) $argument, $m)) {
+			// Des noms de génies, rien d'autre : ce qui est passé ici finit en
+			// nom de fonction appelée par la file.
+			foreach (preg_split('/[\s,]+/', $m[1], -1, PREG_SPLIT_NO_EMPTY) as $tache) {
+				if (preg_match('/^[a-z0-9_]+$/i', $tache)) {
+					$options['taches'][] = $tache;
+				}
+			}
 		} elseif ((string) $argument === '--verbeux') {
 			$options['verbeux'] = true;
 		}
