@@ -61,6 +61,37 @@ Réglages dans *Configuration → Dashboard : configuration* :
 Les alertes et les notifications du navigateur se règlent au même endroit ;
 voir [Exploitation](exploitation.md#être-prévenu-sans-venir-regarder).
 
+### Les notifications passent derrière un htpasswd
+
+Un site d'administration n'a aucun public, et le couvrir d'un `htpasswd` est
+une bonne idée. La question se posait pour les notifications : le service
+worker est servi par une adresse **non signée**, que le navigateur revient
+chercher tout seul longtemps après la visite qui l'a enregistrée. Le htpasswd
+est fondé sur un chemin — on ne peut pas exempter une adresse qui ne se
+distingue que par sa chaîne de requête —, la protection couvre donc forcément
+cette adresse.
+
+Mesuré plutôt que supposé, sur un SPIP réel placé derrière une authentification
+HTTP :
+
+- **l'enregistrement passe.** Il part d'une page de l'espace privé où l'on
+  vient de s'authentifier, et sa requête porte l'en-tête `Authorization` ;
+- **la mise à jour passe** tant que le navigateur connaît les identifiants ;
+- **un 401 sur cette adresse ne détruit rien.** La mise à jour échoue, mais
+  l'enregistrement et le service worker actif survivent — c'est le point qui
+  décidait de tout ;
+- **les identifiants revenus, la mise à jour repasse.** Le navigateur temporise
+  quelques secondes après un échec avant de redemander quoi que ce soit : une
+  mesure prise trop tôt ne mesure que cette temporisation ;
+- **la réception d'une notification ne touche pas le site.** Une poussée livrée
+  pendant que l'adresse rendait 401 a bien atteint le service worker, sans
+  qu'une seule requête n'arrive au serveur. C'est attendu — une poussée va du
+  service de distribution au navigateur —, mais cela ne se supposait pas.
+
+Rien à faire, donc, et rien à changer dans le plugin. Reste une gêne d'usage :
+suivre une notification ouvre l'espace privé, et la boîte de dialogue du
+htpasswd s'interpose si le navigateur a oublié les identifiants.
+
 ## 2. Chaque site géré
 
 Même chose pour l'agent, et le dépôt y gagne encore : c'est le plugin qu'on
