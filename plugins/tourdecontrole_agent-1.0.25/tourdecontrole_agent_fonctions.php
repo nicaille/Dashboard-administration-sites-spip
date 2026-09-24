@@ -23,9 +23,24 @@ function dashagent_tables_presentes($rien = '') {
 	static $presentes = null;
 
 	if ($presentes === null) {
+		// La liste est celle que le plugin déclare, jamais une liste écrite
+		// ici : une liste à la main ne suit pas les tables qu'on ajoute, et
+		// rien ne le signale. Celle de la tour de contrôle en était restée à
+		// quatre sur sept, et une base amputée passait pour saine.
+		include_spip('base/tourdecontrole_agent_tables');
+
+		$attendues = function_exists('tourdecontrole_agent_descriptions_tables')
+			? array_keys(tourdecontrole_agent_descriptions_tables())
+			: [];
+
 		$liste = sql_alltable('%');
 		$liste = is_array($liste) ? array_flip($liste) : [];
-		$presentes = isset($liste['spip_dashagent_journal']) && isset($liste['spip_dashagent_nonces']);
+
+		// Sans déclaration lisible, on ne conclut pas à l'absence.
+		$presentes = true;
+		foreach ($attendues as $table) {
+			$presentes = $presentes && isset($liste[$table]);
+		}
 	}
 
 	return $presentes;

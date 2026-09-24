@@ -125,6 +125,18 @@ function dashboard_api_optionnelle_manquantes($rien = '') {
  * tables aient été créées. Plutôt que de laisser les boucles échouer sur une
  * erreur SQL brute, les pages testent d'abord ce point et expliquent quoi faire.
  *
+ * **La liste est celle que le plugin déclare, jamais une liste écrite ici.**
+ * Elle en portait une, arrêtée à quatre tables quand le plugin en compte sept :
+ * `chantiers`, `waf_jours` et `push` manquaient à l'appel. Une base amputée de
+ * l'une des trois passait donc pour saine — les pages s'affichaient
+ * normalement, et l'absence ne se manifestait que par une « erreur mysql
+ * 1146 » au fond d'un journal, sans rien pour la relier à une installation
+ * incomplète. Vu en vrai.
+ *
+ * Une liste de tables écrite à la main est une liste qui ne suit pas : elle ne
+ * se met pas à jour quand une table s'ajoute, et rien ne le signale. Celle des
+ * déclarations est la seule qui ne puisse pas se désynchroniser.
+ *
  * @filtre
  * @return bool
  */
@@ -132,10 +144,19 @@ function dashboard_tables_presentes($rien = '') {
 	static $presentes = null;
 
 	if ($presentes === null) {
+		include_spip('base/tourdecontrole_tables');
+
+		$attendues = function_exists('tourdecontrole_descriptions_tables')
+			? array_keys(tourdecontrole_descriptions_tables())
+			: [];
+
 		$liste = sql_alltable('%');
 		$liste = is_array($liste) ? array_flip($liste) : [];
+
+		// Sans déclaration lisible, on ne conclut pas à l'absence : mieux vaut
+		// laisser les pages s'afficher que les masquer sur une liste vide.
 		$presentes = true;
-		foreach (['spip_dashboard_sites', 'spip_dashboard_plugins', 'spip_dashboard_journal', 'spip_dashboard_sauvegardes'] as $table) {
+		foreach ($attendues as $table) {
 			$presentes = $presentes && isset($liste[$table]);
 		}
 	}

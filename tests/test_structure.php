@@ -352,6 +352,37 @@ foreach ($plugins as $plugin) {
 		strpos($install, ($familles[$prefixe] ?? $prefixe) . '_tables_manquantes(') !== false
 	);
 
+	/* Le garde-fou qui dit « les tables sont là » portait sa propre liste,
+	   écrite à la main et restée à quatre tables quand le plugin en déclare
+	   sept. Une base amputée de l'une des trois oubliées passait donc pour
+	   saine : les pages s'affichaient normalement, et l'absence ne se
+	   manifestait que par une « erreur mysql 1146 » au fond d'un journal.
+
+	   Une liste de tables écrite à la main ne suit pas les tables qu'on
+	   ajoute, et rien ne le signale. On exige donc qu'elle soit dérivée des
+	   déclarations — le seul endroit qui ne puisse pas se désynchroniser. */
+	$famille = $familles[$prefixe] ?? $prefixe;
+	foreach (fichiers($plugin, ['php']) as $fichier) {
+		$source = file_get_contents($fichier);
+		$debut = strpos($source, 'function ' . $famille . '_tables_presentes(');
+		if ($debut === false) {
+			continue;
+		}
+		$corps = substr($source, $debut, 2000);
+		$corps = substr($corps, 0, strpos($corps . "\n}\n", "\n}\n"));
+
+		verifier(
+			"$nom_court : le garde-fou des tables lit les déclarations",
+			strpos($corps, $prefixe . '_descriptions_tables()') !== false
+		);
+		$en_dur = '/\'spip_[a-z0-9_]+\'/';
+		verifier(
+			"$nom_court : le garde-fou des tables n’écrit aucune table en dur",
+			!preg_match($en_dur, $corps),
+			premiere_occurrence($en_dur, $corps)
+		);
+	}
+
 	foreach ($declarees as $table) {
 		verifier("$nom_court : $table supprimée par la désinstallation", strpos($install, "sql_drop_table('$table')") !== false);
 
