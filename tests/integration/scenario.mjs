@@ -1194,6 +1194,80 @@ if (await lienPublic.count()) {
 		/^https?:\/\//.test(href) && !/[()]/.test(href), href || 'vide');
 }
 
+console.log('\n### Le catalogue de la tour, confronté à celui du site');
+
+/* La tour tient son propre catalogue et l'oppose à ce que rapporte chaque site.
+   Ici les deux vivent dans le même SPIP, donc ils s'accordent naturellement :
+   pour éprouver la confrontation, il faut **fabriquer le désaccord**, en posant
+   dans le catalogue de la tour une version que le site ne connaît pas.
+
+   Le contrôle qui compte est le dernier : une version réservée à une autre
+   branche de SPIP ne doit **pas** être annoncée. Sans ce filtrage, on
+   proposerait une mise à jour que le site refuserait — exactement le travers
+   que toute cette fonction corrige. */
+{
+	await bouton(page, 'Synchroniser');
+
+	const avant = JSON.parse(sql(
+		"SELECT prefixe, version, provenance, maj_disponible FROM spip_dashboard_plugins"
+		+ " WHERE id_dashboard_site=1 AND distribue='non' LIMIT 1"));
+
+	if (!avant.length) {
+		dit('un plugin non distribué à confronter', false, 'aucun');
+	} else {
+		const cible = avant[0];
+		dit('la confrontation a tourné', cible.provenance !== '', cible.provenance || 'vide');
+
+		const branche = (JSON.parse(sql(
+			'SELECT version_spip FROM spip_dashboard_sites WHERE id_dashboard_site=1'
+		))[0].version_spip || '').split('.').slice(0, 2).join('.');
+		dit('la branche SPIP du site est connue', /^\d+\.\d+$/.test(branche), branche);
+
+		// Un dépôt et un paquet fabriqués pour l'occasion, dans le catalogue de
+		// la tour seulement. Le site géré, lui, n'en sait rien.
+		sqlEcrire("INSERT INTO spip_depots (titre, xml_paquets, type) VALUES"
+			+ " ('Essai tour', 'https://essai.invalid/depot/plugins.xml', 'http')");
+		const idDepot = JSON.parse(sql(
+			"SELECT id_depot FROM spip_depots WHERE titre='Essai tour'"))[0].id_depot;
+
+		const poser = (version, branches) => {
+			sqlEcrire(`DELETE FROM spip_paquets WHERE id_depot=${idDepot}`);
+			sqlEcrire("INSERT INTO spip_paquets (id_depot, prefixe, version, branches_spip, etat)"
+				+ ` VALUES (${idDepot}, '${cible.prefixe}', '${version}', '${branches}', 'stable')`);
+		};
+
+		// 1. Une version compatible, plus récente : la tour doit trancher.
+		poser('99.9.9', branche);
+		await bouton(page, 'Synchroniser');
+		let apres = JSON.parse(sql(
+			`SELECT version_retenue, provenance, maj_disponible FROM spip_dashboard_plugins`
+			+ ` WHERE id_dashboard_site=1 AND prefixe='${cible.prefixe}'`))[0];
+		dit('la tour impose sa version', apres.version_retenue === '99.9.9', apres.version_retenue);
+		dit('et la provenance le dit', apres.provenance === 'tour', apres.provenance);
+		dit('la mise à jour est annoncée', apres.maj_disponible === 'oui', apres.maj_disponible);
+
+		// 2. La même version, mais réservée à une autre branche de SPIP. Elle
+		//    ne doit plus être annoncée : le site ne saurait pas l'installer.
+		poser('99.9.9', '3.2');
+		await bouton(page, 'Synchroniser');
+		apres = JSON.parse(sql(
+			`SELECT version_retenue, maj_disponible FROM spip_dashboard_plugins`
+			+ ` WHERE id_dashboard_site=1 AND prefixe='${cible.prefixe}'`))[0];
+		dit('une version d’une autre branche n’est pas annoncée',
+			apres.version_retenue !== '99.9.9', apres.version_retenue);
+
+		// 3. Le dépôt d'un site que la tour ne déclare pas doit être listé,
+		//    et le badge de provenance apparaître sur la fiche.
+		sqlEcrire(`DELETE FROM spip_paquets WHERE id_depot=${idDepot}`);
+		sqlEcrire(`DELETE FROM spip_depots WHERE id_depot=${idDepot}`);
+		await bouton(page, 'Synchroniser');
+
+		const corps = await aller(page, '/ecrire/?exec=dashboard');
+		dit('la vue d’ensemble reste saine après confrontation',
+			!/Erreur|zbug|Argument manquant/i.test(corps), corps.slice(0, 160));
+	}
+}
+
 console.log('\n### Onglet SPIP WAF');
 
 // Le plugin n'est pas livré avec ce dépôt : la section ne tourne que si le banc

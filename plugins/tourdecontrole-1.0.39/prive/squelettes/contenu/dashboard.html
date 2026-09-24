@@ -43,7 +43,7 @@
 	l'enregistrement, et échappés ici comme tout ce qui vient de là-bas.
 ]
 #SET{depots_inconnus,#VAL|dashboard_depots_inconnus}
-[(#GET{depots_inconnus}|count|>{0}|oui)
+<B_inconnus>
 <details class="dashboard-fiche" id="depots-inconnus">
 	<summary><strong><:dashboard:depots_inconnus_titre:></strong></summary>
 	<p class="explication"><:dashboard:depots_inconnus_explication:></p>
@@ -57,7 +57,7 @@
 	</BOUCLE_inconnus>
 	</ul>
 </details>
-]
+</B_inconnus>
 
 [(#REM)
 	Sans catalogue, la tour s'en remet entièrement aux sites et ne peut plus
