@@ -17,8 +17,59 @@
 	<li class="dashboard-erreur"><strong>[(#GET{synthese}|table_valeur{en_erreur})]</strong> <:dashboard:synthese_erreurs:></li>
 	<li class="dashboard-attention"><strong>[(#GET{synthese}|table_valeur{core_retard})]</strong> <:dashboard:synthese_core_retard:></li>
 	<li class="dashboard-attention"><strong>[(#GET{synthese}|table_valeur{base_retard})]</strong> <:dashboard:synthese_base_retard:></li>
-	<li class="dashboard-attention"><strong>[(#GET{synthese}|table_valeur{plugins_maj})]</strong> <:dashboard:synthese_plugins_maj:></li>
+	[(#REM)
+		Le total dit la part qu'il doit aux sites eux-mêmes. Un chiffre
+		agrégé sans mention de sa source laisse croire à une source unique,
+		alors qu'il additionne ici deux avis : celui de la tour quand elle
+		en a un, celui du site sinon.
+
+		Le libellé est composé en PHP : quand le nombre vient d'une fonction
+		et non d'un champ de boucle, la chaîne de langue à argument ne
+		s'écrit pas dans le squelette sans y perdre la page.
+	]
+	<li class="dashboard-attention"><strong>[(#GET{synthese}|table_valeur{plugins_maj})]</strong> <:dashboard:synthese_plugins_maj:>[
+		<small>(#VAL|dashboard_maj_rapportees_libelle)</small>]</li>
 </ul>
+
+[(#REM)
+	Les dépôts déclarés sur des sites gérés que la tour ne connaît pas. Elle
+	n'a alors aucun avis sur les plugins qui en viennent, et se contente de
+	rapporter ce que dit le site — ce que le badge de la fiche indique.
+
+	Groupés par dépôt plutôt que répétés site par site : dix sites partageant
+	un dépôt privé ne posent qu'une question, pas dix.
+
+	Titre et adresse viennent des sites gérés : rendus inertes à
+	l'enregistrement, et échappés ici comme tout ce qui vient de là-bas.
+]
+#SET{depots_inconnus,#VAL|dashboard_depots_inconnus}
+<B_inconnus>
+<details class="dashboard-fiche" id="depots-inconnus">
+	<summary><strong><:dashboard:depots_inconnus_titre:></strong></summary>
+	<p class="explication"><:dashboard:depots_inconnus_explication:></p>
+	<ul>
+	<BOUCLE_inconnus(DATA){source table,#GET{depots_inconnus}}>
+		<li>
+			<strong>[(#VALEUR|table_valeur{titre}|entites_html)]</strong>
+			<code>[(#VALEUR|table_valeur{source}|entites_html)]</code>
+			<small>[(#VALEUR|table_valeur{libelle_sites})]</small>
+		</li>
+	</BOUCLE_inconnus>
+	</ul>
+</details>
+</B_inconnus>
+
+[(#REM)
+	Sans catalogue, la tour s'en remet entièrement aux sites et ne peut plus
+	repérer un catalogue de site périmé. On le dit en clair plutôt que de
+	laisser croire à un avis qu'on n'a pas.
+]
+[(#VAL|dashboard_catalogue_present|non)
+<div class="dashboard-fiche dashboard-fiche-alerte" id="catalogue-absent">
+	<h2><:dashboard:catalogue_absent_titre:></h2>
+	<p><:dashboard:catalogue_absent_explication:></p>
+</div>
+]
 
 [(#REM)
 	Tout ce qui se pilote site après site vit dans ce conteneur : le pilote

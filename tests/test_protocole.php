@@ -2083,6 +2083,149 @@ verifier('et cette date est bien dans le passé', strtotime($plancher) < time())
 verifier('une période démesurée est bornée',
 	strtotime(dashboard_journal_depuis('99999')) > (time() - (3651 * 86400)));
 
+echo "\n== Le catalogue de la tour, et la confrontation ==\n";
+
+/* La normalisation d'une adresse de catalogue. SVP ne télécharge pas l'adresse
+   qu'on lui déclare : il en dérive des variantes et retient la première qui
+   répond. Deux sites mémorisent donc deux adresses différentes pour le même
+   dépôt, et les comparer telles quelles déclarerait « inconnus » des dépôts
+   parfaitement connus. */
+$racine = 'https://exemple.org/depot';
+foreach ([
+	'https://exemple.org/depot/plugins.xml',
+	'https://exemple.org/depot/plugins.thin.xml',
+	'https://exemple.org/depot/plugins.thin.spip-4.4.xml',
+	'https://exemple.org/depot/',
+	'https://exemple.org/depot',
+] as $variante) {
+	verifier("variante ramenée à la même racine : $variante",
+		dashboard_catalogue_racine($variante) === $racine,
+		dashboard_catalogue_racine($variante));
+}
+verifier('la casse de l’hôte ne compte pas',
+	dashboard_catalogue_racine('https://EXEMPLE.org/depot/plugins.xml') === $racine);
+verifier('deux dépôts distincts ne se confondent pas',
+	dashboard_catalogue_racine('https://exemple.org/autre/plugins.xml') !== $racine);
+verifier('une adresse illisible ne rend rien',
+	dashboard_catalogue_racine('pas une adresse') === '');
+verifier('une adresse vide ne rend rien', dashboard_catalogue_racine('') === '');
+
+/* SVP stocke ses versions normalisées, remplies de zéros à gauche pour le tri
+   SQL. Les lire telles quelles affichait « 001.000.001 » au webmestre, et
+   faisait reposer toute comparaison sur la tolérance numérique de
+   version_compare() — laquelle marche par chance, pas par construction.
+   Trouvé par le parcours d'intégration, qui a vu la forme normalisée atteindre
+   l'écran. */
+verifier('une version normalisée redevient lisible',
+	dashboard_catalogue_denormaliser('001.000.039') === '1.0.39',
+	dashboard_catalogue_denormaliser('001.000.039'));
+verifier('un zéro reste un zéro',
+	dashboard_catalogue_denormaliser('001.000.000') === '1.0.0',
+	dashboard_catalogue_denormaliser('001.000.000'));
+verifier('un suffixe ne perd pas son zéro',
+	dashboard_catalogue_denormaliser('001.002.000-dev') === '1.2.0-dev',
+	dashboard_catalogue_denormaliser('001.002.000-dev'));
+verifier('une version déjà lisible ne bouge pas',
+	dashboard_catalogue_denormaliser('6.3.6') === '6.3.6');
+verifier('une version vide ne rend rien',
+	dashboard_catalogue_denormaliser('') === '');
+
+/* La branche SPIP d'une version complète. */
+verifier('4.4.23 donne la branche 4.4', dashboard_catalogue_branche('4.4.23') === '4.4');
+verifier('4.1 donne la branche 4.1', dashboard_catalogue_branche('4.1') === '4.1');
+verifier('une version illisible ne donne pas de branche',
+	dashboard_catalogue_branche('inconnue') === '');
+
+/* La compatibilité. Une liste vide vaut « je ne sais pas », et on ne conclut
+   pas à l'incompatibilité : écarter un paquet dont on ignore la compatibilité
+   cacherait une mise à jour qui existe peut-être. */
+verifier('la branche listée est compatible',
+	dashboard_catalogue_compatible('4.0,4.1,4.2', '4.1') === true);
+verifier('une branche absente ne l’est pas',
+	dashboard_catalogue_compatible('4.0,4.1', '4.4') === false);
+verifier('une liste vide ne conclut pas à l’incompatibilité',
+	dashboard_catalogue_compatible('', '4.4') === true);
+verifier('une branche inconnue ne conclut pas non plus',
+	dashboard_catalogue_compatible('4.0,4.1', '') === true);
+
+/* Le filtrage par branche est **le** point critique : sans lui, on annonce une
+   mise à jour que le site refusera, et on retombe sur le travers qu'on
+   corrige. Le contrôle qui l'attrape est celui-ci. */
+$paquets = [
+	['version' => '6.2.1', 'branches' => '4.0,4.1'],
+	['version' => '6.3.6', 'branches' => '4.3,4.4'],
+	['version' => '6.3.0', 'branches' => '4.2,4.3,4.4'],
+];
+verifier('un site en 4.4 se voit proposer la plus récente des compatibles',
+	dashboard_catalogue_version_max($paquets, '4.4') === '6.3.6',
+	dashboard_catalogue_version_max($paquets, '4.4'));
+verifier('un site en 4.1 ne se voit pas proposer une version 4.4',
+	dashboard_catalogue_version_max($paquets, '4.1') === '6.2.1',
+	dashboard_catalogue_version_max($paquets, '4.1'));
+verifier('une branche sans aucun paquet compatible ne rend rien',
+	dashboard_catalogue_version_max($paquets, '3.2') === '');
+verifier('un catalogue vide ne rend rien',
+	dashboard_catalogue_version_max([], '4.4') === '');
+
+/* Le verdict : qui l'emporte, et ce qu'on en dit. */
+$v = dashboard_catalogue_verdict('6.2.0', '6.3.6', '6.2.1');
+verifier('la tour l’emporte quand elle a un avis', $v['version'] === '6.3.6', $v['version']);
+verifier('et la provenance le dit', $v['provenance'] === 'tour', $v['provenance']);
+verifier('la mise à jour est signalée', $v['maj'] === true);
+
+$v = dashboard_catalogue_verdict('6.2.0', '', '6.2.1');
+verifier('sans avis de la tour, celui du site est conservé', $v['version'] === '6.2.1');
+verifier('et sa provenance est dite', $v['provenance'] === 'site', $v['provenance']);
+verifier('la mise à jour reste signalée', $v['maj'] === true);
+
+$v = dashboard_catalogue_verdict('6.3.6', '6.3.6', '6.2.1');
+verifier('à jour selon la tour : aucune mise à jour', $v['maj'] === false);
+
+$v = dashboard_catalogue_verdict('6.2.0', '', '');
+verifier('aucun avis nulle part : pas de provenance', $v['provenance'] === '');
+verifier('et pas de mise à jour annoncée', $v['maj'] === false);
+
+$v = dashboard_catalogue_verdict('4.4.0', '4.4.2', '4.4.2', true);
+verifier('un plugin livré avec le core n’est jamais compté', $v['maj'] === false);
+
+/* La tour dit moins que le site : c'est un catalogue de tour en retard, et il
+   ne doit pas faire disparaître une mise à jour que le site voit. C'est le cas
+   qui distingue « la tour l'emporte » d'une règle prudente. */
+$v = dashboard_catalogue_verdict('6.2.0', '6.2.0', '6.3.6');
+verifier('la tour l’emporte même quand elle dit moins', $v['version'] === '6.2.0', $v['version']);
+verifier('et le décompte suit ce verdict', $v['maj'] === false);
+
+/* Les dépôts inconnus, appariés sur la racine et non sur le titre : le titre
+   est choisi par qui déclare le dépôt. */
+$depots = [
+	['titre' => 'SPIP',  'source' => 'https://plugins.spip.net/plugins.thin.spip-4.4.xml'],
+	['titre' => 'Maison', 'source' => 'https://interne.exemple.org/depot/plugins.xml'],
+];
+$racines = [dashboard_catalogue_racine('https://plugins.spip.net/plugins.xml')];
+$inconnus = dashboard_catalogue_depots_inconnus($depots, $racines);
+verifier('un seul dépôt est inconnu', count($inconnus) === 1, count($inconnus));
+verifier('et c’est le bon', ($inconnus[0]['titre'] ?? '') === 'Maison');
+verifier('une variante d’adresse ne rend pas un dépôt inconnu',
+	count(dashboard_catalogue_depots_inconnus(
+		[['titre' => 'SPIP', 'source' => 'https://plugins.spip.net/plugins.thin.xml']],
+		$racines
+	)) === 0);
+verifier('sans racine connue, tout est inconnu',
+	count(dashboard_catalogue_depots_inconnus($depots, [])) === 2);
+
+/* Le décompte, tel que la synchronisation l'appelle. Un inventaire d'avant la
+   confrontation doit continuer de compter : un décompte qui disparaît serait
+   pire qu'un décompte imparfait. */
+verifier('le décompte suit le verdict quand il existe',
+	dashboard_compter_maj([
+		['maj_disponible' => 'non', 'maj_verdict' => true],
+		['maj_disponible' => 'oui', 'maj_verdict' => false],
+	]) === 1);
+verifier('et retombe sur l’avis du site sinon',
+	dashboard_compter_maj([['maj_disponible' => 'oui']]) === 1);
+verifier('un plugin distribué n’est jamais compté',
+	dashboard_compter_maj([['maj_verdict' => true, 'distribue' => 'oui']]) === 0);
+
 echo "\n----------------------------------------\n";
 echo ($total - $echecs) . " / $total vérifications passées\n";
 

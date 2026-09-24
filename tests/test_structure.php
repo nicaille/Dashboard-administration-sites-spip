@@ -438,16 +438,52 @@ foreach ($plugins as $plugin) {
 		verifier("$nom_court : schema=$schema aligné sur la plus haute étape ($plus_haute)", $schema === $plus_haute);
 	}
 
-	// Marqueur de dernière modification attendu par SPIP sur toute table gérée.
+	/* Marqueur de dernière modification attendu par SPIP sur toute table gérée.
+
+	   La déclaration se lisait sur une fenêtre de trois mille caractères, ce
+	   qui laissait déborder sur la table suivante : une table pouvait passer
+	   au vert en trouvant le « maj » de sa voisine. Et une table déclarée par
+	   un appel de fonction — `$tables['x'] = schema_x();` — n'avait même pas
+	   sa propre déclaration dans la fenêtre. Un contrôle qui trouve la bonne
+	   valeur au mauvais endroit ne vérifie rien.
+
+	   On découpe donc sur la déclaration suivante, et on suit l'appel de
+	   fonction quand il y en a un. */
 	foreach (glob($plugin . '/base/*.php') as $fichier) {
 		$source = file_get_contents($fichier);
 		foreach ($declarees as $table) {
-			$position = strpos($source, "\$tables['$table']");
-			if ($position === false) {
+			if (strpos($source, "\$tables['$table']") === false) {
 				continue;
 			}
-			$suite = substr($source, $position, 3000);
-			verifier("$nom_court : $table porte une colonne maj TIMESTAMP", strpos($suite, "'maj'") !== false);
+
+			/* Une même table est souvent déclarée deux fois : une fois comme
+			   objet éditorial, une fois comme table principale. Seule la
+			   seconde porte les colonnes. On les lit donc toutes, et il suffit
+			   que l'une d'elles convienne. */
+			$porte = false;
+			$depart = 0;
+			while (($position = strpos($source, "\$tables['$table']", $depart)) !== false) {
+				$depart = $position + 1;
+
+				$suite = substr($source, $depart);
+				$fin   = strpos($suite, "\$tables['");
+				$bloc  = $fin === false ? $suite : substr($suite, 0, $fin);
+
+				// Déclarée par une fonction : c'est son corps qu'il faut lire.
+				if (preg_match('/=\s*([a-z_][a-z0-9_]*)\(\s*\)\s*;/i', $bloc, $appel)) {
+					$debut = strpos($source, 'function ' . $appel[1] . '(');
+					if ($debut !== false) {
+						$bloc .= substr($source, $debut, 3000);
+					}
+				}
+
+				if (strpos($bloc, "'maj'") !== false) {
+					$porte = true;
+					break;
+				}
+			}
+
+			verifier("$nom_court : $table porte une colonne maj TIMESTAMP", $porte);
 		}
 	}
 }

@@ -86,6 +86,13 @@ l'index du dépôt**, casse comprise, et à défaut d'index les noms d'usage son
 essayés auprès du serveur avant qu'une mise à jour ne s'engage. Voir
 [docs/exploitation.md](docs/exploitation.md#doù-vient-ladresse-de-larchive).
 
+La tour ne s'en remet pas à ce seul catalogue : depuis la 1.0.39 elle tient le
+sien, le rafraîchit de force, et **confronte les deux avis**. Le décompte du
+parc devient ainsi juste même sur un site dont le catalogue est bloqué, et un
+badge dit quand une version est rapportée par le site faute d'avis de la tour.
+La comparaison se fait par branche SPIP : une version réservée à SPIP 4.4 n'est
+pas proposée à un site en 4.1.
+
 ## Agir sur plusieurs sites à la fois
 
 La vue d'ensemble ne sert pas qu'à regarder. Des cases à cocher désignent une

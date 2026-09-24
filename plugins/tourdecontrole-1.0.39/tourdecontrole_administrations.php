@@ -118,6 +118,13 @@ function tourdecontrole_upgrade($nom_meta_base_version, $version_cible) {
 		['tourdecontrole_creer_tables'],
 	];
 
+	// 1.0.10 : la tour confronte son propre catalogue à celui de chaque site.
+	// Deux colonnes de plus sur l'inventaire des plugins, sans reprise de
+	// données : la prochaine synchronisation les remplit.
+	$maj['1.0.10'] = [
+		['tourdecontrole_creer_tables'],
+	];
+
 	include_spip('base/upgrade');
 	maj_plugin($nom_meta_base_version, $version_cible, $maj);
 }

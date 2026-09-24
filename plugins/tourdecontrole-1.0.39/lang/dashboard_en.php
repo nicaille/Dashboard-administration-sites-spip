@@ -75,6 +75,8 @@ $lang = [
 	'base_maj_texte' => 'This site’s files expect a database migration. Until it is applied, SPIP keeps the managed site’s private area behind its upgrade page.',
 	'bilan_explication' => 'This report clears itself after an hour; the journal below keeps the record.',
 	'col_actions'    => 'Actions',
+	'catalogue_absent_explication' => 'Without a catalogue it relies entirely on what each site reports, and cannot spot a stale site catalogue. Declaring a repository under <i>Configuration → Plugins → Repositories</i> gives it that opinion. The official address is <code>https://plugins.spip.net/plugins.xml</code>.',
+	'catalogue_absent_titre' => 'The control tower has no catalogue',
 	'col_auteur' => 'By',
 	'col_cache'      => 'Cache',
 	'col_composant'  => 'Component',
@@ -108,6 +110,9 @@ $lang = [
 	// D
 	'depots_avertissement' => 'the available versions shown may be stale',
 	'depots_heures' => '@n@ hour(s) ago',
+	'depots_inconnus_explication' => 'These repositories are declared on managed sites, but not here. For plugins coming from them, the control tower has no opinion: it reports what the site says. Declaring them here would let it decide for itself.',
+	'depots_inconnus_sites' => 'Used by: @sites@',
+	'depots_inconnus_titre' => 'Repositories unknown to the control tower',
 	'depots_jamais' => 'never',
 	'depots_jours' => '@n@ day(s) ago',
 	'depots_minutes' => '@n@ minute(s) ago',
@@ -285,6 +290,8 @@ $lang = [
 	'purge_sessions'    => 'Visitor sessions',
 	'purge_squelettes'  => 'Compiled templates',
 	'purge_tout'        => 'All caches',
+	'provenance_site' => 'per the site',
+	'provenance_site_titre' => 'Version reported by the site itself: the control tower does not declare the repository this plugin comes from.',
 	'purge_tout_explication' => 'Pages, templates, computed images and CSS/JS. Sessions are left alone.',
 
 	// S
@@ -311,6 +318,7 @@ $lang = [
 	'synthese_base_retard' => 'database(s) to migrate',
 	'synthese_core_retard' => 'cores to upgrade',
 	'synthese_erreurs'    => 'unreachable',
+	'synthese_dont_sites' => 'of which @nb@ reported by the sites',
 	'synthese_plugins_maj' => 'plugins to upgrade',
 	'synthese_supervises' => 'supervised sites',
 

@@ -110,6 +110,8 @@ async function sansFuite(page, ou) {
 async function aller(page, url, attente = 'domcontentloaded') {
 	await page.goto(base + url, { waitUntil: attente });
 	await sansFuite(page, url.replace(/^\/ecrire\/\?exec=/, '').slice(0, 48));
+
+	return page.locator('body').innerText();
 }
 
 /**
@@ -1192,6 +1194,91 @@ if (await lienPublic.count()) {
 	const href = (await lienPublic.getAttribute('href')) || '';
 	dit('le lien public du parc est une vraie adresse',
 		/^https?:\/\//.test(href) && !/[()]/.test(href), href || 'vide');
+}
+
+console.log('\n### Le catalogue de la tour, confronté à celui du site');
+
+/* La tour tient son propre catalogue et l'oppose à ce que rapporte chaque site.
+   Ici les deux vivent dans le même SPIP, donc ils s'accordent naturellement :
+   pour éprouver la confrontation, il faut **fabriquer le désaccord**, en posant
+   dans le catalogue de la tour une version que le site ne connaît pas.
+
+   Le contrôle qui compte est le dernier : une version réservée à une autre
+   branche de SPIP ne doit **pas** être annoncée. Sans ce filtrage, on
+   proposerait une mise à jour que le site refuserait — exactement le travers
+   que toute cette fonction corrige. */
+{
+	await bouton(page, 'Synchroniser');
+
+	/* On vise un plugin que la tour connaît **réellement**, sans rien
+	   fabriquer : c'est ce qui prouve que la confrontation tourne en marche
+	   normale, et pas seulement quand le contrôle lui pose le décor. Un
+	   plugin dont ni la tour ni le site ne savent rien rendrait une
+	   provenance vide, ce qui ne prouverait pas grand-chose. */
+	const avant = JSON.parse(sql(
+		"SELECT prefixe, version, version_retenue, provenance FROM spip_dashboard_plugins"
+		+ " WHERE id_dashboard_site=1 AND distribue='non' AND provenance='tour' LIMIT 1"));
+
+	if (!avant.length) {
+		dit('un plugin confronté au catalogue de la tour', false, 'aucun');
+	} else {
+		const cible = avant[0];
+		dit('la confrontation tourne sans qu’on la provoque',
+			cible.provenance === 'tour', cible.provenance || 'vide');
+
+		/* SVP stocke ses versions normalisées : « 001.000.039 ». Les afficher
+		   telles quelles est ce que le parcours a attrapé. */
+		dit('la version retenue est lisible',
+			!/^0\d\d\./.test(cible.version_retenue), cible.version_retenue);
+
+		const branche = (JSON.parse(sql(
+			'SELECT version_spip FROM spip_dashboard_sites WHERE id_dashboard_site=1'
+		))[0].version_spip || '').split('.').slice(0, 2).join('.');
+		dit('la branche SPIP du site est connue', /^\d+\.\d+$/.test(branche), branche);
+
+		// Un dépôt et un paquet fabriqués pour l'occasion, dans le catalogue de
+		// la tour seulement. Le site géré, lui, n'en sait rien.
+		sqlEcrire("INSERT INTO spip_depots (titre, xml_paquets, type) VALUES"
+			+ " ('Essai tour', 'https://essai.invalid/depot/plugins.xml', 'http')");
+		const idDepot = JSON.parse(sql(
+			"SELECT id_depot FROM spip_depots WHERE titre='Essai tour'"))[0].id_depot;
+
+		const poser = (version, branches) => {
+			sqlEcrire(`DELETE FROM spip_paquets WHERE id_depot=${idDepot}`);
+			sqlEcrire("INSERT INTO spip_paquets (id_depot, prefixe, version, branches_spip, etat)"
+				+ ` VALUES (${idDepot}, '${cible.prefixe}', '${version}', '${branches}', 'stable')`);
+		};
+
+		// 1. Une version compatible, plus récente : la tour doit trancher.
+		poser('99.9.9', branche);
+		await bouton(page, 'Synchroniser');
+		let apres = JSON.parse(sql(
+			`SELECT version_retenue, provenance, maj_disponible FROM spip_dashboard_plugins`
+			+ ` WHERE id_dashboard_site=1 AND prefixe='${cible.prefixe}'`))[0];
+		dit('la tour impose sa version', apres.version_retenue === '99.9.9', apres.version_retenue);
+		dit('et la provenance le dit', apres.provenance === 'tour', apres.provenance);
+		dit('la mise à jour est annoncée', apres.maj_disponible === 'oui', apres.maj_disponible);
+
+		// 2. La même version, mais réservée à une autre branche de SPIP. Elle
+		//    ne doit plus être annoncée : le site ne saurait pas l'installer.
+		poser('99.9.9', '3.2');
+		await bouton(page, 'Synchroniser');
+		apres = JSON.parse(sql(
+			`SELECT version_retenue, maj_disponible FROM spip_dashboard_plugins`
+			+ ` WHERE id_dashboard_site=1 AND prefixe='${cible.prefixe}'`))[0];
+		dit('une version d’une autre branche n’est pas annoncée',
+			apres.version_retenue !== '99.9.9', apres.version_retenue);
+
+		// 3. Le dépôt d'un site que la tour ne déclare pas doit être listé,
+		//    et le badge de provenance apparaître sur la fiche.
+		sqlEcrire(`DELETE FROM spip_paquets WHERE id_depot=${idDepot}`);
+		sqlEcrire(`DELETE FROM spip_depots WHERE id_depot=${idDepot}`);
+		await bouton(page, 'Synchroniser');
+
+		const corps = await aller(page, '/ecrire/?exec=dashboard');
+		dit('la vue d’ensemble reste saine après confrontation',
+			!/Erreur|zbug|Argument manquant/i.test(corps), corps.slice(0, 160));
+	}
 }
 
 console.log('\n### Onglet SPIP WAF');

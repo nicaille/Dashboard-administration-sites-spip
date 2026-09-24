@@ -12,6 +12,9 @@ if (!defined('_ECRIRE_INC_VERSION')) {
 include_spip('inc/dashboard_client');
 include_spip('inc/dashboard_operations');
 include_spip('inc/dashboard_versions');
+// Les filtres du catalogue vivent dans ce fichier : SPIP ne charge que
+// `<prefixe>_fonctions.php`, et un filtre resté dans un `inc/` est introuvable.
+include_spip('inc/dashboard_catalogue');
 
 /**
  * Fonctions de SPIP dont le plugin dépend, par fichier qui les fournit.

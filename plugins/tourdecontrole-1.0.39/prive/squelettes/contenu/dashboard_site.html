@@ -310,7 +310,23 @@
 				<tr class="[(#MAJ_DISPONIBLE|=={oui}|?{dashboard-ligne-maj,})]">
 					<th scope="row">[(#NOM|dashboard_nom_lisible|sinon{#PREFIXE})] <small><code>[(#PREFIXE|entites_html)]</code></small></th>
 					<td><code>[(#VERSION|entites_html)]</code></td>
-					<td>[<code>(#VERSION_DISPONIBLE|entites_html)</code>]</td>
+					[(#REM)
+						La version retenue après confrontation, et d'où vient
+						cet avis. Quand la tour n'a pas de catalogue pour ce
+						plugin — un dépôt qu'elle ne déclare pas — on garde
+						l'avis du site plutôt que de le jeter, en disant qu'il
+						vient de lui.
+
+						Repli sur la colonne du site pour les inventaires
+						d'avant la confrontation : un chiffre qui disparaît
+						serait pire qu'un chiffre imparfait.
+					]
+					<td>
+						[<code>(#VERSION_RETENUE|sinon{#VERSION_DISPONIBLE}|entites_html)</code>]
+						[(#PROVENANCE|=={site}|oui)
+							<span class="dashboard-provenance" title="<:dashboard:provenance_site_titre|attribut_html:>"><:dashboard:provenance_site:></span>
+						]
+					</td>
 					<td>
 						[(#DISTRIBUE|=={oui}|oui)<em><:dashboard:plugin_distribue:></em>]
 						[(#DISTRIBUE|=={non}|oui)#SOURCE]

@@ -2,7 +2,7 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.38`,
+`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.39`,
 `plugins/tourdecontrole_agent-1.0.25`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
@@ -248,6 +248,58 @@ elle est dérivée elle aussi.
 
 `tests/test_structure.php` refuse désormais tout nom de table écrit en dur dans
 un `*_tables_presentes()`, et exige qu'il lise les déclarations.
+
+## La tour a son propre avis, et le confronte
+
+Tout ce que la tour savait des versions **disponibles** venait du catalogue SVP
+de chaque site géré : autant de caches distants qu'elle a de sites, et la source
+directe du verrou 304 et du parc qui annonce « à jour » ce qui ne l'est pas.
+
+Elle est elle-même un site SPIP muni de SVP. Elle tient donc son catalogue —
+lecture locale de `spip_paquets`, aucun client HTTP à écrire, SVP gérant les
+branches — et **confronte** les deux avis (`inc/dashboard_catalogue.php`). Le
+rafraîchissement distant reste : c'est SVP sur le site géré qui installe.
+
+Ce que ça rapporte n'est pas du réseau, les sites relisant toujours leurs
+catalogues, mais de la justesse.
+
+**SVP stocke ses versions normalisées.** `spip_paquets.version` vaut
+`001.000.039` pour la version 1.0.39, un remplissage à gauche qui sert au tri
+SQL. Lire cette colonne telle quelle affiche `001.000.039` au webmestre, et fait
+reposer toute comparaison sur la tolérance numérique de `version_compare()`, qui
+traite `001` et `1` comme égaux. Ça marche, **par chance et non par
+construction**. Rien dans le code ne dit que cette colonne n'est pas ce qu'elle
+paraît, et les contrôles unitaires passaient tous : ils comparaient des versions
+écrites à la main, sous la forme qu'on croyait bonne. Seul le rendu l'a montré.
+D'où `dashboard_catalogue_denormaliser()`, et le suffixe qui ne doit pas perdre
+son zéro.
+
+**« Disponible » est une propriété par site, pas par plugin.** Saisies 6.3.6
+peut exister sans qu'un site en SPIP 4.1 puisse l'installer. Prendre le numéro
+le plus élevé sans filtrer sur la branche annoncerait une mise à jour que le
+site refusera — le travers même qu'on corrige. C'est le contrôle qui compte le
+plus, et il s'éprouve par mutation : retirer le filtrage fait tomber deux
+vérifications.
+
+**Deux provenances, jamais confondues.** Quand la tour a un avis il l'emporte,
+seul choix qui rende le total juste sur un site au catalogue mort. Sinon on
+garde celui du site avec un badge qui le dit : répondre « je ne sais pas » quand
+le site, lui, sait, serait une perte sèche. Le total du parc mentionne la part
+qu'il doit aux sites, un chiffre agrégé sans sa source laissant croire à une
+source unique.
+
+**Le catalogue de la tour se force** comme ceux des sites gérés, en effaçant la
+copie locale avant d'appeler SVP. Sans cela elle hérite du verrou 304, et un
+catalogue de tour périmé fait mentir **tout le parc d'un coup**.
+
+**L'appariement des dépôts se fait sur le répertoire, pas sur l'adresse
+déclarée** : SVP en dérive des variantes, et deux sites mémorisent deux
+`xml_paquets` différents pour le même dépôt. Comparer les adresses telles
+quelles déclarerait inconnus des dépôts parfaitement connus.
+
+Enfin, un rappel que ce chantier a fait payer : **un filtre laissé dans un
+`inc/` n'existe pas**. SPIP ne charge que `<prefixe>_fonctions.php`, qui doit
+donc inclure le fichier — sans quoi la page tombe sur « Filtre non défini ».
 
 ## Une lecture de meta figée sur un ancien préfixe ne casse rien de visible
 
