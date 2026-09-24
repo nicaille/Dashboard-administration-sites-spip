@@ -76,6 +76,41 @@ function dashboard_catalogue_racine($url) {
 }
 
 /**
+ * Rend à une version SVP sa forme lisible.
+ *
+ * **SVP stocke les versions normalisées** : `spip_paquets.version` vaut
+ * `001.000.039` pour la version 1.0.39, un remplissage à gauche qui sert au
+ * tri SQL. Lire cette colonne telle quelle afficherait `001.000.039` au
+ * webmestre, et ferait reposer toute comparaison sur la tolérance numérique de
+ * `version_compare()` — laquelle marche par chance, pas par construction.
+ *
+ * Trouvé par le parcours d'intégration, qui a vu la version normalisée
+ * atteindre l'écran. Rien, dans la lecture du code, ne disait que cette colonne
+ * n'était pas ce qu'elle a l'air d'être.
+ *
+ * Même règle que `denormaliser_version()` de SVP, réécrite ici pour rester
+ * pure : un suffixe commence toujours par un tiret sur une version normalisée,
+ * et ne doit pas se faire manger son zéro.
+ *
+ * @param string $version
+ * @return string
+ */
+function dashboard_catalogue_denormaliser($version) {
+	$version = trim((string) $version);
+	if ($version === '') {
+		return '';
+	}
+
+	$bouts = [];
+	foreach (explode('.', $version) as $nombre) {
+		$net = ltrim($nombre, '0');
+		$bouts[] = ($net !== '' && substr($net, 0, 1) !== '-') ? $net : '0' . $net;
+	}
+
+	return implode('.', $bouts);
+}
+
+/**
  * La branche SPIP d'un numéro de version complet.
  *
  * « 4.4.23 » vaut la branche « 4.4 ». C'est elle que porte la compatibilité
@@ -264,7 +299,8 @@ function dashboard_catalogue_tour() {
 			continue;
 		}
 		$catalogue[$prefixe][] = [
-			'version'  => (string) ($ligne['version'] ?? ''),
+			// Dénormalisée : la colonne porte un remplissage à gauche.
+			'version'  => dashboard_catalogue_denormaliser($ligne['version'] ?? ''),
 			'branches' => (string) ($ligne['branches_spip'] ?? ''),
 		];
 	}

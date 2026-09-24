@@ -2110,6 +2110,26 @@ verifier('une adresse illisible ne rend rien',
 	dashboard_catalogue_racine('pas une adresse') === '');
 verifier('une adresse vide ne rend rien', dashboard_catalogue_racine('') === '');
 
+/* SVP stocke ses versions normalisées, remplies de zéros à gauche pour le tri
+   SQL. Les lire telles quelles affichait « 001.000.001 » au webmestre, et
+   faisait reposer toute comparaison sur la tolérance numérique de
+   version_compare() — laquelle marche par chance, pas par construction.
+   Trouvé par le parcours d'intégration, qui a vu la forme normalisée atteindre
+   l'écran. */
+verifier('une version normalisée redevient lisible',
+	dashboard_catalogue_denormaliser('001.000.039') === '1.0.39',
+	dashboard_catalogue_denormaliser('001.000.039'));
+verifier('un zéro reste un zéro',
+	dashboard_catalogue_denormaliser('001.000.000') === '1.0.0',
+	dashboard_catalogue_denormaliser('001.000.000'));
+verifier('un suffixe ne perd pas son zéro',
+	dashboard_catalogue_denormaliser('001.002.000-dev') === '1.2.0-dev',
+	dashboard_catalogue_denormaliser('001.002.000-dev'));
+verifier('une version déjà lisible ne bouge pas',
+	dashboard_catalogue_denormaliser('6.3.6') === '6.3.6');
+verifier('une version vide ne rend rien',
+	dashboard_catalogue_denormaliser('') === '');
+
 /* La branche SPIP d'une version complète. */
 verifier('4.4.23 donne la branche 4.4', dashboard_catalogue_branche('4.4.23') === '4.4');
 verifier('4.1 donne la branche 4.1', dashboard_catalogue_branche('4.1') === '4.1');

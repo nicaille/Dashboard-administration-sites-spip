@@ -110,6 +110,8 @@ async function sansFuite(page, ou) {
 async function aller(page, url, attente = 'domcontentloaded') {
 	await page.goto(base + url, { waitUntil: attente });
 	await sansFuite(page, url.replace(/^\/ecrire\/\?exec=/, '').slice(0, 48));
+
+	return page.locator('body').innerText();
 }
 
 /**
@@ -1208,15 +1210,26 @@ console.log('\n### Le catalogue de la tour, confronté à celui du site');
 {
 	await bouton(page, 'Synchroniser');
 
+	/* On vise un plugin que la tour connaît **réellement**, sans rien
+	   fabriquer : c'est ce qui prouve que la confrontation tourne en marche
+	   normale, et pas seulement quand le contrôle lui pose le décor. Un
+	   plugin dont ni la tour ni le site ne savent rien rendrait une
+	   provenance vide, ce qui ne prouverait pas grand-chose. */
 	const avant = JSON.parse(sql(
-		"SELECT prefixe, version, provenance, maj_disponible FROM spip_dashboard_plugins"
-		+ " WHERE id_dashboard_site=1 AND distribue='non' LIMIT 1"));
+		"SELECT prefixe, version, version_retenue, provenance FROM spip_dashboard_plugins"
+		+ " WHERE id_dashboard_site=1 AND distribue='non' AND provenance='tour' LIMIT 1"));
 
 	if (!avant.length) {
-		dit('un plugin non distribué à confronter', false, 'aucun');
+		dit('un plugin confronté au catalogue de la tour', false, 'aucun');
 	} else {
 		const cible = avant[0];
-		dit('la confrontation a tourné', cible.provenance !== '', cible.provenance || 'vide');
+		dit('la confrontation tourne sans qu’on la provoque',
+			cible.provenance === 'tour', cible.provenance || 'vide');
+
+		/* SVP stocke ses versions normalisées : « 001.000.039 ». Les afficher
+		   telles quelles est ce que le parcours a attrapé. */
+		dit('la version retenue est lisible',
+			!/^0\d\d\./.test(cible.version_retenue), cible.version_retenue);
 
 		const branche = (JSON.parse(sql(
 			'SELECT version_spip FROM spip_dashboard_sites WHERE id_dashboard_site=1'
