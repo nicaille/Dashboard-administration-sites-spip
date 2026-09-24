@@ -2,8 +2,8 @@
 
 ## Les dossiers de plugins portent leur version
 
-`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.37`,
-`plugins/tourdecontrole_agent-1.0.24`.
+`plugins/<prefixe>-<version>` : `plugins/tourdecontrole-1.0.38`,
+`plugins/tourdecontrole_agent-1.0.25`.
 
 **À chaque montée de version d'un plugin, renommer son dossier en conséquence**,
 dans le même commit que le changement de `version=` dans son `paquet.xml`. Un
@@ -220,6 +220,34 @@ vérifications, c'est là qu'il faut regarder.
 
 Un underscore dans un préfixe ne pose aucun problème — `porte_plume`, livré avec
 SPIP, en porte un.
+
+## Une liste de tables écrite à la main ne suit pas
+
+`dashboard_tables_presentes()` portait sa propre liste, arrêtée à **quatre
+tables quand le plugin en déclare sept** : `chantiers`, `waf_jours` et `push`
+n'y avaient jamais été ajoutées. Une base amputée de l'une des trois passait
+donc pour saine.
+
+Le pire est dans l'enchaînement. `dashboard_tables_absentes()`, elle, nommait
+correctement la table manquante — mais son message ne s'affiche que dans la
+branche rendue quand `dashboard_tables_presentes()` répond faux. Le diagnostic
+juste existait, et restait inatteignable. Les pages s'affichaient normalement,
+et l'absence ne se manifestait que par une « erreur mysql 1146 » au fond de
+`maj.log`, sans rien pour la relier à une installation incomplète.
+
+Mesuré des deux côtés, table escamotée par un `ALTER TABLE … RENAME` :
+l'ancien garde-fou rend `true`, le nouveau rend `false` et nomme
+`spip_dashboard_push`.
+
+La règle : **la liste est celle que le plugin déclare**, par
+`<prefixe>_descriptions_tables()`, jamais une liste écrite dans la fonction qui
+la consulte. Une liste à la main ne se met pas à jour quand une table s'ajoute,
+et rien ne le signale — c'est la même faute que le test qui perd son sujet.
+L'agent portait la sienne, juste par chance puisqu'il n'a que deux tables ;
+elle est dérivée elle aussi.
+
+`tests/test_structure.php` refuse désormais tout nom de table écrit en dur dans
+un `*_tables_presentes()`, et exige qu'il lise les déclarations.
 
 ## Une lecture de meta figée sur un ancien préfixe ne casse rien de visible
 
