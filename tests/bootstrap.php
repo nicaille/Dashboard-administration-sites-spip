@@ -147,6 +147,9 @@ require_once chemin_plugin('tourdecontrole') . '/inc/dashboard_operations.php';
 require_once chemin_plugin('tourdecontrole') . '/tourdecontrole_fonctions.php';
 /* La synchronisation touche à la base, mais ses règles de décompte sont pures. */
 require_once chemin_plugin('tourdecontrole') . '/inc/dashboard_sync.php';
+/* La confrontation des catalogues : ce qui **décide** y est pur, et c'est
+   justement la partie qu'il faut éprouver. */
+require_once chemin_plugin('tourdecontrole') . '/inc/dashboard_catalogue.php';
 /* Le moteur de chantiers ne touche à la base que dans ses fonctions d'accès :
    la logique d'enchaînement des étapes, elle, est vérifiable telle quelle. */
 require_once chemin_plugin('tourdecontrole') . '/inc/dashboard_chantiers.php';

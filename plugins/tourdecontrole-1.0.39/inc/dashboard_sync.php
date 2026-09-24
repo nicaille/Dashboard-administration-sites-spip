@@ -59,6 +59,13 @@ function dashboard_synchroniser($id_dashboard_site, $options = []) {
 	$version_spip = (string) ($infos['spip']['version'] ?? '');
 	$cible        = dashboard_version_cible($version_spip);
 
+	// Le catalogue de la tour a son mot à dire, et il l'emporte quand il en a
+	// un : c'est ce qui rend le décompte juste sur un site dont le catalogue
+	// est périmé. Chaque plugin repart d'ici avec sa version retenue et la
+	// provenance de cet avis.
+	include_spip('inc/dashboard_catalogue');
+	$plugins = dashboard_catalogue_confronter($plugins, $version_spip);
+
 	$nb_maj = dashboard_compter_maj($plugins);
 
 	sql_updateq('spip_dashboard_sites', [
@@ -170,7 +177,15 @@ function dashboard_compter_maj($plugins) {
 		if (!is_array($plugin)) {
 			continue;
 		}
-		if (!empty($plugin['maj_disponible']) && empty($plugin['distribue'])) {
+		// Le verdict de la confrontation quand il a été posé, l'avis du site
+		// sinon : cette fonction sert aussi aux inventaires d'avant la
+		// confrontation, et un décompte qui disparaît serait pire qu'un
+		// décompte imparfait.
+		$maj = array_key_exists('maj_verdict', $plugin)
+			? !empty($plugin['maj_verdict'])
+			: !empty($plugin['maj_disponible']);
+
+		if ($maj && empty($plugin['distribue'])) {
 			$n++;
 		}
 	}
@@ -203,7 +218,21 @@ function dashboard_enregistrer_plugins($id_dashboard_site, $plugins) {
 			'nom'                => substr((string) ($plugin['nom'] ?? ''), 0, 255),
 			'version'            => substr((string) ($plugin['version'] ?? ''), 0, 64),
 			'version_disponible' => substr((string) ($plugin['version_disponible'] ?? ''), 0, 64),
-			'maj_disponible'     => !empty($plugin['maj_disponible']) ? 'oui' : 'non',
+			// Le verdict de la confrontation, et non plus le seul avis du site :
+			// c'est lui que lisent l'affichage, le bouton de mise à jour et le
+			// décompte. Ce que le site a dit reste dans `version_disponible`,
+			// et `provenance` dit qui a tranché.
+			'maj_disponible'     => (array_key_exists('maj_verdict', $plugin)
+					? !empty($plugin['maj_verdict'])
+					: !empty($plugin['maj_disponible']))
+				? 'oui' : 'non',
+			// La version retenue après confrontation, et d'où vient cet avis.
+			// La provenance est contrainte à deux valeurs connues : elle
+			// traverse un inventaire venu d'un site géré.
+			'version_retenue'       => substr((string) ($plugin['version_retenue'] ?? ''), 0, 64),
+			'provenance'         => in_array(($plugin['provenance'] ?? ''), ['tour', 'site'], true)
+				? (string) $plugin['provenance']
+				: '',
 			'etat'               => substr((string) ($plugin['etat'] ?? ''), 0, 32),
 			'dossier'            => substr((string) ($plugin['dossier'] ?? ''), 0, 255),
 			'source'             => substr((string) ($plugin['source'] ?? ''), 0, 16),

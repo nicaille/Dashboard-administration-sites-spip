@@ -138,6 +138,12 @@ function tourdecontrole_declarer_tables_principales($tables) {
 			'version'             => "varchar(64) DEFAULT '' NOT NULL",
 			'version_disponible'  => "varchar(64) DEFAULT '' NOT NULL",
 			'maj_disponible'      => "varchar(3) DEFAULT 'non' NOT NULL",
+			// La version retenue après confrontation avec le catalogue de la
+			// tour, et la provenance de cet avis : « tour » ou « site ». Un
+			// chiffre sans sa source est un chiffre auquel on ne peut rien
+			// opposer.
+			'version_retenue'     => "varchar(64) DEFAULT '' NOT NULL",
+			'provenance'          => "varchar(8) DEFAULT '' NOT NULL",
 			'etat'                => "varchar(32) DEFAULT '' NOT NULL",
 			'dossier'             => "varchar(255) DEFAULT '' NOT NULL",
 			'source'              => "varchar(16) DEFAULT '' NOT NULL",

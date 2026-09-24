@@ -75,6 +75,8 @@ $lang = [
 	'base_maj_texte' => 'Les fichiers de ce site attendent une migration de leur base de données. Tant qu’elle n’est pas jouée, SPIP bloque l’espace privé du site géré derrière sa page de mise à niveau.',
 	'bilan_explication' => 'Ce compte rendu disparaît de lui-même au bout d’une heure ; le journal, plus bas, en garde la trace.',
 	'col_actions'    => 'Actions',
+	'catalogue_absent_explication' => 'Sans catalogue, elle s’en remet entièrement à ce que rapporte chaque site, et ne peut donc pas repérer un catalogue de site périmé. Déclarer un dépôt dans <i>Configuration → Plugins → Dépôts</i> lui rend cet avis. L’adresse officielle est <code>https://plugins.spip.net/plugins.xml</code>.',
+	'catalogue_absent_titre' => 'La tour de contrôle n’a pas de catalogue',
 	'col_auteur' => 'Par',
 	'col_cache'      => 'Cache',
 	'col_composant'  => 'Composant',
@@ -108,6 +110,9 @@ $lang = [
 	// D
 	'depots_avertissement' => 'les versions disponibles annoncées peuvent être périmées',
 	'depots_heures' => 'il y a @n@ heure(s)',
+	'depots_inconnus_explication' => 'Ces dépôts sont déclarés sur des sites gérés, mais pas ici. Pour les plugins qui en viennent, la tour de contrôle n’a pas d’avis : elle rapporte ce que dit le site. Les déclarer ici lui permettrait de trancher elle-même.',
+	'depots_inconnus_sites' => 'Employé par : @sites@',
+	'depots_inconnus_titre' => 'Dépôts inconnus de la tour de contrôle',
 	'depots_jamais' => 'jamais',
 	'depots_jours' => 'il y a @n@ jour(s)',
 	'depots_minutes' => 'il y a @n@ minute(s)',
@@ -285,6 +290,8 @@ $lang = [
 	'purge_sessions'    => 'Sessions des visiteurs',
 	'purge_squelettes'  => 'Squelettes compilés',
 	'purge_tout'        => 'Tous les caches',
+	'provenance_site' => 'selon le site',
+	'provenance_site_titre' => 'Version rapportée par le site lui-même : la tour de contrôle ne déclare pas le dépôt d’où vient ce plugin.',
 	'purge_tout_explication' => 'Pages, squelettes, images calculées et CSS/JS. Les sessions ne sont pas touchées.',
 
 	// S
@@ -311,6 +318,7 @@ $lang = [
 	'synthese_base_retard' => 'base(s) à migrer',
 	'synthese_core_retard' => 'core à mettre à jour',
 	'synthese_erreurs'    => 'injoignables',
+	'synthese_dont_sites' => 'dont @nb@ rapportée(s) par les sites',
 	'synthese_plugins_maj' => 'plugins à mettre à jour',
 	'synthese_supervises' => 'sites supervisés',
 
