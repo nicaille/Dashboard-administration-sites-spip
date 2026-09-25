@@ -620,6 +620,7 @@ echo "\n== URL des archives SPIP ==\n";
 
 $GLOBALS['dashboard_config_test'] = ['url_archives_spip' => 'https://files.spip.net/spip/archives/'];
 require_once chemin_plugin('tourdecontrole') . '/inc/dashboard_versions.php';
+require_once chemin_plugin('tourdecontrole') . '/inc/dashboard_spip_api.php';
 
 /* L'index tel que le publie files.spip.net : le nom est en minuscules. Le
    déduire d'une convention supposée valait un « HTTP 404 » après la sauvegarde,
@@ -689,6 +690,275 @@ $manuelles = dashboard_versions_manuelles();
 verifier('deux branches lues', count($manuelles) === 2, json_encode($manuelles));
 verifier('branche 4.2 correcte', ($manuelles['4.2'] ?? '') === '4.2.16');
 verifier('ligne invalide ignorée', !isset($manuelles['ligne']));
+
+echo "\n== Annuaire officiel des versions de SPIP ==\n";
+
+/* Les charges réelles servies par spip.net le 25 septembre 2026, abrégées de
+   leurs correctifs incrémentaux. Elles ne sont pas réécrites à la main : c'est
+   tout l'intérêt. Trois contrôles unitaires bâtis sur un format supposé
+   passeraient au vert en n'éprouvant que ma supposition — la faute exacte des
+   versions normalisées de SVP, où trente-neuf vérifications ont validé une
+   forme que personne ne publiait. */
+$api3 = <<<'JSON'
+{"api":3,"versions":{"dev":{"url":"https://files.spip.net/spip/dev/spip-master.zip","php":["8.4","8.5"]},
+"4.4.25":{"url":"https://files.spip.net/spip/archives/spip-v4.4.25.zip","php":["7.4","8.0","8.1","8.2","8.3","8.4","8.5"],
+"ram":134217728,"freespace":157286400,"sha1":"1f9619af10366c61a08b084717a608ad4e2caa44",
+"sha256":"99ba244ddf6a48d7d954dfc30db2cf4b84a2e481e47f5edd4b0c886673e0e281"},
+"4.3.9":{"url":"https://files.spip.net/spip/archives/spip-v4.3.9.zip","php":["7.4","8.0","8.1","8.2","8.3","8.4"],
+"ram":134217728,"freespace":157286400,"sha1":"9ecf05b7c7a9363b4475d1f38cdb56cfd3572c7e"}}}
+JSON;
+
+$api2 = '{"api":2,"versions":{"dev":"spip\/dev\/spip-master.zip","4.4.25":"spip\/archives\/spip-v4.4.25.zip",'
+	. '"4.3.9":"spip\/archives\/spip-v4.3.9.zip","4.2.17":"spip\/archives\/spip-v4.2.17.zip"},'
+	. '"default_branch":"4.4","requirements":{"php":{"master":"8.4.0","4.4":"7.4.0","4.3":"7.4.0","4.2":"7.4.0"}},'
+	. '"digests":{"4.4.25":{"sha1":"1f9619af10366c61a08b084717a608ad4e2caa44"},'
+	. '"4.3.9":{"sha1":"9ecf05b7c7a9363b4475d1f38cdb56cfd3572c7e"},'
+	. '"4.2.17":{"sha1":"05fecbf918f889526e6ab22a86d0ae838b57f83b"}}}';
+
+$api1 = '{"api":1,"versions":{"dev":"spip\/dev\/spip-master.zip","4.4.25":"spip\/archives\/spip-v4.4.25.zip",'
+	. '"4.3.9":"spip\/archives\/spip-v4.3.9.zip"}}';
+
+$lu3 = dashboard_api_analyser($api3);
+verifier('format 3 reconnu', $lu3['api'] === 3, json_encode($lu3['api']));
+verifier('« dev » écarté : on ne propose pas un tronc à un site en production',
+	!isset($lu3['versions']['dev']) && count($lu3['versions']) === 2, implode(', ', array_keys($lu3['versions'])));
+verifier('adresse absolue prise telle quelle',
+	($lu3['versions']['4.4.25']['url'] ?? '') === 'https://files.spip.net/spip/archives/spip-v4.4.25.zip',
+	$lu3['versions']['4.4.25']['url'] ?? '');
+verifier('SHA-256 relevé',
+	($lu3['versions']['4.4.25']['sha256'] ?? '') === '99ba244ddf6a48d7d954dfc30db2cf4b84a2e481e47f5edd4b0c886673e0e281');
+verifier('liste des PHP supportés relevée',
+	($lu3['versions']['4.4.25']['php'] ?? []) === ['7.4', '8.0', '8.1', '8.2', '8.3', '8.4', '8.5'],
+	json_encode($lu3['versions']['4.4.25']['php'] ?? []));
+verifier('une version sans SHA-256 n’en invente pas',
+	($lu3['versions']['4.3.9']['sha256'] ?? 'absent') === '');
+
+$lu2 = dashboard_api_analyser($api2);
+verifier('format 2 reconnu', $lu2['api'] === 2);
+verifier('chemin relatif recollé à la racine des fichiers',
+	($lu2['versions']['4.2.17']['url'] ?? '') === 'https://files.spip.net/spip/archives/spip-v4.2.17.zip',
+	$lu2['versions']['4.2.17']['url'] ?? '');
+verifier('branche par défaut relevée', $lu2['branche_defaut'] === '4.4', $lu2['branche_defaut']);
+verifier('SHA-1 du bloc digests recollé à sa version',
+	($lu2['versions']['4.2.17']['sha1'] ?? '') === '05fecbf918f889526e6ab22a86d0ae838b57f83b');
+verifier('PHP minimal de la branche recollé, faute de liste',
+	($lu2['versions']['4.4.25']['php_mini'] ?? '') === '7.4.0' && ($lu2['versions']['4.4.25']['php'] ?? []) === []);
+
+$lu1 = dashboard_api_analyser($api1);
+verifier('format 1 reconnu et exploitable', $lu1['api'] === 1 && count($lu1['versions']) === 2);
+
+/* Une charge qu'on ne comprend pas ne vaut pas « aucune version » : c'est le
+   silence, et il ne doit jamais se transformer en verdict. */
+verifier('charge illisible : aucun verdict', dashboard_api_analyser('<html>500</html>')['versions'] === []);
+verifier('JSON sans versions : aucun verdict', dashboard_api_analyser('{"api":9}')['versions'] === []);
+verifier('JSON dont aucune version n’est numérotée : aucun verdict',
+	dashboard_api_analyser('{"api":3,"versions":{"dev":{"url":"https://x.test/a.zip"}}}')['versions'] === []);
+verifier('adresse non https refusée',
+	dashboard_api_analyser('{"api":1,"versions":{"4.4.25":"http://ailleurs.test/a.zip"}}')['versions']['4.4.25']['url'] === '');
+verifier('empreinte mal formée écartée',
+	dashboard_api_analyser('{"api":3,"versions":{"4.4.25":{"url":"https://files.spip.net/a.zip","sha256":"pas-une-empreinte"}}}')
+		['versions']['4.4.25']['sha256'] === '');
+
+echo "\n== La fusion des deux formats ==\n";
+
+/* Le piège mesuré : le format 3 n'est pas un surensemble du format 2. Il ignore
+   la branche 4.2, que le 2 publie. Lire le seul format 3 rendrait la tour
+   aveugle sur les sites d'une branche ancienne — ceux dont on veut justement
+   surveiller la fin de vie. */
+verifier('le format 3 ignore une branche que le 2 publie',
+	!isset($lu3['versions']['4.2.17']) && isset($lu2['versions']['4.2.17']));
+
+$fusion = dashboard_api_fusionner($lu3, $lu2);
+verifier('la fusion couvre les trois branches',
+	count($fusion['versions']) === 3, implode(', ', array_keys($fusion['versions'])));
+verifier('la branche que le 3 ignorait est comblée par le 2',
+	isset($fusion['versions']['4.2.17']));
+verifier('là où les deux parlent, le format 3 l’emporte entier',
+	($fusion['versions']['4.4.25']['sha256'] ?? '') !== '' && ($fusion['versions']['4.4.25']['php'] ?? []) !== [],
+	json_encode($fusion['versions']['4.4.25']));
+verifier('la branche par défaut du 2 est conservée', $fusion['branche_defaut'] === '4.4');
+verifier('fusionner avec du vide ne perd rien',
+	count(dashboard_api_fusionner($lu3, [])['versions']) === 2);
+
+echo "\n== « Disponible » est une propriété par site ==\n";
+
+/* La leçon du catalogue des plugins, transposée au core : une version qui existe
+   n'est pas une version installable ici. 4.3.9 ne prend pas PHP 8.5, et
+   l'annoncer à un site qui tourne dessus reviendrait à promettre une opération
+   qui casse le site. */
+verifier('PHP dans la liste : compatible',
+	dashboard_api_php_compatible('8.2.18', $fusion['versions']['4.4.25']));
+verifier('PHP hors liste par le haut : incompatible',
+	!dashboard_api_php_compatible('8.5.1', $fusion['versions']['4.3.9']));
+verifier('PHP hors liste par le bas : incompatible',
+	!dashboard_api_php_compatible('7.3.33', $fusion['versions']['4.4.25']));
+verifier('sans liste, le minimum de branche tranche',
+	dashboard_api_php_compatible('8.0.30', $lu2['versions']['4.4.25'])
+	&& !dashboard_api_php_compatible('7.3.33', $lu2['versions']['4.4.25']));
+verifier('aucune contrainte publiée : on ne refuse pas',
+	dashboard_api_php_compatible('7.3.33', ['php' => [], 'php_mini' => '']));
+verifier('PHP du site inconnu : on ne refuse pas',
+	dashboard_api_php_compatible('', $fusion['versions']['4.4.25']));
+
+echo "\n== L’état du core, quatre valeurs ==\n";
+
+$versions = $fusion['versions'];
+
+$v = dashboard_core_verdict('4.4.23', '8.2.18', $versions);
+verifier('site en retard dans sa branche', $v['etat'] === 'retard' && $v['cible'] === '4.4.25',
+	$v['etat'] . ' / ' . $v['cible']);
+verifier('aucun saut de branche proposé depuis la plus haute', $v['majeure'] === '', $v['majeure']);
+
+$v = dashboard_core_verdict('4.4.25', '8.2.18', $versions);
+verifier('site à jour', $v['etat'] === 'a_jour' && $v['cible'] === '', $v['etat']);
+
+/* Le troisième état, celui qui manquait. Un site sur un PHP trop ancien n'est ni
+   à jour ni en retard : il est bloqué, et le dire est la seule réponse honnête —
+   « à jour » serait faux, et un bouton promettrait une opération qui échoue. */
+$v = dashboard_core_verdict('4.4.20', '7.3.33', $versions);
+verifier('site bloqué par son PHP', $v['etat'] === 'bloque' && $v['cible'] === '4.4.25',
+	$v['etat'] . ' / ' . $v['cible']);
+verifier('le PHP attendu est nommé', strpos($v['php_requis'], '7.4') === 0, $v['php_requis']);
+
+/* Et le quatrième, le plus important : un annuaire vide ne dit rien. C'est très
+   exactement le défaut d'origine — l'unique source répondait 500, la tour
+   concluait « personne en retard », et rien ne le signalait. */
+$v = dashboard_core_verdict('4.4.23', '8.2.18', []);
+verifier('annuaire vide : état inconnu, pas « à jour »', $v['etat'] === 'inconnu' && $v['cible'] === '', $v['etat']);
+verifier('version de site illisible : état inconnu',
+	dashboard_core_verdict('', '8.2.18', $versions)['etat'] === 'inconnu');
+
+/* Le saut de branche est signalé, jamais proposé. */
+$v = dashboard_core_verdict('4.3.9', '8.2.18', $versions);
+verifier('branche à jour et saut de branche signalé',
+	$v['etat'] === 'a_jour' && $v['majeure'] === '4.4.25', $v['etat'] . ' / ' . $v['majeure']);
+$v = dashboard_core_verdict('4.2.16', '8.2.18', $versions);
+verifier('retard dans la branche ancienne, et la majeure à côté',
+	$v['etat'] === 'retard' && $v['cible'] === '4.2.17' && $v['majeure'] === '4.4.25',
+	$v['cible'] . ' / ' . $v['majeure']);
+
+echo "\n== Une version candidate n’est pas une version ==\n";
+
+/* Le critère du core, repris tel quel : le troisième nombre doit être numérique.
+   Le core s'en sert pour ne pas annoncer un saut de branche vers une instable ;
+   on va plus loin et on refuse aussi de la proposer dans la branche installée.
+   Remplacer le noyau de tout un parc par une candidate à la publication n'est
+   pas une décision de tableau de bord. */
+verifier('une version de publication est stable', dashboard_api_stable('4.4.25'));
+verifier('une candidate ne l’est pas', !dashboard_api_stable('4.5.0-rc1'));
+verifier('une beta ne l’est pas', !dashboard_api_stable('4.5.0-beta'));
+verifier('un numéro tronqué ne l’est pas', !dashboard_api_stable('4.4'));
+verifier('un quatrième nombre ne rend pas instable', dashboard_api_stable('4.4.25.1'));
+
+$instables = dashboard_api_analyser('{"api":3,"versions":{'
+	. '"4.4.26":{"url":"https://files.spip.net/spip/archives/spip-v4.4.26.zip"},'
+	. '"4.4.27-rc1":{"url":"https://files.spip.net/spip/archives/spip-v4.4.27-rc1.zip"},'
+	. '"4.5.0-rc1":{"url":"https://files.spip.net/spip/archives/spip-v4.5.0-rc1.zip"}}}');
+verifier('les instables restent dans l’annuaire : c’est le verdict qui trie',
+	count($instables['versions']) === 3, implode(', ', array_keys($instables['versions'])));
+
+$v = dashboard_core_verdict('4.4.25', '8.2.18', $instables['versions']);
+verifier('une candidate de la branche n’est pas proposée',
+	$v['etat'] === 'retard' && $v['cible'] === '4.4.26', $v['etat'] . ' / ' . $v['cible']);
+verifier('et aucune branche instable n’est annoncée', $v['majeure'] === '', $v['majeure']);
+
+$v = dashboard_core_verdict('4.4.26', '8.2.18', $instables['versions']);
+verifier('un site à jour le reste malgré deux candidates',
+	$v['etat'] === 'a_jour' && $v['majeure'] === '', $v['etat'] . ' / ' . $v['majeure']);
+
+echo "\n== Confrontation avec l’avis du site géré ==\n";
+
+/* L'agent remonte ce que le génie du core a écrit dans les metas du site. C'est
+   la seule source qui parle encore quand la tour n'a pas de sortie réseau. */
+verifier('avis du site relevé',
+	dashboard_core_avis_site(['spip' => ['maj_disponible' => '4.4.25']]) === '4.4.25');
+verifier('avis du site absent',
+	dashboard_core_avis_site(['spip' => []]) === '');
+verifier('avis du site non numérique écarté',
+	dashboard_core_avis_site(['spip' => ['maj_disponible' => '<a href="#">4.4</a>']]) === '');
+
+$tour = dashboard_core_verdict('4.4.23', '8.2.18', $versions);
+$c = dashboard_core_confronter($tour, '4.4.24', '4.4.23');
+verifier('quand la tour sait, elle tranche', $c['cible'] === '4.4.25' && $c['provenance'] === 'tour',
+	$c['cible'] . ' / ' . $c['provenance']);
+
+/* Tour muette et site renseigné : on adopte, et on dit d'où ça vient. Répondre
+   « je ne sais pas » alors que le site, lui, sait, serait une perte sèche. */
+$c = dashboard_core_confronter(dashboard_core_verdict('4.4.23', '8.2.18', []), '4.4.25', '4.4.23');
+verifier('tour muette : l’avis du site est adopté',
+	$c['etat'] === 'retard' && $c['cible'] === '4.4.25' && $c['provenance'] === 'site',
+	$c['etat'] . ' / ' . $c['cible'] . ' / ' . $c['provenance']);
+
+/* Un avis de site qui ne dit rien de neuf ne fabrique pas un retard. */
+$c = dashboard_core_confronter(dashboard_core_verdict('4.4.25', '8.2.18', []), '4.4.23', '4.4.25');
+verifier('avis du site plus ancien que l’installé : ignoré',
+	$c['etat'] === 'inconnu' && $c['provenance'] === '', $c['etat'] . ' / ' . $c['provenance']);
+$c = dashboard_core_confronter(dashboard_core_verdict('4.3.9', '8.2.18', []), '4.4.25', '4.3.9');
+verifier('avis du site sur une autre branche : ignoré',
+	$c['etat'] === 'inconnu', $c['etat']);
+
+/* Le core du site ne filtre pas la stabilité pour une mise à jour de branche : il
+   proposerait une candidate. La règle est la nôtre, et elle ne dépend pas de qui
+   apporte l'avis. */
+$c = dashboard_core_confronter(dashboard_core_verdict('4.4.25', '8.2.18', []), '4.4.26-rc1', '4.4.25');
+verifier('une candidate rapportée par le site est écartée',
+	$c['etat'] === 'inconnu' && $c['provenance'] === '', $c['etat'] . ' / ' . $c['cible']);
+
+/* Un site bloqué par son PHP reste bloqué : l'avis du site ne doit pas servir à
+   contourner le verdict de la tour, qui est mieux renseigné que lui. */
+$c = dashboard_core_confronter(dashboard_core_verdict('4.4.20', '7.3.33', $versions), '4.4.25', '4.4.20');
+verifier('un site bloqué le reste malgré l’avis du site',
+	$c['etat'] === 'bloque' && $c['provenance'] === 'tour', $c['etat'] . ' / ' . $c['provenance']);
+
+echo "\n== L’annuaire va le chercher, et ne conclut pas d’un 500 ==\n";
+
+$GLOBALS['dashboard_config_test'] = ['url_versions_spip' => 'https://www.spip.net/spip_loader.api'];
+$GLOBALS['dashboard_api_test'] = [
+	'https://www.spip.net/spip_loader.api/3' => $api3,
+	'https://www.spip.net/spip_loader.api'   => $api2,
+];
+$annuaire = dashboard_api_annuaire(true);
+verifier('les deux adresses sont lues et fusionnées',
+	count($annuaire['versions']) === 3, implode(', ', array_keys($annuaire['versions'])));
+verifier('l’annuaire est mémorisé', !empty($GLOBALS['dashboard_config_test']['cache_api']['versions']));
+
+/* Le format 3 tombe, le 2 répond : on garde ce qui reste plutôt que de tout
+   perdre. C'est la règle du silence appliquée adresse par adresse. */
+$GLOBALS['dashboard_api_test']['https://www.spip.net/spip_loader.api/3'] = 500;
+$annuaire = dashboard_api_annuaire(true);
+verifier('un format en panne n’emporte pas l’autre',
+	count($annuaire['versions']) === 3, implode(', ', array_keys($annuaire['versions'])));
+verifier('sans le format 3, plus de SHA-256 : on ne l’invente pas',
+	($annuaire['versions']['4.4.25']['sha256'] ?? 'absent') === '');
+
+/* Les deux adresses muettes : l'annuaire mémorisé reste, et rien n'est effacé.
+   Un annuaire de trois heures vaut infiniment mieux qu'un parc qui disparaît du
+   radar. */
+$GLOBALS['dashboard_api_test'] = [
+	'https://www.spip.net/spip_loader.api/3' => 500,
+	'https://www.spip.net/spip_loader.api'   => false,
+];
+$avant = $GLOBALS['dashboard_config_test']['cache_api'];
+$annuaire = dashboard_api_annuaire(true);
+verifier('tout muet : l’annuaire mémorisé est conservé',
+	count($annuaire['versions']) === 3, count($annuaire['versions']));
+verifier('et le cache n’a pas été écrasé par du vide',
+	$GLOBALS['dashboard_config_test']['cache_api'] === $avant);
+$journal = array_filter((array) ($GLOBALS['spip_log_test'] ?? []), function ($l) {
+	return strpos((string) $l[1], 'dashboard_api :') === 0;
+});
+verifier('une source muette laisse une trace', count($journal) >= 2, count($journal));
+
+/* Sans aucun annuaire mémorisé, l'échec rend un tableau vide — donc l'état
+   « inconnu », et non « à jour ». */
+unset($GLOBALS['dashboard_config_test']['cache_api']);
+verifier('aucun annuaire du tout : tableau vide, pas de verdict',
+	dashboard_api_annuaire(true)['versions'] === []);
+
+/* Réglage vidé : on ne va rien chercher, et on ne prétend rien savoir. */
+$GLOBALS['dashboard_config_test']['url_versions_spip'] = '';
+verifier('adresse d’annuaire vidée : aucune lecture', dashboard_api_adresses() === []);
+verifier('adresse vidée : tableau vide', dashboard_api_annuaire(true)['versions'] === []);
 
 echo "\n== Ce qui ne doit pas quitter un site géré ==\n";
 
@@ -1955,11 +2225,12 @@ verifier('aucune réponse : silence', dashboard_push_verdict(0) === 'silence');
 
 echo "\n== Alertes : on n'écrit que s'il y a du nouveau ==\n";
 
-$vide = ['core' => [], 'plugins' => [], 'agent' => [], 'pannes' => [], 'sites' => 12];
+$vide = ['core' => [], 'bloques' => [], 'plugins' => [], 'agent' => [], 'pannes' => [], 'sites' => 12];
 verifier('un parc sans rien à dire est reconnu comme tel', dashboard_alerte_vide($vide));
 
 $etat = [
 	'core'    => [['id' => 3, 'titre' => 'Alpha', 'version' => '4.4.1']],
+	'bloques' => [['id' => 5, 'titre' => 'Delta', 'version' => '4.4.0', 'cible' => '4.4.25', 'php' => '7.3.33']],
 	'plugins' => [['id' => 7, 'titre' => 'Beta', 'nb' => 2]],
 	'agent'   => [],
 	'pannes'  => [['id' => 9, 'titre' => 'Gamma', 'genre' => 'injoignable', 'detail' => 'timeout après 30 s']],
@@ -1993,6 +2264,36 @@ $autre = $etat;
 $autre['pannes'][0]['genre'] = 'muet';
 verifier('un genre de panne qui change est du nouveau',
 	dashboard_alerte_empreinte($autre) !== $empreinte);
+
+/* Un site bloqué par son PHP est une rubrique à part : la lever est précisément
+   la nouvelle qu'on attend, et l'hébergeur qui passe le site en 7.4 doit
+   rouvrir le canal. Sans le PHP dans l'empreinte, l'alerte resterait muette le
+   jour où le blocage cesse. */
+$autre = $etat;
+$autre['bloques'][0]['php'] = '7.4.33';
+verifier('un PHP qui bouge sur un site bloqué est du nouveau',
+	dashboard_alerte_empreinte($autre) !== $empreinte);
+
+$autre = $etat;
+$autre['bloques'] = [];
+verifier('un blocage levé est du nouveau',
+	dashboard_alerte_empreinte($autre) !== $empreinte);
+
+/* Et un site bloqué ne se confond jamais avec un site en retard : le premier se
+   règle chez l'hébergeur, le second d'un clic. Les intervertir enverrait le
+   webmestre lancer une opération qui casse le site. */
+$permute = $etat;
+$permute['core']   = [['id' => 5, 'titre' => 'Delta', 'version' => '4.4.0']];
+$permute['bloques'] = [['id' => 3, 'titre' => 'Alpha', 'version' => '4.4.1', 'cible' => '4.4.25', 'php' => '7.3.33']];
+verifier('retard et blocage ne sont pas interchangeables',
+	dashboard_alerte_empreinte($permute) !== $empreinte);
+
+$texte = dashboard_alerte_texte($etat, 'https://tour.test/');
+verifier('le message nomme le site bloqué et son PHP',
+	strpos($texte['texte'], 'Delta') !== false && strpos($texte['texte'], '7.3.33') !== false,
+	$texte['texte']);
+verifier('et le résumé compte les blocages à part',
+	strpos($texte['court'], 'alerte_court_bloques') !== false, $texte['court']);
 
 /* Et l'inverse : un parc qui va mieux est aussi une nouvelle, sans quoi on
    resterait sur la dernière mauvaise nouvelle sans savoir qu'elle est levée. */

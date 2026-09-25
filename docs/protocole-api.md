@@ -124,6 +124,27 @@ Chaque entrée de `plugins` porte : `prefixe`, `nom`, `version`,
 `version_disponible` provient des dépôts SVP locaux quand SVP est installé sur
 le site géré ; l'agent n'ouvre aucune connexion sortante pour la calculer.
 
+Le bloc `spip` porte, depuis l'agent 1.0.26, deux champs sur la mise à jour du
+noyau que le site connaît **de lui-même** :
+
+| Champ | Sens |
+|---|---|
+| `maj_disponible` | la version que le génie `mise_a_jour` du core a relevée, ou une chaîne vide |
+| `maj_controlee` | la date du dernier relevé réussi, au format SQL |
+
+Ils ne coûtent aucune connexion sortante : le core du site les a déjà écrits dans
+ses metas, et c'est cette source qui prévient son webmestre par courriel. L'agent
+lit `derniere_maj_notifiee` en premier — un numéro propre, mais qui n'existe que
+si une notification est réellement partie —, puis retombe sur `info_maj_spip`,
+écrite à chaque passage. Cette seconde meta contient du **HTML** : l'agent en
+extrait le numéro de version et ne fait jamais voyager le balisage.
+
+`maj_controlee` est la date de modification du cache que `info_maj_cache()` écrit,
+et seulement quand la lecture a abouti : c'est donc la fraîcheur de l'avis, pas
+celle de la tentative. Elle importe, parce que **ce génie ne passe que toutes les
+soixante-douze heures** : l'avis du site peut avoir trois jours, et la tour ne le
+retient qu'à défaut du sien.
+
 `waf_serie` s'ajoute quand le site a le plugin SPIP WAF, et vaut `null` sinon :
 `jours` (la profondeur demandée, quatre-vingt-dix au plus), `depuis` (le premier
 jour rendu) et `points`, une entrée par journée — `jour` (`AAAA-MM-JJ`),
@@ -339,6 +360,14 @@ Chaque entrée est mise de côté par `rename()` avant d'être remplacée ; si u
 étape échoue, tout ce qui a déjà été déplacé est restauré. Les copies de
 sécurité, suffixées `.dashagent-AAAAMMJJHHMMSS`, sont conservées sept jours puis
 supprimées par la tâche d'entretien.
+
+`sha256` est **facultatif pour l'agent, et fourni depuis la tour 1.0.40** : elle
+le prend dans l'annuaire officiel des versions, qui le publie à côté de l'adresse
+de l'archive. Avant cela, le paramètre existait, l'agent le vérifiait, et rien ne
+le renseignait jamais — un contrôle écrit dès le premier jour et qui n'avait
+jamais servi une fois. Il reste facultatif pour qu'un miroir privé sans annuaire
+demeure utilisable ; le journal du parc dit laquelle des deux situations s'est
+produite.
 
 ### `base_maj_preflight`
 

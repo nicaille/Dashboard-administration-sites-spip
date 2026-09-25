@@ -54,9 +54,17 @@ Réglages dans *Configuration → Dashboard : configuration* :
 | Synchroniser automatiquement | activé |
 | Fréquence | 6 h |
 | Sites par passage | 10 (à baisser si le cron est court) |
+| Annuaire des versions de SPIP | `https://www.spip.net/spip_loader.api` (défaut) |
 | Sauvegarder avant mise à jour du core | activé |
 | Prévenir le webmestre | à décider — éteint par défaut |
 | Destinataires des alertes | vide par défaut : sans adresse, aucun courriel ne part |
+
+L'*annuaire des versions de SPIP* est ce qui permet à la tour de savoir qu'une
+version est sortie, et d'en connaître l'empreinte SHA-256. C'est l'adresse que le
+core de chaque site interroge déjà pour son propre compte. Vidée, la tour
+n'interroge aucun service extérieur et répond « je ne sais pas » au lieu
+d'affirmer que le parc est à jour ; seules les *versions imposées* comptent alors.
+Voir [Exploitation](exploitation.md#doù-vient-la-connaissance-des-versions).
 
 Les alertes et les notifications du navigateur se règlent au même endroit ;
 voir [Exploitation](exploitation.md#être-prévenu-sans-venir-regarder).

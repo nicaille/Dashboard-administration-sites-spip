@@ -81,10 +81,24 @@ en plus du compte rendu de l'étape précédente : lire le second pour le premie
 faisait croire à un blocage là où il n'y en avait pas. Si le navigateur perd la
 main, il réessaie cinq fois avant de laisser la tâche de fond finir seule.
 
-L'adresse de l'archive de core n'est jamais devinée : elle est **relevée dans
-l'index du dépôt**, casse comprise, et à défaut d'index les noms d'usage sont
-essayés auprès du serveur avant qu'une mise à jour ne s'engage. Voir
-[docs/exploitation.md](docs/exploitation.md#doù-vient-ladresse-de-larchive).
+Les versions disponibles viennent de **l'annuaire officiel de spip.net**, celui
+que le core de chaque site interroge déjà pour son propre compte. La tour en lit
+deux formats — le plus riche donne l'adresse absolue de l'archive, son SHA-256 et
+les versions de PHP supportées ; l'autre couvre des branches que le premier
+ignore. L'empreinte est transmise à l'agent, qui refuse toute archive qui n'y
+répond pas.
+
+L'état du core a donc quatre valeurs et non deux : à jour, en retard, **bloqué**
+quand le PHP de l'hébergement ne supporte pas la version disponible, et
+**inconnu** quand l'annuaire n'a rien répondu. Les deux derniers étaient comptés
+pour sains, ce qui faisait passer un parc entier pour à jour pendant que sa source
+de versions répondait 500. Un bouton n'est armé que sur « en retard ». Voir
+[docs/exploitation.md](docs/exploitation.md#doù-vient-la-connaissance-des-versions).
+
+L'adresse de l'archive n'est jamais devinée : celle de l'annuaire d'abord, à
+défaut le nom **relevé dans l'index du dépôt**, casse comprise, et à défaut
+d'index les noms d'usage sont essayés auprès du serveur avant qu'une mise à jour
+ne s'engage.
 
 La tour ne s'en remet pas à ce seul catalogue : depuis la 1.0.39 elle tient le
 sien, le rafraîchit de force, et **confronte les deux avis**. Le décompte du
