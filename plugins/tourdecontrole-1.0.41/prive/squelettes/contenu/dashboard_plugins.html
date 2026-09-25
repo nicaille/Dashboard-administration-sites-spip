@@ -12,12 +12,16 @@
 	l'on revient voir en rouvrant le lien.
 
 	**Rien de ce qui porte un crochet littéral n'est enveloppé dans un bloc
-	optionnel.** Le champ du formulaire s'appelle `maj[]`, d'après un tableau,
-	et les sélecteurs du script portent des crochets : un bloc optionnel les
-	rendrait en clair, ces commentaires compris, sous le titre. Partout où il
-	faut une condition autour d'un tel contenu, c'est une boucle CONDITION,
-	avec sa branche « sinon » entre la fermeture de la boucle et le double
-	slash.
+	optionnel.** Le champ du formulaire porte un nom de tableau, donc une paire
+	de crochets, et les sélecteurs du script en portent aussi : un bloc optionnel
+	les rendrait en clair, ces commentaires compris, sous le titre. Partout où il
+	faut une condition autour d'un tel contenu, c'est une boucle CONDITION, avec
+	sa branche « sinon » entre la fermeture de la boucle et le double slash.
+
+	Et cette règle vaut **pour ce commentaire-ci** : un bloc de remarque est un
+	bloc optionnel comme un autre. Écrire ici le nom du champ avec ses crochets a
+	fait rendre tout ce paragraphe en clair, sous le titre de la page. On nomme
+	donc les crochets, on ne les écrit pas.
 ]
 [(#AUTORISER{voir, dashboard_site}|sinon_interdire_acces)]
 <link rel="stylesheet" href="[(#CHEMIN{css/dashboard.css}|timestamp|direction_css)]" type="text/css" />

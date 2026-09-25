@@ -774,6 +774,41 @@ foreach ($plugins as $plugin) {
 			);
 		}
 
+		// Un bloc de remarque **est** un bloc optionnel, et son contenu ne
+		// supporte donc aucun crochet littéral. Celui-là se vérifie ici, et pas
+		// seulement au parcours : les bornes d'un `[(#REM) … ]` écrit sur ses
+		// propres lignes sont sûres, là où celles d'un bloc optionnel quelconque
+		// ne le sont pas — d'où la remarque qui suit.
+		//
+		// Le nom d'un champ de formulaire à valeurs multiples porte une paire de
+		// crochets. L'écrire dans une remarque pour l'expliquer a fait rendre
+		// trente lignes de prose technique en clair, sous le titre de la page,
+		// sans lever la moindre erreur. On nomme donc les crochets, on ne les
+		// écrit pas — la même règle que pour les syntaxes de balise.
+		$dedans = false;
+		$fautives = [];
+		foreach (explode("\n", $source) as $rang => $ligne) {
+			if (preg_match('/^\s*\[\(#REM\)\s*$/', $ligne)) {
+				$dedans = true;
+				continue;
+			}
+			if ($dedans && preg_match('/^\s*\]\s*$/', $ligne)) {
+				$dedans = false;
+				continue;
+			}
+			if ($dedans && (strpos($ligne, '[') !== false || strpos($ligne, ']') !== false)) {
+				$fautives[] = 'ligne ' . ($rang + 1) . ' : ' . trim($ligne);
+			}
+		}
+		// Une vérification par squelette, et non une seulement quand ça casse :
+		// un contrôle qui ne parle qu'en cas d'échec ne fait pas bouger le
+		// décompte, et rien ne dit alors qu'il regarde encore quelque chose.
+		verifier(
+			"$affiche : pas de crochet littéral dans un bloc de remarque",
+			$fautives === [],
+			implode(' ; ', array_slice($fautives, 0, 3))
+		);
+
 		// Un piège de plus, qui n'a **pas** sa place ici : le contenu d'un bloc
 		// optionnel ne supporte aucun crochet littéral — un crochet ouvrant
 		// casse le bloc, un crochet fermant le termine trop tôt. La règle est

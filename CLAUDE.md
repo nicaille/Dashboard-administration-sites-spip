@@ -704,8 +704,24 @@ le rendu, charge utile à l'appui.
    d'intégration cherchait « Argument manquant » et « erreur_squelette » : il
    cherchait une erreur là où il n'y en a pas.
 
-   **Ce piège-là ne se vérifie pas statiquement**, et l'essayer coûte des
-   faux positifs : un bloc optionnel s'écrit aussi `[texte(#BALISE)texte]`,
+   **Un bloc de remarque est un bloc optionnel**, et la règle vaut donc pour
+   lui. Le nom d'un champ de formulaire à valeurs multiples porte une paire de
+   crochets ; l'écrire dans une remarque pour l'expliquer a fait rendre trente
+   lignes de prose technique en clair, sous le titre de la page, sans lever la
+   moindre erreur. On nomme les crochets, on ne les écrit pas — la même règle
+   que pour les syntaxes de balise, dont celle-ci est le pendant.
+
+   Ce cas-là, lui, **se vérifie statiquement** : les bornes d'un
+   `[(#REM) … ]` écrit sur ses propres lignes sont sûres, là où celles d'un bloc
+   optionnel quelconque ne le sont pas. `tests/test_structure.php` le contrôle,
+   un squelette à la fois. À ne pas confondre avec les **balises** dans une
+   remarque, qui ne posent aucun problème : neuf en vivent dans les squelettes
+   du dépôt, sur des pages qui fonctionnent. La règle « SPIP compile les balises
+   jusque dans les commentaires » vaut pour les commentaires HTML et JavaScript,
+   pas pour les blocs de remarque.
+
+   **Le cas général, lui, ne se vérifie pas statiquement**, et l'essayer coûte
+   des faux positifs : un bloc optionnel s'écrit aussi `[texte(#BALISE)texte]`,
    si bien qu'un crochet suivi d'autre chose qu'une parenthèse peut
    parfaitement en ouvrir un — cinq squelettes sains du dépôt se sont fait
    accuser. Ce qui l'attrape est dans `ouvrir()`, côté parcours : **une

@@ -74,12 +74,17 @@ function action_dashboard_plugins_lot_dist() {
 function dashboard_lot_retour($lot, $message, $statut = 'erreur') {
 	include_spip('inc/headers');
 
+	// Le quatrième argument, `'&'`, n'est pas décoratif : par défaut
+	// `parametre_url()` sépare avec `&amp;`, ce qui convient à une adresse posée
+	// dans du HTML et **pas** à un en-tête Location. Sans lui, le navigateur
+	// recevait un paramètre nommé `amp;lot` et la page ne voyait aucun lot — la
+	// redirection aboutissait, sur un écran de sélection vierge.
 	$url = generer_url_ecrire('dashboard_plugins');
 	if ($lot !== '') {
-		$url = parametre_url($url, 'lot', $lot);
+		$url = parametre_url($url, 'lot', $lot, '&');
 	}
-	$url = parametre_url($url, 'dashboard_message', $message);
-	$url = parametre_url($url, 'dashboard_statut', $statut);
+	$url = parametre_url($url, 'dashboard_message', substr($message, 0, 500), '&');
+	$url = parametre_url($url, 'dashboard_statut', $statut, '&');
 
 	redirige_par_entete($url);
 }
