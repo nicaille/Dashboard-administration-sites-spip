@@ -2409,6 +2409,54 @@ verifier('file reçue et vide : l’étape s’arrête au lieu de tout prendre',
 verifier('et elle n’a lancé aucune mise à jour',
 	strpos((string) $epuise['message'], 'restant') !== false, (string) $epuise['message']);
 
+echo "\n== Ce que le cron affirme avoir exécuté ==\n";
+
+require_once chemin_plugin('tourdecontrole') . '/inc/dashboard_cron.php';
+
+/* Un génie exécuté replanifie son propre travail : sa date en base a bougé.
+   C'est la seule preuve disponible — `cron()` ne rend rien, et lister les
+   travaux échus ne dirait que ce qui **devait** passer. Le contrôle à écrire
+   est donc celui qui échouerait si l'on se contentait de cette liste. */
+$avant = ['dashboard_sync' => 1000, 'dashboard_chantiers' => 1000];
+
+$bouge = dashboard_cron_bilan_tour($avant, ['dashboard_sync' => 1120, 'dashboard_chantiers' => 1120]);
+verifier('deux génies dont la date a bougé sont dits passés',
+	strpos($bouge, 'génies passés : dashboard_chantiers, dashboard_sync') === 0, $bouge);
+verifier('et rien ne reste échu', strpos($bouge, 'encore échus') === false, $bouge);
+
+/* Le cas qui compte : un génie qui a explosé. La boucle le rattrape et continue,
+   son travail n'est pas repris — et sa date n'a pas bougé. Le dire « passé »
+   serait affirmer le contraire de ce qui s'est produit. */
+$casse = dashboard_cron_bilan_tour($avant, ['dashboard_sync' => 1120, 'dashboard_chantiers' => 1000]);
+verifier('celui dont la date n’a pas bougé n’est pas dit passé',
+	strpos($casse, 'passés : dashboard_sync') !== false
+	&& strpos($casse, 'encore échus : dashboard_chantiers') !== false, $casse);
+
+$aucun = dashboard_cron_bilan_tour($avant, $avant);
+verifier('aucune date bougée : aucun génie passé',
+	strpos($aucun, 'génies passés : aucun') === 0, $aucun);
+verifier('et les deux sont dits encore échus',
+	strpos($aucun, 'encore échus : dashboard_chantiers, dashboard_sync') !== false, $aucun);
+
+/* Un travail non périodique disparaît au lieu d'être replanifié : sa
+   disparition prouve qu'il a tourné. Le confondre avec « pas passé » ferait
+   annoncer un échec sur une tâche parfaitement exécutée. */
+$parti = dashboard_cron_bilan_tour(['maj_une_fois' => 1000], []);
+verifier('un travail disparu a bien tourné',
+	strpos($parti, 'génies passés : maj_une_fois') === 0, $parti);
+
+/* Rien d'échu : il n'y a rien à affirmer, et surtout pas « aucun génie passé »,
+   qui se lirait comme une panne. */
+verifier('aucun travail échu se dit comme tel',
+	dashboard_cron_bilan_tour([], []) === 'aucun travail échu à ce tour');
+verifier('et un après vide n’y change rien',
+	dashboard_cron_bilan_tour([], ['dashboard_sync' => 1120]) === 'aucun travail échu à ce tour');
+
+/* La fonction décide de ce qu'un journal d'exploitation affirme : elle ne doit
+   pas tomber sur une entrée inattendue. */
+verifier('un argument non tableau ne fait pas tomber',
+	dashboard_cron_bilan_tour(null, null) === 'aucun travail échu à ce tour');
+
 echo "\n== Alertes : on n'écrit que s'il y a du nouveau ==\n";
 
 $vide = ['core' => [], 'bloques' => [], 'plugins' => [], 'agent' => [], 'pannes' => [], 'sites' => 12];

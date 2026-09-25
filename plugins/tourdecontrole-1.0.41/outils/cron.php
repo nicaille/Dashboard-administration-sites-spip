@@ -89,6 +89,11 @@ if (!defined('_DIRECT_CRON_FORCE')) {
 
 cron_amorcer($racine);
 
+// La décision de ce que le journal affirme vit dans un `inc/`, pour pouvoir
+// s'éprouver : ce script-ci s'exécute à l'inclusion, donc rien de ce qu'il
+// enferme n'est vérifiable.
+include_spip('inc/dashboard_cron');
+
 if (!function_exists('cron')) {
 	fwrite(STDERR, "SPIP amorcé, mais cron() reste introuvable.\n");
 	exit(1);
@@ -184,6 +189,11 @@ while (time() < $echeance && $tours < $options['tours']) {
 	$tours++;
 	cron_dire($options, 'tour ' . $tours . ' (attente ' . var_export($attente, true) . ')');
 
+	// Ce qui est échu avant le tour, pour pouvoir dire après coup ce qui a
+	// réellement tourné. Relevé seulement quand on parle : c'est une requête de
+	// plus par tour, et elle ne sert qu'au journal.
+	$echus_avant = $options['verbeux'] ? cron_echus() : [];
+
 	// Un génie tiers qui explose ne doit pas emporter les nôtres. SPIP réinsère
 	// le travail au statut « en cours » *avant* de l'exécuter, et ne le repasse
 	// à « planifié » qu'une fois fini : un travail mort en route n'est donc pas
@@ -198,6 +208,10 @@ while (time() < $echeance && $tours < $options['tours']) {
 		fwrite(STDERR, '[cron] travail interrompu : ' . get_class($e) . ' — '
 			. $e->getMessage() . ' (' . $e->getFile() . ':' . $e->getLine() . ")\n");
 		$interrompus++;
+	}
+
+	if ($options['verbeux']) {
+		cron_dire($options, dashboard_cron_bilan_tour($echus_avant, cron_echus()));
 	}
 
 	// Une tâche forcée qui n'a rien à faire rend la main tout de suite : sans
@@ -258,6 +272,30 @@ function cron_prochain() {
 	}
 
 	return strtotime($date);
+}
+
+/**
+ * Les travaux échus, avec leur date, par nom de fonction.
+ *
+ * @return array `[fonction => horodatage]`
+ */
+function cron_echus() {
+	include_spip('inc/queue');
+	include_spip('base/abstract_sql');
+
+	$echus = [];
+	$lignes = sql_allfetsel(
+		'fonction, date',
+		'spip_jobs',
+		['status=' . intval(_JQ_SCHEDULED), 'date <= ' . sql_quote(date('Y-m-d H:i:s'))],
+		'',
+		'date'
+	);
+	foreach ($lignes as $ligne) {
+		$echus[(string) $ligne['fonction']] = strtotime((string) $ligne['date']);
+	}
+
+	return $echus;
 }
 
 /**
