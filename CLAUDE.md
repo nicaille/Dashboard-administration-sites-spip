@@ -775,6 +775,25 @@ des étapes qui précèdent `plugins` ne touche cette colonne** — vérifié fo
 par fonction avant de s'y fier, pas supposé. `cible` n'aurait pas convenu : un
 `varchar(255)` ne tient pas la liste des plugins d'un site bien fourni.
 
+### Un vocabulaire d'états ne se recopie pas, il se demande
+
+Les statuts terminaux d'un chantier sont **`ok` et `erreur`**, et
+`dashboard_chantier_fini()` est seule à le dire. `dashboard_lot_verdict()` avait
+recopié cette liste en y écrivant « fini », mot qui n'existe nulle part dans le
+moteur. Conséquence : un chantier terminé n'était jamais vu comme tel, l'écran de
+suivi ne basculait jamais en résultat, et le lot avait pourtant abouti — message
+« terminé » en base, plugin à jour sur le site.
+
+Le pire est que **les contrôles unitaires passaient**. Ils portaient le même mot
+faux dans leurs jeux d'essai : j'avais écrit `'statut' => 'fini'` des deux côtés,
+et les deux erreurs s'annulaient. C'est la faute des versions normalisées de SVP
+à l'identique — un contrôle bâti sur la forme qu'on croit bonne n'éprouve que sa
+propre croyance.
+
+D'où deux règles : **s'appuyer sur la fonction du moteur** plutôt que sur une
+copie de sa liste, et, quand un état vient d'ailleurs, écrire un contrôle qui
+**interroge la source** au lieu de réaffirmer ce qu'on en a compris.
+
 ### Le succès se constate sur l'inventaire, pas sur la réponse
 
 `dashboard_lot_verdict()` ne croit pas ce qu'a répondu l'appel : un plugin est à

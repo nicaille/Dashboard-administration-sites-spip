@@ -2306,7 +2306,7 @@ echo "\n== Le succès se constate, il ne se déduit pas ==\n";
 $chantiers = [[
 	'id_dashboard_chantier' => 11,
 	'id_dashboard_site'     => 3,
-	'statut'                => 'fini',
+	'statut'                => 'ok',
 	'reste'                 => '',
 	'detail'                => json_encode([
 		'demandes' => ['GIS', 'SAISIES', 'CEXTRAS'],
@@ -2325,7 +2325,7 @@ verifier('celui dont personne n’a parlé et qui a bougé aussi',
 /* Et le message d’échec du chantier est repris quand il existe : sans lui, la
    page dirait « échec » sans dire pourquoi. */
 $bilan_msg = dashboard_lot_verdict([[
-	'id_dashboard_chantier' => 12, 'id_dashboard_site' => 3, 'statut' => 'fini', 'reste' => '',
+	'id_dashboard_chantier' => 12, 'id_dashboard_site' => 3, 'statut' => 'ok', 'reste' => '',
 	'detail' => json_encode(['demandes' => ['GIS'], 'echecs' => ['GIS' => 'verrou SVP posé']]),
 ]], [3 => ['GIS']]);
 verifier('le motif de l’échec est repris',
@@ -2344,13 +2344,27 @@ verifier('un chantier en cours n’est pas déclaré fini', $tot[0]['fini'] === 
 
 echo "\n== Achèvement, succès, sites touchés ==\n";
 
+/* Le vocabulaire des statuts appartient au moteur de chantiers, et mes jeux
+   d'essai portaient le même mot faux que le code : « fini » là où il dit « ok ».
+   Ils passaient donc au vert sur un défaut réel — un chantier terminé n'était
+   jamais vu comme tel, et l'écran de suivi ne basculait jamais en résultat.
+
+   Ce contrôle-ci ne recopie pas la liste : il demande au moteur. Si son
+   vocabulaire change, c'est lui qui aura raison. */
+verifier('le statut terminal est celui que le moteur reconnaît',
+	dashboard_chantier_fini(['statut' => 'ok']) && dashboard_chantier_fini(['statut' => 'erreur'])
+	&& !dashboard_chantier_fini(['statut' => 'encours'])
+	&& !dashboard_chantier_fini(['statut' => 'attente']));
+verifier('et « fini » n’en fait pas partie, contrairement à ce que je croyais',
+	!dashboard_chantier_fini(['statut' => 'fini']));
+
 verifier('un lot dont un chantier tourne n’est pas achevé', !dashboard_lot_acheve($tot));
 verifier('un lot dont tout est fini l’est', dashboard_lot_acheve($bilan));
 verifier('un lot vide n’est pas achevé : il n’existe pas', !dashboard_lot_acheve([]));
 
 verifier('un lot avec un échec n’est pas sans échec', !dashboard_lot_sans_echec($bilan));
 $parfait = dashboard_lot_verdict([[
-	'id_dashboard_chantier' => 14, 'id_dashboard_site' => 3, 'statut' => 'fini', 'reste' => '',
+	'id_dashboard_chantier' => 14, 'id_dashboard_site' => 3, 'statut' => 'ok', 'reste' => '',
 	'detail' => json_encode(['demandes' => ['GIS'], 'echecs' => []]),
 ]], []);
 verifier('un lot tout réussi l’est', dashboard_lot_sans_echec($parfait));
@@ -2360,7 +2374,7 @@ verifier('un lot tout réussi l’est', dashboard_lot_sans_echec($parfait));
 verifier('le site touché est retenu', dashboard_lot_sites_touches($parfait) === [3],
 	json_encode(dashboard_lot_sites_touches($parfait)));
 $rien = dashboard_lot_verdict([[
-	'id_dashboard_chantier' => 15, 'id_dashboard_site' => 8, 'statut' => 'fini', 'reste' => '',
+	'id_dashboard_chantier' => 15, 'id_dashboard_site' => 8, 'statut' => 'ok', 'reste' => '',
 	'detail' => json_encode(['demandes' => ['GIS'], 'echecs' => ['GIS' => 'refus']]),
 ]], [8 => ['GIS']]);
 verifier('un site dont rien n’a abouti n’est pas à resynchroniser',

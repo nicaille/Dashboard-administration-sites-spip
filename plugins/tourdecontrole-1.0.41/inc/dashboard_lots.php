@@ -308,6 +308,8 @@ function dashboard_lot_chantiers($lot) {
  * @return array Une entrée par site
  */
 function dashboard_lot_verdict($chantiers, $retard) {
+	include_spip('inc/dashboard_chantiers');
+
 	$bilan = [];
 
 	foreach ((array) $chantiers as $chantier) {
@@ -335,7 +337,12 @@ function dashboard_lot_verdict($chantiers, $retard) {
 			'id_dashboard_site' => $id,
 			'id_chantier'       => (int) $chantier['id_dashboard_chantier'],
 			'statut'            => (string) $chantier['statut'],
-			'fini'              => in_array((string) $chantier['statut'], ['fini', 'erreur'], true),
+			// `dashboard_chantier_fini()` et non une liste recopiée ici : le
+			// vocabulaire des statuts appartient au moteur de chantiers, et j'y
+			// avais écrit « fini » là où il dit « ok ». Un chantier terminé n'était
+			// donc jamais vu comme tel, l'écran restait en suivi indéfiniment, et
+			// rien ne le signalait — le lot avait bel et bien abouti.
+			'fini'              => dashboard_chantier_fini($chantier),
 			'demandes'          => $demande,
 			'reussis'           => $reussis,
 			'rates'             => $rates,
