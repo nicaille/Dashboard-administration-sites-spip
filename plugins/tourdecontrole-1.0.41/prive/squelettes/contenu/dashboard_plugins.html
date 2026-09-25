@@ -113,11 +113,22 @@
 	ne donne aucun droit. Aucune adresse n'est fabriquée en JavaScript.
 ]
 <ul class="dashboard-lot-file" data-lot-file="chantiers" hidden>
-	<BOUCLE_file(DASHBOARD_SITES){id_dashboard_site IN #GET{ids}}{par titre}>
-	#SET{fiche,#GET{lot}|dashboard_lot_site{#ID_DASHBOARD_SITE}}
-	#SET{id_chantier,#GET{fiche}|table_valeur{id_chantier}}
-	<li data-chantier="[(#GET{id_chantier})]"><a
-		href="[(#URL_ACTION_AUTEUR{dashboard_chantier,#GET{id_chantier}})]">[(#GET{id_chantier})]</a></li>
+	[(#REM)
+		Boucle sur les chantiers, et non sur les sites, pour une raison de
+		compilateur : l'identifiant doit arriver à la balise d'action comme une
+		balise **simple**. Un argument littéral suivi d'une balise à accolades fait
+		perdre à SPIP le nom de la balise en chemin, et la page entière tombe.
+		C'est le piège déjà consigné, rencontré ici sous la forme d'un « Cannot
+		assign null to property Champ::$code » — un message qui ne désigne pas le
+		coupable, et qui tombe sur la première balise compilée de la page.
+
+		Le filtrage sur les sites autorisés est conservé : la liste des
+		identifiants vient du bilan, qui a déjà repassé chaque site par
+		autoriser(). Le jeton du lot désigne, il n'autorise pas.
+	]
+	<BOUCLE_file(DASHBOARD_CHANTIERS){lot=#GET{lot}}{id_dashboard_site IN #GET{ids}}{par id_dashboard_site}>
+	<li data-chantier="#ID_DASHBOARD_CHANTIER"><a
+		href="[(#URL_ACTION_AUTEUR{dashboard_chantier,#ID_DASHBOARD_CHANTIER})]">#ID_DASHBOARD_CHANTIER</a></li>
 	</BOUCLE_file>
 </ul>
 
@@ -216,13 +227,13 @@
 <p class="explication"><:dashboard:plugins_explication:></p>
 
 [(#REM)
-	Pas de troisième argument à #URL_ACTION_AUTEUR : l'action choisit elle-même où
+	Pas de troisième argument à la balise d'action : celle-ci choisit elle-même où
 	renvoyer, puisqu'elle doit y porter le jeton du lot qu'elle vient d'ouvrir.
 	Une redirection posée ici serait ignorée, et laisserait croire le contraire.
 
 	`data-lot-form` et non la seule classe : l'espace privé porte déjà un
-	formulaire de recherche dans son entête, et un `querySelector('form.formulaire_spip')`
-	aurait pu tomber dessus.
+	formulaire de recherche dans son entête, et un sélecteur sur la seule classe
+	du thème aurait pu tomber dessus.
 ]
 <form method="post" action="[(#URL_ACTION_AUTEUR{dashboard_plugins_lot})]"
       class="formulaire_spip" data-lot-form="oui">
