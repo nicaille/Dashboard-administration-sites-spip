@@ -471,3 +471,23 @@
 .dashboard-parc-cocher input {
 	margin: 0;
 }
+
+/* Lots de mises à jour de plugins.
+   Rien n'est redéfini du thème du privé : on ne pose que ce qui n'existe pas,
+   et tout fond posé l'est avec sa couleur de texte. Un fond blanc sans couleur
+   donnait des libellés invisibles sur les boutons de pagination. */
+.dashboard-lot-barre {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 1em;
+	margin: 1em 0;
+	padding: .6em .8em;
+	border: 1px solid rgba(0, 0, 0, .15);
+	border-radius: 4px;
+}
+.dashboard-lot-compte { font-size: .9em; }
+.dashboard-lot-avancement { font-style: italic; }
+.dashboard-lot-echec { font-weight: bold; }
+.dashboard-lot-reussis,
+.dashboard-lot-rates { margin: .2em 0 .6em 1.2em; }

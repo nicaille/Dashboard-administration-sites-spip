@@ -17,6 +17,8 @@ include_spip('inc/dashboard_versions');
 include_spip('inc/dashboard_catalogue');
 // Idem pour l'annuaire des versions de SPIP, dont les squelettes lisent l'état.
 include_spip('inc/dashboard_spip_api');
+// Et pour les lots de mises à jour de plugins, dont la page lit le verdict.
+include_spip('inc/dashboard_lots');
 
 /**
  * Fonctions de SPIP dont le plugin dépend, par fichier qui les fournit.
@@ -1458,4 +1460,181 @@ function dashboard_journal_retention_libelle($rien = '') {
  */
 function dashboard_journal_retention($rien = '') {
 	return max(1, (int) dashboard_config('retention_journal', 180));
+}
+
+/**
+ * Le verdict d'un lot de mises à jour de plugins, prêt pour l'affichage.
+ *
+ * Un seul appel par page, et le résultat est mémorisé : la page le relit pour
+ * l'entête, pour la liste des sites, et pour décider si le lot est achevé.
+ *
+ * Le succès est constaté sur l'inventaire relu **maintenant**, et non sur ce
+ * qu'a répondu l'appel qui a mis à jour. Un site qui se tait pendant qu'il se
+ * remplace lui-même est le cas normal, pas une panne.
+ *
+ * @filtre
+ * @param string $lot
+ * @return array
+ */
+function dashboard_lot_bilan($lot) {
+	static $memoire = [];
+	$lot = (string) $lot;
+	if (isset($memoire[$lot])) {
+		return $memoire[$lot];
+	}
+
+	include_spip('inc/dashboard_lots');
+	$chantiers = dashboard_lot_chantiers($lot);
+
+	return $memoire[$lot] = $chantiers
+		? dashboard_lot_verdict($chantiers, dashboard_lot_en_retard())
+		: [];
+}
+
+/**
+ * Le lot est-il achevé, tous chantiers confondus ?
+ *
+ * @filtre
+ * @param string $lot
+ * @return bool
+ */
+function dashboard_lot_est_acheve($lot) {
+	include_spip('inc/dashboard_lots');
+
+	return dashboard_lot_acheve(dashboard_lot_bilan((string) $lot));
+}
+
+/**
+ * Le lot achevé n'a-t-il que des succès ?
+ *
+ * @filtre
+ * @param string $lot
+ * @return bool
+ */
+function dashboard_lot_est_reussi($lot) {
+	include_spip('inc/dashboard_lots');
+	$bilan = dashboard_lot_bilan((string) $lot);
+
+	return dashboard_lot_acheve($bilan) && dashboard_lot_sans_echec($bilan);
+}
+
+/**
+ * Le compte rendu d'un lot, en une phrase.
+ *
+ * Composé en PHP et non par une chaîne de langue posée dans un `#SET` : une
+ * chaîne à arguments écrite directement dans un `#SET` rend une chaîne vide, et
+ * `#ARRAY{nb,#GET{x}}` ajoute un niveau d'accolades que l'analyse ne suit plus.
+ *
+ * @filtre
+ * @param string $lot
+ * @return string
+ */
+function dashboard_lot_resume($lot) {
+	include_spip('inc/dashboard_lots');
+	$bilan = dashboard_lot_bilan((string) $lot);
+	if (!$bilan) {
+		return '';
+	}
+
+	$reussis = 0;
+	$rates   = 0;
+	$restants = 0;
+	foreach ($bilan as $ligne) {
+		$reussis += count($ligne['reussis']);
+		$rates   += count($ligne['rates']);
+		if (empty($ligne['fini'])) {
+			$restants++;
+		}
+	}
+
+	if ($restants) {
+		return _T('dashboard:lot_en_cours', ['nb' => $restants, 'sites' => count($bilan)]);
+	}
+
+	return $rates
+		? _T('dashboard:lot_bilan_mixte', ['ok' => $reussis, 'ko' => $rates])
+		: _T('dashboard:lot_bilan_ok', ['nb' => $reussis, 'sites' => count($bilan)]);
+}
+
+/**
+ * Les sites d'un lot qui ont reçu au moins une mise à jour.
+ *
+ * Rendu en tableau, pour la boucle DATA de l'écran de résultat.
+ *
+ * @filtre
+ * @param string $lot
+ * @return array
+ */
+function dashboard_lot_touches($lot) {
+	include_spip('inc/dashboard_lots');
+
+	return dashboard_lot_sites_touches(dashboard_lot_bilan((string) $lot));
+}
+
+/**
+ * La ligne de bilan d'un site dans un lot.
+ *
+ * @filtre
+ * @param string $lot
+ * @param int $id_site
+ * @return array
+ */
+function dashboard_lot_site($lot, $id_site) {
+	foreach (dashboard_lot_bilan((string) $lot) as $ligne) {
+		if ((int) $ligne['id_dashboard_site'] === (int) $id_site) {
+			return $ligne;
+		}
+	}
+
+	return [];
+}
+
+/**
+ * Combien de mises à jour de plugins le parc attend-il, tous sites confondus ?
+ *
+ * @filtre
+ * @param string $rien Chaîne vide que SPIP passe à `#VAL|nom`
+ * @return int
+ */
+function dashboard_plugins_en_retard($rien = '') {
+	if (!dashboard_tables_presentes()) {
+		return 0;
+	}
+
+	include_spip('inc/dashboard_lots');
+	$total = 0;
+	foreach (dashboard_lot_en_retard() as $prefixes) {
+		$total += count($prefixes);
+	}
+
+	return $total;
+}
+
+/**
+ * L'adresse de la gestion des plugins d'un site géré, pour un lien d'échec.
+ *
+ * @filtre
+ * @param string $url_site
+ * @return string
+ */
+function dashboard_url_plugins_site($url_site) {
+	include_spip('inc/dashboard_lots');
+
+	return dashboard_lot_url_plugins((string) $url_site);
+}
+
+/**
+ * Les identifiants des sites d'un lot, pour le critère IN de la boucle.
+ *
+ * @filtre
+ * @param string $lot
+ * @return array
+ */
+function dashboard_lot_ids($lot) {
+	$ids = [];
+	foreach (dashboard_lot_bilan((string) $lot) as $ligne) {
+		$ids[] = (int) $ligne['id_dashboard_site'];
+	}
+
+	return $ids;
 }

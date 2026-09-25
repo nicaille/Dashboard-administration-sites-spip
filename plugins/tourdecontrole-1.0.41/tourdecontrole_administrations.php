@@ -133,6 +133,12 @@ function tourdecontrole_upgrade($nom_meta_base_version, $version_cible) {
 		['tourdecontrole_creer_tables'],
 	];
 
+	// 1.0.12 : la colonne `lot`, qui relie entre eux les chantiers nés d'une
+	// même sélection sur la page des mises à jour de plugins.
+	$maj['1.0.12'] = [
+		['tourdecontrole_creer_tables'],
+	];
+
 	include_spip('base/upgrade');
 	maj_plugin($nom_meta_base_version, $version_cible, $maj);
 }

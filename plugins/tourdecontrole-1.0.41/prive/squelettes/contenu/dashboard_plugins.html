@@ -1,0 +1,373 @@
+[(#REM)
+	Les mises à jour de plugins du parc entier, sur une page : on coche, on
+	valide, et le compte rendu dit ce qui est passé et ce qui a échoué.
+
+	Le parc savait déjà mettre à jour **un** plugin sur **un** site, et **tous**
+	les plugins d'un site. Ce qui manquait est entre les deux, et c'est le cas
+	courant : dix sites portent le même plugin en retard.
+
+	Deux états, tenus par le paramètre `lot` de l'adresse : sans lot la
+	sélection, avec lot le suivi puis le résultat. L'adresse portant le lot,
+	fermer l'onglet ne perd rien — les chantiers continuent sous le cron, et
+	l'on revient voir en rouvrant le lien.
+
+	**Rien de ce qui porte un crochet littéral n'est enveloppé dans un bloc
+	optionnel.** Le champ du formulaire s'appelle `maj[]`, d'après un tableau,
+	et les sélecteurs du script portent des crochets : un bloc optionnel les
+	rendrait en clair, ces commentaires compris, sous le titre. Partout où il
+	faut une condition autour d'un tel contenu, c'est une boucle CONDITION,
+	avec sa branche « sinon » entre la fermeture de la boucle et le double
+	slash.
+]
+[(#AUTORISER{voir, dashboard_site}|sinon_interdire_acces)]
+<link rel="stylesheet" href="[(#CHEMIN{css/dashboard.css}|timestamp|direction_css)]" type="text/css" />
+
+<h1 class="grostitre"><:dashboard:titre_plugins_parc:></h1>
+
+[(#ENV{dashboard_message}|oui)
+	<p class="[(#ENV{dashboard_statut}|=={ok}|?{reponse_formulaire_ok,reponse_formulaire_erreur})] reponse_formulaire">
+		[(#ENV{dashboard_message}|textebrut)]
+	</p>
+]
+
+<BOUCLE_installe(CONDITION){si #VAL|dashboard_tables_presentes}>
+
+#SET{lot,#ENV{lot}|match{^[0-9a-f]{16}$}}
+
+[(#REM)
+	ÉTAT DEUX : un lot est en cours ou achevé.
+
+	Le jeton de l'adresse **désigne**, il n'autorise pas : `dashboard_lot_chantiers()`
+	repasse chaque site par `autoriser()`, sans quoi un jeton transmis donnerait
+	à lire l'avancement de sites qu'on n'a pas le droit de voir.
+]
+<BOUCLE_lot(CONDITION){si #GET{lot}}>
+
+#SET{acheve,#GET{lot}|dashboard_lot_est_acheve}
+#SET{reussi,#GET{lot}|dashboard_lot_est_reussi}
+#SET{ids,#GET{lot}|dashboard_lot_ids}
+
+<div class="dashboard-fiche" id="lot">
+	<h2><:dashboard:titre_lot_suivi:></h2>
+	<p><strong>[(#GET{lot}|dashboard_lot_resume)]</strong></p>
+	[(#GET{acheve}|non)
+	<p class="dashboard-lot-avancement" aria-live="polite"><:dashboard:lot_patience:></p>
+	]
+</div>
+
+<BOUCLE_sites_lot(DASHBOARD_SITES){id_dashboard_site IN #GET{ids}}{par titre}>
+#SET{ligne,#GET{lot}|dashboard_lot_site{#ID_DASHBOARD_SITE}}
+#SET{url_plugins,#URL_SITE|dashboard_url_plugins_site}
+#SET{nb_rates,#GET{ligne}|table_valeur{rates}|count}
+
+<div class="dashboard-fiche">
+	<h3>
+		<a href="[(#URL_ECRIRE{dashboard_site,id_dashboard_site=#ID_DASHBOARD_SITE})]">[(#TITRE|entites_html)]</a>
+		[(#GET{ligne}|table_valeur{fini}|non)
+			<span class="dashboard-badge"><:dashboard:lot_badge_encours:></span>
+		]
+		[(#GET{nb_rates}|>{0})
+			<span class="dashboard-badge dashboard-badge-alerte"><:dashboard:lot_badge_echec:></span>
+		]
+	</h3>
+
+	<B_reussis>
+	<p><:dashboard:lot_reussis:></p>
+	<ul class="dashboard-lot-reussis">
+		<BOUCLE_reussis(DATA){source table,#GET{ligne}|table_valeur{reussis}}>
+		<li><code>[(#VALEUR|entites_html)]</code></li>
+		</BOUCLE_reussis>
+	</ul>
+	</B_reussis>
+
+	[(#REM)
+		Les échecs, et le lien qui sert vraiment : la gestion des plugins du site
+		distant. Elle existe sur tout SPIP, avec ou sans SVP, et c'est de là qu'on
+		voit l'état réel. Nouvel onglet, et `rel="noreferrer"` — l'adresse de
+		l'espace privé de la tour n'a pas à voyager en référent chez un site qui
+		vient de mal se comporter.
+	]
+	<B_rates>
+	<p class="dashboard-lot-echec"><:dashboard:lot_rates:></p>
+	<ul class="dashboard-lot-rates">
+		<BOUCLE_rates(DATA){source table,#GET{ligne}|table_valeur{rates}}>
+		<li>
+			<code>[(#CLE|entites_html)]</code>
+			[<span class="dashboard-message-erreur">(#VALEUR|couper{160})</span>]
+		</li>
+		</BOUCLE_rates>
+	</ul>
+	[(#GET{url_plugins}|oui)
+	<p class="boutons">
+		<a class="btn btn_secondaire" href="[(#GET{url_plugins}|attribut_url)]"
+		   target="_blank" rel="noreferrer"><:dashboard:lot_lien_plugins_site:></a>
+	</p>
+	]
+	</B_rates>
+</div>
+</BOUCLE_sites_lot>
+
+[(#REM)
+	La file des chantiers à pousser. Chaque adresse est signée pour son chantier,
+	et l'action revérifie `autoriser('operer')` : la file dit quoi appeler, elle
+	ne donne aucun droit. Aucune adresse n'est fabriquée en JavaScript.
+]
+<ul class="dashboard-lot-file" data-lot-file="chantiers" hidden>
+	<BOUCLE_file(DASHBOARD_SITES){id_dashboard_site IN #GET{ids}}{par titre}>
+	#SET{fiche,#GET{lot}|dashboard_lot_site{#ID_DASHBOARD_SITE}}
+	#SET{id_chantier,#GET{fiche}|table_valeur{id_chantier}}
+	<li data-chantier="[(#GET{id_chantier})]"><a
+		href="[(#URL_ACTION_AUTEUR{dashboard_chantier,#GET{id_chantier}})]">[(#GET{id_chantier})]</a></li>
+	</BOUCLE_file>
+</ul>
+
+[(#GET{acheve}|oui)
+<div class="dashboard-fiche" id="suite">
+	[(#GET{reussi}|oui)
+		<p><:dashboard:lot_tout_ok:></p>
+	]
+	[(#GET{reussi}|non)
+		<p class="explication"><:dashboard:lot_reste_des_echecs:></p>
+	]
+	<p class="boutons">
+		<a class="btn" href="[(#URL_ECRIRE{dashboard})]"><:dashboard:lot_retour_parc:></a>
+		<a class="btn btn_secondaire" href="[(#URL_ECRIRE{dashboard_plugins})]"><:dashboard:lot_nouvelle_selection:></a>
+	</p>
+</div>
+]
+
+<script type="text/javascript">
+/* Pousse les chantiers du lot, un par un, jusqu'à ce que chacun réponde
+   « fini ». Le contrat est celui du reste du parc : tant que ce n'est pas fini,
+   on rappelle la même adresse. C'est ainsi qu'un chantier de cinq étapes tient
+   dans une boucle qui n'en sait rien.
+
+   Les adresses sont écrites par le squelette ci-dessus, signées pour leur
+   chantier : aucune n'est fabriquée ici. */
+(function () {
+	var file = document.querySelector('[data-lot-file="chantiers"]');
+	var sortie = document.querySelector('.dashboard-lot-avancement');
+	if (!file || !sortie) { return; }
+
+	var liens = [].map.call(file.querySelectorAll('li[data-chantier] a'), function (a) {
+		return a.getAttribute('href');
+	});
+	if (!liens.length) { return; }
+
+	var tours = 0;
+	var toursMax = 400;
+
+	function dire(texte) { sortie.textContent = texte; }
+
+	function pousser(rang) {
+		if (rang >= liens.length) {
+			/* Tout est poussé : on recharge pour que le verdict soit calculé sur
+			   l'inventaire d'après, côté serveur. Le succès se constate, il ne se
+			   déduit pas de ce qu'a répondu l'appel. */
+			window.location.reload();
+			return;
+		}
+		if (++tours > toursMax) {
+			dire('Suivi interrompu ; la tâche de fond termine le lot.');
+			return;
+		}
+
+		dire('Site ' + (rang + 1) + ' sur ' + liens.length + '…');
+
+		fetch(liens[rang], { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+			.then(function (r) { return r.json(); })
+			.then(function (etat) {
+				if (etat && etat.message) { dire(etat.message); }
+				window.setTimeout(function () {
+					pousser(etat && etat.fini ? rang + 1 : rang);
+				}, 600);
+			})
+			.catch(function () {
+				/* Un silence ne dit rien de l'issue : on passe au site suivant, et
+				   le rechargement final constatera sur l'inventaire. */
+				window.setTimeout(function () { pousser(rang + 1); }, 1200);
+			});
+	}
+
+	pousser(0);
+})();
+</script>
+
+</BOUCLE_lot>
+
+[(#REM)
+	ÉTAT UN : la sélection. C'est la branche rendue quand l'adresse ne porte pas
+	de lot.
+]
+<BOUCLE_retard(CONDITION){si #VAL|dashboard_plugins_en_retard}>
+
+[(#REM)
+	`operer` ne dépend pas du site : c'est un droit global, réservé aux
+	webmestres, là où `voir` suffit à ouvrir cette page. Le tester une fois pour
+	toutes autour du formulaire est donc à la fois juste et la seule forme qui
+	compile — placé dans la boucle des sites, il entrelaçait sa condition avec la
+	branche « avant » de la boucle des plugins, et SPIP rendait « Boucle _operable
+	non fermée ». Les parties d'une boucle s'imbriquent, elles ne se croisent pas.
+	On nomme donc ici les marqueurs de boucle, on ne les écrit pas : SPIP les
+	analyse jusque dans les commentaires de squelette.
+]
+<BOUCLE_agir(CONDITION){si #AUTORISER{operer,dashboard_site}}>
+
+<p class="explication"><:dashboard:plugins_explication:></p>
+
+[(#REM)
+	Pas de troisième argument à #URL_ACTION_AUTEUR : l'action choisit elle-même où
+	renvoyer, puisqu'elle doit y porter le jeton du lot qu'elle vient d'ouvrir.
+	Une redirection posée ici serait ignorée, et laisserait croire le contraire.
+
+	`data-lot-form` et non la seule classe : l'espace privé porte déjà un
+	formulaire de recherche dans son entête, et un `querySelector('form.formulaire_spip')`
+	aurait pu tomber dessus.
+]
+<form method="post" action="[(#URL_ACTION_AUTEUR{dashboard_plugins_lot})]"
+      class="formulaire_spip" data-lot-form="oui">
+	<div class="dashboard-lot-barre">
+		<label><input type="checkbox" data-lot-tout="oui" /> <:dashboard:plugins_tout_cocher:></label>
+		<button type="submit" class="btn btn_danger" data-lot-valider="oui" disabled>
+			<:dashboard:plugins_valider:>
+		</button>
+		<span class="dashboard-lot-compte" aria-live="polite"></span>
+	</div>
+
+	<p class="explication"><:dashboard:plugins_avertissement:></p>
+
+	<BOUCLE_sites(DASHBOARD_SITES){statut=publie}{par titre}>
+	<B_maj>
+	<div class="dashboard-fiche">
+		<h2>
+			<a href="[(#URL_ECRIRE{dashboard_site,id_dashboard_site=#ID_DASHBOARD_SITE})]">[(#TITRE|entites_html)]</a>
+			[<code>(#VERSION_SPIP|entites_html)</code>]
+		</h2>
+
+		<p>
+			<label><input type="checkbox" data-lot-site="#ID_DASHBOARD_SITE" />
+				<:dashboard:plugins_cocher_site:></label>
+		</p>
+		<table class="spip liste">
+			<thead>
+				<tr>
+					<th scope="col"><span class="visuallyhidden"><:dashboard:plugins_colonne_choix:></span></th>
+					<th scope="col"><:dashboard:col_plugin:></th>
+					<th scope="col"><:dashboard:plugins_colonne_installee:></th>
+					<th scope="col"><:dashboard:plugins_colonne_disponible:></th>
+				</tr>
+			</thead>
+			<tbody>
+			<BOUCLE_maj(DASHBOARD_PLUGINS){id_dashboard_site}{maj_disponible=oui}{distribue=non}{par prefixe}>
+				#SET{coche,#ID_DASHBOARD_SITE|concat{':',#PREFIXE}}
+				#SET{cible,#VERSION_RETENUE|sinon{#VERSION_DISPONIBLE}}
+				<tr>
+					<td>
+						[(#REM)
+							La case ne porte qu'un couple site-préfixe. Ni version
+							visée, ni adresse : la version est redéduite au moment
+							d'agir, sur un inventaire tout juste rafraîchi, et
+							l'action revalide le couple contre cet inventaire.
+							La case désigne, elle n'autorise pas.
+						]
+						<input type="checkbox" name="maj[]" value="[(#GET{coche}|entites_html)]"
+						       data-lot-plugin="#ID_DASHBOARD_SITE" />
+					</td>
+					<td>
+						[<strong>(#NOM|textebrut|couper{60})</strong>]
+						<br /><code>[(#PREFIXE|entites_html)]</code>
+					</td>
+					<td><code>[(#VERSION|entites_html)]</code></td>
+					<td>
+						[<code>(#GET{cible}|entites_html)</code>]
+						[(#PROVENANCE|=={site}|oui)
+							<span class="dashboard-provenance" title="<:dashboard:provenance_site_titre|attribut_html:>"><:dashboard:provenance_site:></span>
+						]
+					</td>
+				</tr>
+			</BOUCLE_maj>
+			</tbody>
+		</table>
+	</div>
+	</B_maj>
+	</BOUCLE_sites>
+</form>
+
+<script type="text/javascript">
+/* Les cases, et rien d'autre. Le bouton reste inerte tant que rien n'est coché :
+   valider une sélection vide n'a pas de sens, et l'action le refuserait de toute
+   façon — mais un bouton qui ne fait rien sans le dire est un défaut à lui seul. */
+(function () {
+	var form = document.querySelector('form[data-lot-form]');
+	if (!form) { return; }
+
+	var valider = form.querySelector('[data-lot-valider]');
+	var compte  = form.querySelector('.dashboard-lot-compte');
+	var tout    = form.querySelector('[data-lot-tout]');
+
+	function plugins() {
+		return [].slice.call(form.querySelectorAll('[data-lot-plugin]'));
+	}
+
+	function rafraichir() {
+		var choisis = plugins().filter(function (c) { return c.checked; }).length;
+		if (valider) { valider.disabled = (choisis === 0); }
+		if (compte) {
+			compte.textContent = choisis ? choisis + ' mise(s) à jour sélectionnée(s)' : '';
+		}
+		/* La case d'un site suit ses plugins : cochée quand tous le sont,
+		   indéterminée quand une partie l'est. Sans l'état indéterminé, elle
+		   annoncerait « tout coché » sur une sélection partielle. */
+		[].forEach.call(form.querySelectorAll('[data-lot-site]'), function (caseSite) {
+			var id = caseSite.getAttribute('data-lot-site');
+			var siens = plugins().filter(function (c) {
+				return c.getAttribute('data-lot-plugin') === id;
+			});
+			var coches = siens.filter(function (c) { return c.checked; }).length;
+			caseSite.checked = (coches > 0 && coches === siens.length);
+			caseSite.indeterminate = (coches > 0 && coches < siens.length);
+		});
+	}
+
+	form.addEventListener('change', function (e) {
+		var cible = e.target;
+		if (cible.hasAttribute('data-lot-site')) {
+			var id = cible.getAttribute('data-lot-site');
+			plugins().forEach(function (c) {
+				if (c.getAttribute('data-lot-plugin') === id) { c.checked = cible.checked; }
+			});
+		} else if (cible === tout) {
+			plugins().forEach(function (c) { c.checked = cible.checked; });
+		}
+		rafraichir();
+	});
+
+	rafraichir();
+})();
+</script>
+
+</BOUCLE_agir>
+<div class="dashboard-fiche">
+	<p><:dashboard:plugins_non_operable:></p>
+	<p class="boutons">
+		<a class="btn" href="[(#URL_ECRIRE{dashboard})]"><:dashboard:lot_retour_parc:></a>
+	</p>
+</div>
+<//B_agir>
+
+</BOUCLE_retard>
+<div class="dashboard-fiche">
+	<p><:dashboard:plugins_aucun_retard:></p>
+	<p class="boutons">
+		<a class="btn" href="[(#URL_ECRIRE{dashboard})]"><:dashboard:lot_retour_parc:></a>
+	</p>
+</div>
+<//B_retard>
+
+<//B_lot>
+</BOUCLE_installe>
+<div class="dashboard-fiche dashboard-fiche-alerte">
+	<h2><:dashboard:titre_tables_absentes:></h2>
+	<p>[(#VAL|dashboard_tables_absentes|entites_html)]</p>
+</div>
+<//B_installe>

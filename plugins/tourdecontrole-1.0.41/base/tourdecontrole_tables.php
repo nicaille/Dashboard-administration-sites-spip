@@ -199,6 +199,11 @@ function tourdecontrole_declarer_tables_principales($tables) {
 			'id_dashboard_site'     => 'bigint(21) DEFAULT 0 NOT NULL',
 			'id_auteur'             => 'bigint(21) DEFAULT 0 NOT NULL',
 			'operation'             => "varchar(32) DEFAULT '' NOT NULL",
+			// Le lot qui a lancé ce chantier, quand il vient d'une sélection
+			// multi-sites. Un jeton, non une séquence : il voyage dans l'adresse
+			// de l'écran de résultat, et fermer l'onglet ne doit pas faire
+			// perdre le lot de vue — les chantiers, eux, continuent.
+			'lot'                   => "varchar(32) DEFAULT '' NOT NULL",
 			'cible'                 => "varchar(255) DEFAULT '' NOT NULL",
 			'etape'                 => "varchar(32) DEFAULT '' NOT NULL",
 			'statut'                => "varchar(16) DEFAULT 'attente' NOT NULL",

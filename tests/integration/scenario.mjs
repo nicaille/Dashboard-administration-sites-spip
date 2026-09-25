@@ -2603,6 +2603,123 @@ console.log('\n### Journal du parc : chaque filtre porte vraiment');
 	dit('deux filtres se cumulent', croise === 0, `${croise} ligne(s)`);
 }
 
+console.log('\n### Page unifiée des mises à jour de plugins');
+
+/* Le site du banc porte le plugin zzztest, déjà mis à jour plus haut. On lui
+   repose un retard en base plutôt que de refaire toute la mécanique de dépôt :
+   ce qu'on éprouve ici est la page, la sélection et le verdict, pas SVP. */
+sqlEcrire("UPDATE spip_dashboard_plugins SET maj_disponible = 'oui', distribue = 'non',"
+	+ " version = '1.0.0', version_disponible = '1.0.1', version_retenue = '1.0.1'"
+	+ " WHERE prefixe = 'ZZZTEST' AND id_dashboard_site = 1");
+
+const pagePlugins = await aller(page, '/ecrire/?exec=dashboard_plugins');
+dit('la page des mises à jour répond', (await erreurs(page)).length === 0,
+	(await erreurs(page)).join(' ; '));
+
+/* Le contrôle qui attrape le piège du bloc optionnel : un crochet littéral dans
+   son contenu fait rendre tout le bloc en clair, commentaires de squelette
+   compris. La page nomme son champ `maj[]`, donc elle en porte. Aucune erreur
+   n'est levée — seule la prose technique à l'écran le dirait. */
+dit('aucun commentaire de squelette n’a fui dans la page',
+	!pagePlugins.includes('bloc optionnel') && !pagePlugins.includes('#REM'),
+	pagePlugins.slice(0, 300));
+dit('le champ de sélection est bien un champ, pas du texte',
+	(await page.locator('input[name="maj[]"]').count()) >= 1,
+	String(await page.locator('input[name="maj[]"]').count()));
+dit('le site est nommé', pagePlugins.includes('Site de test'));
+
+/* Le bouton est inerte sans sélection : un bouton qui ne fait rien sans le dire
+   est un défaut à lui seul. */
+dit('le bouton de validation est désactivé sans sélection',
+	await page.locator('[data-lot-valider]').isDisabled());
+
+const caseMaj = page.locator('input[name="maj[]"]').first();
+await caseMaj.check();
+await page.waitForTimeout(300);
+dit('cocher une mise à jour active le bouton',
+	!(await page.locator('[data-lot-valider]').isDisabled()));
+dit('le décompte de la sélection s’affiche',
+	(await page.locator('.dashboard-lot-compte').innerText()).includes('1'),
+	await page.locator('.dashboard-lot-compte').innerText());
+
+/* La case d'un site suit ses plugins, et vice-versa. */
+await page.locator('[data-lot-site]').first().check();
+await page.waitForTimeout(200);
+dit('cocher le site coche ses plugins', await caseMaj.isChecked());
+
+await page.locator('[data-lot-valider]').click();
+await page.waitForLoadState('domcontentloaded').catch(() => {});
+await page.waitForTimeout(1000);
+
+const urlLot = page.url();
+dit('la validation renvoie vers un lot', /[?&]lot=[0-9a-f]{16}/.test(urlLot), urlLot);
+const lot = (urlLot.match(/[?&]lot=([0-9a-f]{16})/) || [])[1] || '';
+
+const chantierLot = JSON.parse(sql(
+	"SELECT operation, lot, reste, statut FROM spip_dashboard_chantiers"
+	+ " WHERE lot != '' ORDER BY id_dashboard_chantier DESC LIMIT 1"))[0] || {};
+dit('un chantier du bon type a été ouvert', chantierLot.operation === 'plugin_maj_choix',
+	JSON.stringify(chantierLot));
+dit('il porte le lot de l’adresse', chantierLot.lot === lot, `${chantierLot.lot} / ${lot}`);
+
+/* Le contrôle qui compte, et il est écrit à l'envers : la file du chantier doit
+   porter **exactement** ce qui a été coché. Si la garde sautait, l'étape la
+   reconstituerait depuis l'inventaire et deux cases cochées deviendraient autant
+   de mises à jour que le site a de plugins en retard — chacune réussissant, donc
+   rien pour le signaler. */
+dit('la file reçue est exactement la sélection', chantierLot.reste === 'ZZZTEST',
+	chantierLot.reste);
+
+/* Le navigateur pousse le lot. Au terme, la page se recharge et le verdict est
+   calculé sur l'inventaire d'après — le succès se constate, il ne se déduit pas
+   de ce qu'a répondu l'appel. */
+await page.waitForFunction(
+	() => document.querySelector('#suite') !== null,
+	null,
+	{ timeout: 240000 }
+).catch(() => {});
+await page.waitForTimeout(1500);
+
+const apresLot = await aller(page, `/ecrire/?exec=dashboard_plugins&lot=${lot}`);
+dit('l’écran de résultat répond', (await erreurs(page)).length === 0,
+	(await erreurs(page)).join(' ; '));
+dit('le lot est achevé', (await page.locator('#suite').count()) === 1, apresLot.slice(0, 400));
+dit('le retour à la vue d’ensemble est proposé',
+	(await page.locator('#suite a.btn').first().getAttribute('href') || '').includes('exec=dashboard'));
+
+const finLot = JSON.parse(sql(
+	`SELECT statut, message FROM spip_dashboard_chantiers WHERE lot = '${lot}'`))[0] || {};
+dit('le chantier du lot est terminé', finLot.statut === 'fini', JSON.stringify(finLot));
+
+/* Le verdict se lit sur l'inventaire : plus de retard sur ce plugin. */
+const inventaireApres = JSON.parse(sql(
+	"SELECT maj_disponible FROM spip_dashboard_plugins WHERE prefixe = 'ZZZTEST' AND id_dashboard_site = 1"))[0] || {};
+dit('l’inventaire ne déclare plus le plugin en retard',
+	inventaireApres.maj_disponible === 'non', JSON.stringify(inventaireApres));
+dit('et la page le dit réussi', apresLot.includes('ZZZTEST'), apresLot.slice(0, 400));
+
+/* Un lot forgé ne donne rien : le jeton désigne, il n'autorise pas, et un jeton
+   qui ne correspond à rien doit rendre la page de sélection, pas une erreur. */
+const faux = await aller(page, '/ecrire/?exec=dashboard_plugins&lot=' + 'f'.repeat(16));
+dit('un lot inconnu ne fait pas tomber la page', (await erreurs(page)).length === 0,
+	(await erreurs(page)).join(' ; '));
+dit('un jeton mal formé est ignoré',
+	(await aller(page, '/ecrire/?exec=dashboard_plugins&lot=pas-un-jeton')).length > 0
+	&& (await erreurs(page)).length === 0, (await erreurs(page)).join(' ; '));
+
+/* Le fil d'Ariane, comme pour le journal : sans squelette à nous, SPIP fabrique
+   un lien de remontée vers une page qui n'existe pas. */
+await aller(page, '/ecrire/?exec=dashboard_plugins');
+const arianePlugins = await page.locator('.hierarchie, #hierarchie').first().innerText().catch(() => '');
+dit('le fil d’Ariane remonte au parc', arianePlugins.includes('Parc de sites SPIP'),
+	arianePlugins.replace(/\s+/g, ' '));
+
+/* Et le lien depuis la vue d'ensemble. */
+const parcLien = await aller(page, '/ecrire/?exec=dashboard');
+dit('la vue d’ensemble mène à la page des mises à jour',
+	(await page.locator('a[href*="exec=dashboard_plugins"]').count()) >= 1,
+	parcLien.slice(0, 200));
+
 /* La couverture du contrôle anti-fuite, dite en clair. Elle ne tient qu'à une
    chose : que les chargements de page passent par `aller()`. Un `page.goto()`
    direct ajouté plus tard sortirait du filet sans que rien ne le signale — le

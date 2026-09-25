@@ -77,6 +77,12 @@ function dashboard_chantier_etapes($operation) {
 		// et la sauvegarde, il a pu se passer plusieurs minutes, et mettre à
 		// jour depuis une liste périmée n'aurait guère de sens.
 		'plugin_maj_tous' => ['depots', 'sauvegarde', 'sync', 'plugins', 'sync'],
+		// Mêmes étapes que « tous », et c'est voulu : ce qui change n'est pas le
+		// déroulé mais la file, qui est **reçue** au lieu d'être calculée. Le
+		// `sync` intermédiaire garde son sens — entre le clic et la sauvegarde il
+		// a pu passer plusieurs minutes, et un plugin déjà à jour se voit alors
+		// écarté par l'étape elle-même.
+		'plugin_maj_choix' => ['depots', 'sauvegarde', 'sync', 'plugins', 'sync'],
 		// Relire les dépôts et rien d'autre, pour savoir où l'on en est.
 		'depots_maj'      => ['depots', 'sync'],
 		'core_maj'        => ['sauvegarde', 'preflight', 'core', 'base', 'sync'],
@@ -104,7 +110,7 @@ function dashboard_chantier_operation_connue($operation) {
  * @param string $cible Préfixe de plugin, version de SPIP… selon l'opération
  * @return array{ok: bool, id: int, message: string}
  */
-function dashboard_chantier_creer($id_dashboard_site, $operation, $cible = '') {
+function dashboard_chantier_creer($id_dashboard_site, $operation, $cible = '', $options = []) {
 	$etapes = dashboard_chantier_etapes($operation);
 	if (!$etapes) {
 		return ['ok' => false, 'id' => 0, 'message' => 'Opération inconnue : ' . $operation];
@@ -125,7 +131,12 @@ function dashboard_chantier_creer($id_dashboard_site, $operation, $cible = '') {
 		'id_dashboard_site' => (int) $id_dashboard_site,
 		'id_auteur'         => (int) ($GLOBALS['visiteur_session']['id_auteur'] ?? 0),
 		'operation'         => $operation,
+		'lot'               => (string) ($options['lot'] ?? ''),
 		'cible'             => (string) $cible,
+		// La file de départ, pour les opérations dont la liste est reçue plutôt
+		// que calculée. Aucune des étapes qui précèdent « plugins » ne touche à
+		// cette colonne, si bien que la liste y survit intacte.
+		'reste'             => (string) ($options['reste'] ?? ''),
 		'etape'             => $etapes[0],
 		'statut'            => 'attente',
 		'rang'              => 0,
@@ -739,6 +750,19 @@ function dashboard_chantier_etape_plugins($chantier) {
 	$id_site = (int) $chantier['id_dashboard_site'];
 	$reste = array_values(array_filter(explode(',', (string) $chantier['reste'])));
 
+	/* **Une file reçue ne se reconstitue jamais.** Pour `plugin_maj_choix`, la
+	   liste des préfixes est posée à la création du chantier : si elle est vide
+	   ici, c'est qu'elle est épuisée, et non qu'il faut aller la chercher. La
+	   retomber sur l'inventaire transformerait deux cases cochées en autant de
+	   mises à jour que le site a de plugins en retard — sur un parc entier, et
+	   sans que rien ne le signale, puisque chacune réussirait.
+
+	   La distinction tient donc à l'opération, pas à l'état de la file : c'est le
+	   seul endroit qui dise d'où la file devait venir. */
+	if (!$reste && (string) $chantier['operation'] === 'plugin_maj_choix') {
+		return ['ok' => true, 'message' => 'Aucun plugin restant'];
+	}
+
 	// File vide : c'est le premier passage sur cette étape, il faut la constituer.
 	// Une fois le dernier plugin traité, l'étape avance et l'on ne repasse plus
 	// ici, donc il n'y a pas de risque de reconstituer une file déjà épuisée.
@@ -760,6 +784,16 @@ function dashboard_chantier_etape_plugins($chantier) {
 		}
 	}
 
+	/* Ce qui a été demandé se mémorise au premier passage, avant que la file ne
+	   commence à se vider. Sans cela, l'écran de résultat ne saurait plus quoi
+	   confronter à l'inventaire d'après : `reste` est vide au terme, et une liste
+	   reconstituée depuis les plugins encore en retard ne mentionnerait jamais
+	   ceux qui ont réussi. */
+	$detail_lu = json_decode((string) $chantier['detail'], true);
+	$demandes  = (is_array($detail_lu) && is_array($detail_lu['demandes'] ?? null))
+		? $detail_lu['demandes']
+		: $reste;
+
 	$prefixe = (string) array_shift($reste);
 	$reponse = dashboard_operation_plugin_maj($id_site, $prefixe);
 	$message = (string) $reponse['message'];
@@ -778,7 +812,7 @@ function dashboard_chantier_etape_plugins($chantier) {
 			$echecs[$prefixe] = $message;
 		}
 	}
-	$detail = json_encode(['echecs' => $echecs], JSON_UNESCAPED_UNICODE);
+	$detail = json_encode(['demandes' => $demandes, 'echecs' => $echecs], JSON_UNESCAPED_UNICODE);
 
 	if ($reste) {
 		return [
@@ -845,6 +879,7 @@ function dashboard_chantier_libelle($operation, $cible = '') {
 	$libelles = [
 		'plugin_maj'      => 'Mise à jour du plugin ' . $cible,
 		'plugin_maj_tous' => 'Mise à jour de tous les plugins',
+		'plugin_maj_choix' => 'Mise à jour des plugins choisis' . ($cible !== '' ? ' (' . $cible . ')' : ''),
 		'depots_maj'      => 'Relecture des dépôts de plugins',
 		'core_maj'        => 'Mise à jour du core SPIP',
 		'base_maj'        => 'Migration de la base',

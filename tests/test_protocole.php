@@ -2223,6 +2223,192 @@ verifier('503 : panne du service, donc silence', dashboard_push_verdict(503) ===
 verifier('500 : panne du service, donc silence', dashboard_push_verdict(500) === 'silence');
 verifier('aucune réponse : silence', dashboard_push_verdict(0) === 'silence');
 
+echo "\n== Lots de mises à jour de plugins ==\n";
+
+require_once chemin_plugin('tourdecontrole') . '/inc/dashboard_lots.php';
+
+/* Ce que le navigateur envoie : des couples `<id>:<PREFIXE>`, et rien de plus.
+   Ni version visée, ni adresse — la version est redéduite au moment d'agir, sur
+   un inventaire tout juste rafraîchi. */
+$lu = dashboard_lot_lire(['3:SAISIES', '3:GIS', '7:SAISIES']);
+verifier('deux sites reconnus', array_keys($lu) === [3, 7], json_encode(array_keys($lu)));
+verifier('les préfixes du site sont groupés et triés',
+	($lu[3] ?? []) === ['GIS', 'SAISIES'], json_encode($lu[3] ?? []));
+
+verifier('le préfixe est normalisé en capitales',
+	(dashboard_lot_lire(['3:saisies'])[3] ?? []) === ['SAISIES']);
+verifier('un souligné dans le préfixe est accepté',
+	(dashboard_lot_lire(['3:PORTE_PLUME'])[3] ?? []) === ['PORTE_PLUME'],
+	json_encode(dashboard_lot_lire(['3:PORTE_PLUME'])));
+verifier('un doublon ne compte qu’une fois',
+	count(dashboard_lot_lire(['3:GIS', '3:GIS'])[3] ?? []) === 1);
+
+/* Tout ce qui vient du navigateur finira dans une requête et dans un message :
+   ce qui n’a pas la forme d’un préfixe de plugin est écarté ici, pas plus loin. */
+foreach (['3:', ':GIS', '3', 'GIS', '0:GIS', '-2:GIS', '3:GI S', '3:GIS;DROP', '3:<svg>'] as $vilain) {
+	verifier('entrée refusée : ' . $vilain, dashboard_lot_lire([$vilain]) === [],
+		json_encode(dashboard_lot_lire([$vilain])));
+}
+verifier('ce qui n’est pas un tableau ne rend rien', dashboard_lot_lire('3:GIS') === []);
+verifier('un tableau vide ne rend rien', dashboard_lot_lire([]) === []);
+
+/* Une borne, et non un plafond arbitraire : chaque site du lot reçoit une
+   sauvegarde complète, et un lot de plusieurs centaines d’entrées tiendrait des
+   heures sans que personne ne puisse le suivre. */
+$enorme = [];
+for ($i = 1; $i <= _DASHBOARD_LOT_MAX + 50; $i++) {
+	$enorme[] = $i . ':GIS';
+}
+verifier('un lot démesuré est borné',
+	count(dashboard_lot_lire($enorme)) === _DASHBOARD_LOT_MAX,
+	count(dashboard_lot_lire($enorme)));
+
+echo "\n== La case désigne, elle n’autorise pas ==\n";
+
+/* La règle des cases à cocher du parc, appliquée au couple site-plugin. Trois
+   raisons d’écarter, et la page n’en propose aucune : le plugin n’est pas en
+   retard sur ce site, il n’y existe pas, ou le site n’est pas opérable. */
+$connus = [3 => ['GIS', 'SAISIES'], 7 => ['SAISIES'], 9 => ['GIS']];
+$operables = [3, 7];
+
+$retenus = dashboard_lot_valider(['3' => ['GIS', 'SAISIES'], '7' => ['SAISIES']], $connus, $operables);
+verifier('une sélection légitime passe entière',
+	$retenus === [3 => ['GIS', 'SAISIES'], 7 => ['SAISIES']], json_encode($retenus));
+
+$forge = dashboard_lot_valider([9 => ['GIS']], $connus, $operables);
+verifier('un site non opérable est écarté, même si le plugin y est en retard',
+	$forge === [], json_encode($forge));
+
+$forge = dashboard_lot_valider([3 => ['GIS', 'INCONNU']], $connus, $operables);
+verifier('un plugin absent de l’inventaire est écarté, les autres passent',
+	$forge === [3 => ['GIS']], json_encode($forge));
+
+$forge = dashboard_lot_valider([3 => ['INCONNU']], $connus, $operables);
+verifier('un site dont plus rien n’est retenu disparaît du lot',
+	$forge === [], json_encode($forge));
+verifier('une sélection vide ne retient rien', dashboard_lot_valider([], $connus, $operables) === []);
+
+/* Le jeton d’un lot : aléatoire, et non une séquence. Il voyage dans une
+   adresse, et un identifiant qui s’incrémente inviterait à essayer le voisin. */
+$jeton = dashboard_lot_jeton();
+verifier('le jeton a la forme attendue', preg_match('/^[0-9a-f]{16}$/', $jeton) === 1, $jeton);
+verifier('deux jetons diffèrent', dashboard_lot_jeton() !== dashboard_lot_jeton());
+
+echo "\n== Le succès se constate, il ne se déduit pas ==\n";
+
+/* Un site qui se tait pendant qu’il se met à jour lui-même est le cas normal,
+   pas une panne. Le verdict se prend donc sur l’inventaire d’après : un plugin
+   est à jour s’il n’y figure plus comme en retard, quoi qu’ait répondu l’appel.
+
+   Ici le chantier a retenu un échec sur GIS, et l’inventaire ne le déclare plus
+   en retard : c’est un succès. L’inverse serait de croire le message plutôt que
+   le site. */
+$chantiers = [[
+	'id_dashboard_chantier' => 11,
+	'id_dashboard_site'     => 3,
+	'statut'                => 'fini',
+	'reste'                 => '',
+	'detail'                => json_encode([
+		'demandes' => ['GIS', 'SAISIES', 'CEXTRAS'],
+		'echecs'   => ['GIS' => 'le site n’a pas répondu'],
+	]),
+]];
+$bilan = dashboard_lot_verdict($chantiers, [3 => ['SAISIES']]);
+verifier('un seul site au bilan', count($bilan) === 1);
+verifier('le plugin encore en retard est le seul échec',
+	array_keys($bilan[0]['rates']) === ['SAISIES'], json_encode($bilan[0]['rates']));
+verifier('celui dont le chantier se plaignait mais qui a bougé compte pour un succès',
+	in_array('GIS', $bilan[0]['reussis'], true), json_encode($bilan[0]['reussis']));
+verifier('celui dont personne n’a parlé et qui a bougé aussi',
+	in_array('CEXTRAS', $bilan[0]['reussis'], true), json_encode($bilan[0]['reussis']));
+
+/* Et le message d’échec du chantier est repris quand il existe : sans lui, la
+   page dirait « échec » sans dire pourquoi. */
+$bilan_msg = dashboard_lot_verdict([[
+	'id_dashboard_chantier' => 12, 'id_dashboard_site' => 3, 'statut' => 'fini', 'reste' => '',
+	'detail' => json_encode(['demandes' => ['GIS'], 'echecs' => ['GIS' => 'verrou SVP posé']]),
+]], [3 => ['GIS']]);
+verifier('le motif de l’échec est repris',
+	($bilan_msg[0]['rates']['GIS'] ?? '') === 'verrou SVP posé',
+	json_encode($bilan_msg[0]['rates']));
+
+/* Un chantier interrompu avant d’avoir écrit son compte rendu : la file porte
+   encore ce qui était demandé, et elle fait l’affaire. */
+$tot = dashboard_lot_verdict([[
+	'id_dashboard_chantier' => 13, 'id_dashboard_site' => 5, 'statut' => 'encours',
+	'reste' => 'GIS,SAISIES', 'detail' => '',
+]], [5 => ['GIS', 'SAISIES']]);
+verifier('la file tient lieu de demande avant tout compte rendu',
+	$tot[0]['demandes'] === ['GIS', 'SAISIES'], json_encode($tot[0]['demandes']));
+verifier('un chantier en cours n’est pas déclaré fini', $tot[0]['fini'] === false);
+
+echo "\n== Achèvement, succès, sites touchés ==\n";
+
+verifier('un lot dont un chantier tourne n’est pas achevé', !dashboard_lot_acheve($tot));
+verifier('un lot dont tout est fini l’est', dashboard_lot_acheve($bilan));
+verifier('un lot vide n’est pas achevé : il n’existe pas', !dashboard_lot_acheve([]));
+
+verifier('un lot avec un échec n’est pas sans échec', !dashboard_lot_sans_echec($bilan));
+$parfait = dashboard_lot_verdict([[
+	'id_dashboard_chantier' => 14, 'id_dashboard_site' => 3, 'statut' => 'fini', 'reste' => '',
+	'detail' => json_encode(['demandes' => ['GIS'], 'echecs' => []]),
+]], []);
+verifier('un lot tout réussi l’est', dashboard_lot_sans_echec($parfait));
+
+/* Seuls les sites qui ont réellement reçu une mise à jour sont à resynchroniser :
+   un site dont rien n’a bougé n’a pas d’inventaire à rafraîchir. */
+verifier('le site touché est retenu', dashboard_lot_sites_touches($parfait) === [3],
+	json_encode(dashboard_lot_sites_touches($parfait)));
+$rien = dashboard_lot_verdict([[
+	'id_dashboard_chantier' => 15, 'id_dashboard_site' => 8, 'statut' => 'fini', 'reste' => '',
+	'detail' => json_encode(['demandes' => ['GIS'], 'echecs' => ['GIS' => 'refus']]),
+]], [8 => ['GIS']]);
+verifier('un site dont rien n’a abouti n’est pas à resynchroniser',
+	dashboard_lot_sites_touches($rien) === [], json_encode(dashboard_lot_sites_touches($rien)));
+
+echo "\n== Le lien d’échec vers le site distant ==\n";
+
+/* `?exec=admin_plugin` existe sur tout SPIP, avec ou sans SVP : c’est de là qu’on
+   voit l’état réel. Pointer la page de SVP tomberait en erreur précisément sur
+   les sites où une mise à jour a le plus de raisons d’avoir échoué. */
+verifier('l’adresse mène à la gestion des plugins',
+	dashboard_lot_url_plugins('https://exemple.org') === 'https://exemple.org/ecrire/?exec=admin_plugin',
+	dashboard_lot_url_plugins('https://exemple.org'));
+verifier('la barre oblique finale ne double pas',
+	dashboard_lot_url_plugins('https://exemple.org/') === 'https://exemple.org/ecrire/?exec=admin_plugin');
+verifier('un sous-répertoire est conservé',
+	dashboard_lot_url_plugins('https://exemple.org/blog') === 'https://exemple.org/blog/ecrire/?exec=admin_plugin');
+verifier('une adresse vide ne rend rien', dashboard_lot_url_plugins('') === '');
+verifier('un schéma exotique ne rend rien', dashboard_lot_url_plugins('javascript:alert(1)') === '');
+
+echo "\n== Une file reçue ne se reconstitue jamais ==\n";
+
+/* Le contrôle qui compte, et il vaut d’être écrit à l’envers : si la garde
+   manquait, deux cases cochées deviendraient autant de mises à jour que le site
+   a de plugins en retard — sur tout le parc, et sans que rien ne le signale,
+   puisque chacune réussirait.
+
+   L’étape est la même pour « tous » et pour « choisis » ; ce qui les sépare est
+   l’opération, seul endroit qui dise d’où la file devait venir. */
+require_once chemin_plugin('tourdecontrole') . '/inc/dashboard_chantiers.php';
+
+verifier('l’opération du choix est connue du moteur',
+	dashboard_chantier_operation_connue('plugin_maj_choix'));
+verifier('elle a les mêmes étapes que « tous »',
+	dashboard_chantier_etapes('plugin_maj_choix') === dashboard_chantier_etapes('plugin_maj_tous'),
+	implode(' → ', dashboard_chantier_etapes('plugin_maj_choix')));
+verifier('et son libellé ne dit pas « tous »',
+	strpos(dashboard_chantier_libelle('plugin_maj_choix'), 'tous') === false,
+	dashboard_chantier_libelle('plugin_maj_choix'));
+
+$epuise = dashboard_chantier_etape_plugins([
+	'id_dashboard_site' => 3, 'operation' => 'plugin_maj_choix', 'reste' => '', 'detail' => '',
+]);
+verifier('file reçue et vide : l’étape s’arrête au lieu de tout prendre',
+	!empty($epuise['ok']) && empty($epuise['reste']), json_encode($epuise));
+verifier('et elle n’a lancé aucune mise à jour',
+	strpos((string) $epuise['message'], 'restant') !== false, (string) $epuise['message']);
+
 echo "\n== Alertes : on n'écrit que s'il y a du nouveau ==\n";
 
 $vide = ['core' => [], 'bloques' => [], 'plugins' => [], 'agent' => [], 'pannes' => [], 'sites' => 12];

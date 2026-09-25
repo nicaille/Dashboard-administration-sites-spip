@@ -719,6 +719,47 @@ tout `<script src>` rangé dans une branche « sinon ». Il refuse aussi tout
 `#ARRAY{…#GET{…}}`, variante du premier. Le sixième appartient au parcours,
 pour la raison dite plus haut.
 
+## Une file reçue ne se reconstitue jamais
+
+`dashboard_chantier_etape_plugins()` sert deux opérations : `plugin_maj_tous`,
+qui **calcule** sa file depuis l'inventaire, et `plugin_maj_choix`, qui la
+**reçoit** — la liste des préfixes cochés sur la page unifiée est posée dans
+`reste` à la création du chantier.
+
+Or la fonction constituait sa file dès qu'elle la trouvait vide. Pour une file
+reçue, vide veut dire **épuisée**, et la retomber sur l'inventaire
+transformerait deux cases cochées en autant de mises à jour que le site a de
+plugins en retard. Sur tout un parc, et sans que rien ne le signale : chacune
+réussirait.
+
+La distinction ne peut pas se lire dans l'état de la file. Elle tient à
+l'opération, seul endroit qui dise d'où la file devait venir — d'où la garde
+explicite, et un contrôle unitaire écrit à l'envers : sans elle, l'étape part
+chercher en base, ce qui, dans le bac à sable des contrôles, la fait tomber tout
+net.
+
+La liste voyage dans `reste` et non dans une colonne à elle, parce qu'**aucune
+des étapes qui précèdent `plugins` ne touche cette colonne** — vérifié fonction
+par fonction avant de s'y fier, pas supposé. `cible` n'aurait pas convenu : un
+`varchar(255)` ne tient pas la liste des plugins d'un site bien fourni.
+
+### Le succès se constate sur l'inventaire, pas sur la réponse
+
+`dashboard_lot_verdict()` ne croit pas ce qu'a répondu l'appel : un plugin est à
+jour si l'inventaire relu **après** ne le déclare plus en retard. C'est la règle
+du silence poussée jusqu'à l'écran — un site qui se tait pendant qu'il se
+remplace lui-même est le cas normal, et l'étape ne retient déjà pas ce silence
+comme un échec.
+
+Conséquence contre-intuitive, et voulue : un plugin dont le chantier a retenu une
+erreur mais qui est passé à la bonne version compte pour un **succès**. C'est ce
+que le site montre, et c'est lui qui a raison.
+
+Ce qui a été demandé se mémorise donc au premier passage de l'étape, dans son
+compte rendu. Sans cela il n'y aurait plus rien à confronter : `reste` est vide
+au terme, et une liste reconstituée depuis les plugins encore en retard ne
+mentionnerait jamais ceux qui ont réussi.
+
 ## Une case à cocher ne donne aucun droit
 
 Les actions de parc — relire les dépôts, synchroniser ou vider une sélection,
@@ -736,6 +777,19 @@ Trois écritures doivent donc s'accorder, et rien ne les relie à l'exécution :
 bouton (`data-parc-action="sync"`), la file (`data-parc-file="sync"`) et le
 `case 'sync':` de l'action. Qu'une seule manque et le bouton ne fait rien, sans
 erreur ni message — `tests/test_structure.php` les confronte.
+
+Et la même règle vaut pour un couple site-plugin. La page unifiée des mises à
+jour coche `<id_site>:<PREFIXE>` ; l'action revalide chaque couple contre
+l'inventaire (`maj_disponible`, `distribue`) **et** contre
+`autoriser('operer')`, et écarte le reste sans bruit. Une adresse forgée ne
+donne donc rien, et un inventaire qui a bougé entre l'affichage et le clic le
+dit au lieu d'agir sur du périmé.
+
+Ici l'adresse signée ne peut pas porter la sélection : elle autorise
+« lancer un lot », et le nombre de sous-ensembles cochables est combinatoire.
+C'est donc **le contenu du formulaire** qui désigne, et il est revalidé comme
+une case à cocher l'est. Le jeton du lot qui suit obéit à la même règle : il
+retrouve l'écran de suivi, et chaque site y repasse par `autoriser()`.
 
 Le contrat de réponse est le même pour les quatre opérations : tant que
 `termine` est faux, le pilote rappelle **la même adresse**. C'est ainsi qu'une
