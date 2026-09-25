@@ -62,7 +62,17 @@
 <BOUCLE_sites_lot(DASHBOARD_SITES){id_dashboard_site IN #GET{ids}}{par titre}>
 #SET{ligne,#GET{lot}|dashboard_lot_site{#ID_DASHBOARD_SITE}}
 #SET{url_plugins,#URL_SITE|dashboard_url_plugins_site}
-#SET{nb_rates,#GET{ligne}|table_valeur{rates}|count}
+[(#REM)
+	Les deux listes sont extraites ici, et non dans le critère des boucles qui les
+	parcourent. Un critère accepte une balise, et même une balise suivie d'un
+	filtre sans argument ; y mettre une balise **à accolades** suivie d'un filtre
+	**à accolades** fait deux niveaux de plus, que l'analyse ne suit pas. Le
+	remède est celui déjà consigné pour les arguments composites : calculer à
+	part.
+]
+#SET{reussis,#GET{ligne}|table_valeur{reussis}}
+#SET{rates,#GET{ligne}|table_valeur{rates}}
+#SET{nb_rates,#GET{rates}|count}
 
 <div class="dashboard-fiche">
 	<h3>
@@ -78,7 +88,7 @@
 	<B_reussis>
 	<p><:dashboard:lot_reussis:></p>
 	<ul class="dashboard-lot-reussis">
-		<BOUCLE_reussis(DATA){source table,#GET{ligne}|table_valeur{reussis}}>
+		<BOUCLE_reussis(DATA){source table,#GET{reussis}}>
 		<li><code>[(#VALEUR|entites_html)]</code></li>
 		</BOUCLE_reussis>
 	</ul>
@@ -94,7 +104,7 @@
 	<B_rates>
 	<p class="dashboard-lot-echec"><:dashboard:lot_rates:></p>
 	<ul class="dashboard-lot-rates">
-		<BOUCLE_rates(DATA){source table,#GET{ligne}|table_valeur{rates}}>
+		<BOUCLE_rates(DATA){source table,#GET{rates}}>
 		<li>
 			<code>[(#CLE|entites_html)]</code>
 			[<span class="dashboard-message-erreur">(#VALEUR|couper{160})</span>]
