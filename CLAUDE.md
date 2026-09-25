@@ -172,6 +172,97 @@ et `gzip -t` les lisent tous ; en PHP, il faut la boucle `inflate_add()` /
 `inflate_get_read_len()`. `tests/integration/scenario.mjs` en porte une, sur
 les deux relectures qu'il fait de l'archive.
 
+## Les versions de SPIP s'annoncent, elles ne se raclent pas
+
+Tout ce que la tour savait des versions de SPIP venait du **listing HTML** de
+`files.spip.net/spip/archives/`, relevé à l'expression régulière. Or ce
+répertoire est un dépôt d'archives, pas un canal d'annonce : sa réponse n'est ni
+garantie ni datée, et le jour où elle est tombée — un 500, en vrai, sur un parc
+en production — la tour a répondu « personne en retard » pour tout le monde, sans
+une ligne de journal. Deux publications de SPIP ont passé inaperçues ainsi, et
+c'est un site géré qui a prévenu son webmestre par courriel avant elle.
+
+Le canal existait depuis toujours, et c'est celui que **le core interroge
+lui-même** : `_VERSIONS_SERVEUR` dans `ecrire/genie/mise_a_jour.php`, soit
+`https://www.spip.net/spip_loader.api`. La question n'était donc pas « ce
+tracker ou la méthode générique de SPIP » : c'est la même adresse.
+
+**Trois formats cohabitent derrière trois adresses, et ils ne disent pas la même
+chose.** `/3` donne une fiche par version — adresse absolue de l'archive,
+SHA-256, PHP supportés, mémoire et espace attendus, correctifs incrémentaux —,
+l'adresse nue rend le format 2, plus pauvre mais qui liste **des branches que le
+format 3 ignore** (une 4.2, mesurée le jour où ceci est écrit). Lire le seul
+format 3 rendrait la tour aveugle sur les branches anciennes, celles dont on veut
+justement surveiller la fin de vie. D'où deux lectures et une fusion où le 3 fait
+autorité, entier, sur ce qu'il liste — panacher les champs de deux fiches
+donnerait une fiche que personne n'a publiée.
+
+`recuperer_url()` et non `recuperer_url_cache()`, contrairement au core : le cache
+du core est un fichier daté, rafraîchi même sur un 304, et c'est exactement le
+mécanisme qui a verrouillé les catalogues SVP d'un parc entier. Notre cache est
+une meta, et **forcer le relit sans le jeter** : forcer veut dire « ne te contente
+pas de ce que tu as », pas « oublie ce que tu sais ». Un contrôle unitaire a
+trouvé la faute inverse, où une relecture demandée à la main et tombée sur une
+source muette effaçait tout ce que la tour savait.
+
+### L'état du core a quatre valeurs, et deux manquaient
+
+`core_maj` valait « oui » ou « non », et le parc déduisait « à jour » de
+« l'effectif moins les retards ». Deux situations étaient donc comptées pour
+saines :
+
+- **bloqué** : la version existe, mais le PHP de l'hébergement ne la supporte
+  pas. C'est la leçon du catalogue des plugins transposée au core — *« disponible »
+  est une propriété par site* —, et dire « à jour » serait faux tandis qu'armer un
+  bouton promettrait une archive qui s'installe et casse le site. Le correctif est
+  chez l'hébergeur ;
+- **inconnu** : l'annuaire n'a rien répondu de lisible. C'est la règle du silence,
+  jamais appliquée à cette source, et c'est le défaut d'origine.
+
+Les deux se comptent désormais sur `core_etat`, et sur lui seul : mélanger
+`core_maj` et `core_etat` dans le décompte ferait compter deux fois les sites
+qu'une migration n'a pas encore reclassés. `core_maj` garde son sens exact — « y
+a-t-il quelque chose à lancer » —, ce qui arme les boutons et les files du parc
+sans toucher à leur logique.
+
+Le **saut de branche** est signalé, jamais proposé.
+
+Et une **version candidate n'est pas une version**. Le core en tient déjà compte
+pour les sauts de branche (`info_maj_versions()`, `is_numeric($rev2)`) ; on reprend
+son critère et on l'étend à la branche installée, parce que remplacer le noyau de
+tout un parc par une `4.5.0-rc1` n'est pas une décision qui se prend depuis un
+tableau de bord. Les instables restent dans l'annuaire — c'est le verdict qui
+trie, pas la lecture —, et un webmestre qui en veut une la nomme dans les versions
+imposées. Trouvé en sondant le lecteur avec une charge fabriquée, pas en le
+relisant : le code était juste sur les deux charges réelles, qui n'en contiennent
+aucune.
+
+### L'empreinte était vérifiée, et personne n'en fournissait
+
+`dashagent_core_maj()` refuse depuis le premier jour une archive dont le SHA-256
+ne répond pas à celui qu'on lui annonce. Mais `dashboard_operation_core_maj()` le
+lisait dans `$options['sha256']`, que **personne ne remplissait jamais** : le
+contrôle était écrit et n'avait jamais servi une fois. Le format 3 le publie ; la
+tour le transmet ; rien à changer côté agent.
+
+C'est une faute qui ne se voit pas : le code existe, il est juste, ses tests
+passent — ils lui passent une empreinte. Ce qui manquait était un appelant.
+Quand un contrôle a un paramètre que rien ne renseigne, c'est le paramètre qu'il
+faut suivre, pas le contrôle.
+
+### Ce que le site sait de lui-même est gratuit
+
+Le génie `mise_a_jour` du core écrit son verdict dans les metas du site géré
+(`info_maj_spip`, `derniere_maj_notifiee`). L'agent les remonte dans son
+inventaire : aucun appel réseau de plus, et c'est la seule source qui parle
+encore quand la tour n'a pas de sortie. Elle ne prime jamais, parce que **ce génie
+ne passe que toutes les 72 heures** (`ecrire/inc/genie.php`).
+
+`info_maj_spip` contient du **HTML** — un lien vers spip.net. L'agent n'en fait
+jamais voyager le balisage : il en extrait le numéro, et rien d'autre. Ce qui
+vient d'un site géré est inerte, y compris quand c'est le core du site qui l'a
+écrit.
+
 ## Le préfixe d'un plugin n'est pas le préfixe de ses fonctions
 
 Les deux plugins ont changé de préfixe en 1.0.19 et 1.0.15 — `dashboard` était

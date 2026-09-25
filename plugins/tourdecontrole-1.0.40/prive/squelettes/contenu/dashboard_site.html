@@ -1,0 +1,1554 @@
+[(#AUTORISER{voir, dashboard_site, #ENV{id_dashboard_site}}|sinon_interdire_acces)]
+<link rel="stylesheet" href="[(#CHEMIN{css/dashboard.css}|timestamp|direction_css)]" type="text/css" />
+
+<BOUCLE_installe(CONDITION){si #VAL|dashboard_tables_presentes}>
+
+[(#ENV{new}|oui)
+	<h1 class="grostitre"><:dashboard:icone_creer_site:></h1>
+	[(#AUTORISER{creer,dashboard_site}|sinon_interdire_acces)]
+	#FORMULAIRE_EDITER_DASHBOARD_SITE{new,#URL_ECRIRE{dashboard_site,id_dashboard_site=@id_dashboard_site@}}
+]
+
+<BOUCLE_site(DASHBOARD_SITES){id_dashboard_site}{statut != poubelle}>
+
+[(#REM)
+	Les deux numéros de version viennent du site géré et du dépôt d'archives :
+	ils sont échappés une fois ici, et les trois endroits qui les affichent
+	reprennent la variable. Un filtre écrit dans l'argument d'une chaîne de
+	langue serait relu comme la suite de cet argument.
+]
+#SET{version_spip,#VERSION_SPIP|entites_html}
+[(#REM)
+	La cible vient de la colonne, décidée à la synchronisation : elle tient compte
+	du PHP du site, ce que le filtre ne peut pas faire depuis un squelette — il ne
+	reçoit qu'un numéro de version, et « disponible » est une propriété par site.
+]
+#SET{version_cible,#CORE_CIBLE|entites_html}
+[(#REM)
+	L'état du core est mémorisé à la synchronisation, avec la version en cause et
+	la provenance de l'avis. On le relit tel quel plutôt que de le recalculer :
+	la colonne dit ce que la tour savait au moment où elle a interrogé le site,
+	ce qui est précisément ce qu'on veut montrer.
+]
+#SET{core_cible,#CORE_CIBLE|entites_html}
+#SET{core_majeure,#CORE_MAJEURE|entites_html}
+#SET{core_php,#CORE_CIBLE|dashboard_core_php_requis|entites_html}
+#SET{php_site,#PHP_VERSION|entites_html}
+
+[(#REM)
+	Après un envoi, SPIP recharge la page en haut : sur une fiche qui tient sur
+	trois écrans, le compte rendu de l'action reste invisible. Chaque bloc porte
+	donc une ancre, et l'URL de retour de ses actions la désigne. Les adresses
+	sont calculées ici, une fois : une balise à accolades glissée dans un
+	argument composite désorganise l'analyse des arguments.
+]
+#SET{retour_etat,#SELF|ancre_url{etat}}
+#SET{retour_caches,#SELF|ancre_url{caches}}
+#SET{retour_plugins,#SELF|ancre_url{plugins}}
+#SET{retour_sauvegardes,#SELF|ancre_url{sauvegardes}}
+#SET{retour_core,#SELF|ancre_url{core}}
+
+<h1 class="grostitre">#TITRE</h1>
+
+[(#ENV{dashboard_message}|oui)
+	<p class="[(#ENV{dashboard_statut}|=={ok}|?{reponse_formulaire_ok,reponse_formulaire_erreur})] reponse_formulaire">
+		[(#ENV{dashboard_message}|textebrut)]
+	</p>
+]
+
+[(#REM)
+	Le compte rendu d'un chantier qui vient de finir. Sans lui, la page ne
+	montrait plus rien une fois l'opération terminée : l'encadré d'avancement
+	disparaît avec le statut « en cours », et il ne restait que la notification
+	de départ, figée sur l'étape 2 — ce qui donnait à lire un échec ou un
+	blocage là où le travail était fait. Or c'est ce bilan-là qui dit l'essentiel,
+	par exemple qu'une base attend encore sa migration.
+]
+<BOUCLE_bilan(DASHBOARD_CHANTIERS){id_dashboard_site}{statut IN ok,erreur}{par date_fin}{inverse}{0,1}>
+[(#DATE_FIN|dashboard_recent|oui)
+	<div class="dashboard-fiche dashboard-bilan" id="bilan">
+		<h2><:dashboard:titre_bilan:></h2>
+		<p class="[(#STATUT|=={ok}|?{reponse_formulaire_ok,reponse_formulaire_erreur})] reponse_formulaire">
+			[(#MESSAGE|textebrut)]
+		</p>
+		<p class="explication">
+			[(#DATE_FIN|affdate_heure)] &mdash; <:dashboard:bilan_explication:>
+		</p>
+	</div>
+]
+</BOUCLE_bilan>
+
+[(#ETAT|=={erreur}|oui)
+	<p class="reponse_formulaire reponse_formulaire_erreur">
+		<:dashboard:derniere_erreur:> [(#ERREUR|textebrut)]
+	</p>
+]
+
+<BOUCLE_chantier(DASHBOARD_CHANTIERS){id_dashboard_site}{statut IN attente,encours}{par date}{inverse}{0,1}>
+<div class="dashboard-fiche dashboard-chantier"
+     data-dashboard-chantier="[(#URL_ACTION_AUTEUR{dashboard_chantier,#ID_DASHBOARD_CHANTIER})]">
+	<h2><:dashboard:titre_chantier:></h2>
+	<p class="dashboard-chantier-libelle">[(#OPERATION|dashboard_libelle_operation{#CIBLE})]</p>
+	<p class="dashboard-chantier-etape">
+		<span class="dashboard-chantier-rang">[(#RANG|plus{1})]/#TOTAL</span>
+		<span class="dashboard-chantier-travail">[(#ETAPE|dashboard_libelle_etape)]</span>
+	</p>
+	<p class="dashboard-chantier-etape">
+		<span class="dashboard-chantier-message">[(#MESSAGE|textebrut)]</span>
+	</p>
+	<p class="explication"><:dashboard:explication_chantier:></p>
+</div>
+</BOUCLE_chantier>
+
+[(#REM)
+	La mise à jour du core d'abord, avant tout le reste : c'est la seule ligne
+	de cette page qui dise qu'un site tourne sur une version dépassée, et c'est
+	la question qu'on se pose en arrivant. Elle vivait en bas, sous l'encadré de
+	SPIP Check, où il fallait dérouler toute la fiche pour la voir.
+
+	Elle vivait aussi *à l'intérieur* de l'autorisation « operer », si bien
+	qu'un utilisateur qui pouvait consulter le parc sans y agir ne voyait rien
+	du tout — pas même l'alerte. Constater un retard ne demande pas le droit
+	d'y remédier : l'encadré se montre à tous, le bouton reste réservé, comme
+	pour la migration de base juste en dessous.
+]
+[(#CORE_MAJ|=={oui}|oui)
+<div class="dashboard-fiche dashboard-fiche-alerte" id="core">
+	<h2><:dashboard:titre_core_maj:></h2>
+	<p>
+		<:dashboard:core_maj_texte{version_actuelle=#GET{version_spip},version_cible=#GET{version_cible}}:>
+		[(#CORE_PROVENANCE|=={site}|oui)
+			<span class="dashboard-provenance" title="<:dashboard:core_provenance_site_titre|attribut_html:>"><:dashboard:provenance_site:></span>
+		]
+	</p>
+	<p class="explication"><:dashboard:core_maj_avertissement:></p>
+	[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+	<p class="boutons">
+		<!-- La version cible n'est volontairement pas passee dans l'URL : une
+		     balise a accolades imbriquee dans les arguments d'une autre balise
+		     desorganise l'analyse des arguments, et l'identifiant du site
+		     arrivait litteralement dans l'adresse — d'ou un « Site inconnu »
+		     muet. L'operation rededuit la version cible, de la meme
+		     configuration et au moment de l'execution.
+		     Ne pas ecrire de syntaxe de balise dans un commentaire : SPIP la
+		     compile quand meme, et une balise invalide emporte le bloc. -->
+		[(#BOUTON_ACTION{<:dashboard:action_core_maj:>,#URL_ACTION_AUTEUR{dashboard_operation,core_maj/#ID_DASHBOARD_SITE,#GET{retour_core}},btn btn_danger,<:dashboard:core_maj_confirmation:>})]
+	</p>
+	]
+</div>
+]
+
+[(#REM)
+	Le troisième état. Une version plus récente existe dans la branche du site,
+	et le PHP de son hébergement ne la supporte pas : ni « à jour », ni « en
+	retard ». Aucun bouton — l'archive s'installerait, et le site tomberait.
+	Le vrai correctif est chez l'hébergeur, et le dire est tout ce qu'on peut
+	faire d'utile.
+]
+[(#CORE_ETAT|=={bloque}|oui)
+<div class="dashboard-fiche dashboard-fiche-alerte" id="core">
+	<h2><:dashboard:titre_core_bloque:></h2>
+	<p>
+		<:dashboard:core_bloque_texte{version_actuelle=#GET{version_spip},version_cible=#GET{core_cible},php_site=#GET{php_site},php_requis=#GET{core_php}}:>
+	</p>
+	<p class="explication"><:dashboard:core_bloque_explication:></p>
+</div>
+]
+
+[(#REM)
+	Le quatrième : l'annuaire des versions n'a rien répondu. C'est le cas que la
+	tour confondait avec « à jour », et qui a fait passer un parc entier pour
+	sain pendant que sa seule source répondait 500. Ni alerte rouge ni silence :
+	une mention qui dit qu'on ne sait pas.
+]
+[(#CORE_ETAT|=={inconnu}|oui)
+<div class="dashboard-fiche" id="core">
+	<h2><:dashboard:titre_core_inconnu:></h2>
+	<p><:dashboard:core_inconnu_texte{version_actuelle=#GET{version_spip}}:></p>
+	<p class="explication"><:dashboard:core_inconnu_explication:></p>
+</div>
+]
+
+[(#REM)
+	Le saut de branche est dit, jamais proposé. Faire passer un site de 4.3 à 4.4
+	depuis un tableau de bord casserait ses plugins sans prévenir, et SVP
+	refuserait ensuite d'en installer la moitié. C'est une décision qui se prend
+	site par site, et elle demande de relire ses squelettes.
+]
+[(#CORE_MAJEURE|oui)
+<div class="dashboard-fiche">
+	<h2><:dashboard:titre_core_majeure:></h2>
+	<p><:dashboard:core_majeure_texte{version_actuelle=#GET{version_spip},version_majeure=#GET{core_majeure}}:></p>
+	<p class="explication"><:dashboard:core_majeure_explication:></p>
+</div>
+]
+
+[(#BASE_MAJ|=={oui}|oui)
+<div class="dashboard-fiche dashboard-fiche-alerte">
+	<h2><:dashboard:titre_base_maj:></h2>
+	<p><:dashboard:base_maj_texte:></p>
+	[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+	<p class="boutons">
+		[(#BOUTON_ACTION{<:dashboard:action_base_maj:>,#URL_ACTION_AUTEUR{dashboard_operation,base_maj/#ID_DASHBOARD_SITE,#GET{retour_etat}},btn btn_danger,<:dashboard:base_maj_confirmation:>})]
+	</p>
+	]
+</div>
+]
+
+<div class="dashboard-fiche" id="etat">
+	<h2><:dashboard:titre_etat:></h2>
+	<table class="spip">
+		<tbody>
+			<tr><th scope="row"><:dashboard:label_url_site:></th><td>[(#URL_SITE|oui)<a href="[(#URL_SITE|attribut_url)]" rel="noreferrer">[(#URL_SITE|entites_html)]</a>]</td></tr>
+			<tr><th scope="row"><:dashboard:label_url_agent:></th><td><code>[(#URL_AGENT|couper{90})]</code></td></tr>
+			<tr><th scope="row"><:dashboard:col_spip:></th><td>
+				[<code>(#VERSION_SPIP|entites_html)</code>]
+				[(#CORE_MAJ|=={oui}|oui)<span class="dashboard-badge dashboard-badge-maj">&rarr; #GET{version_cible}</span>]
+			</td></tr>
+			<tr><th scope="row">PHP</th><td>[<code>(#PHP_VERSION|entites_html)</code>] [(#INFOS|dashboard_info{serveur/memory_limit}) <:dashboard:memoire:>]</td></tr>
+			<tr><th scope="row"><:dashboard:label_base:></th><td>
+				[<code>(#SQL_VERSION|entites_html)</code>]
+				[&mdash; (#INFOS|dashboard_info{base/octets}|dashboard_taille)]
+				[&mdash; (#INFOS|dashboard_info{base/contenus/article}) <:dashboard:articles:>]
+			</td></tr>
+			<tr><th scope="row"><:dashboard:label_agent:></th><td>[<code>(#AGENT_VERSION|entites_html)</code>]</td></tr>
+			<tr><th scope="row"><:dashboard:col_sync:></th><td>[(#DATE_SYNC|dashboard_date_lisible)][(#DATE_SYNC|dashboard_date_lisible|non)<:dashboard:jamais:>]</td></tr>
+			[<tr><th scope="row"><:dashboard:label_notes:></th><td>(#NOTES|propre)</td></tr>]
+		</tbody>
+	</table>
+
+	<p class="boutons dashboard-actions">
+		[(#BOUTON_ACTION{<:dashboard:action_sync:>,#URL_ACTION_AUTEUR{dashboard_operation,sync/#ID_DASHBOARD_SITE,#GET{retour_etat}},btn})]
+		[(#AUTORISER{modifier,dashboard_site,#ID_DASHBOARD_SITE})
+			<a class="btn btn_secondaire" href="[(#URL_ECRIRE{dashboard_site,id_dashboard_site=#ID_DASHBOARD_SITE&modifier=oui}|ancre_url{etat})]"><:dashboard:icone_modifier_site:></a>
+		]
+	</p>
+</div>
+
+[(#ENV{modifier}|oui)
+	[(#AUTORISER{modifier,dashboard_site,#ID_DASHBOARD_SITE}|sinon_interdire_acces)]
+	<div class="dashboard-fiche">
+		<h2><:dashboard:icone_modifier_site:></h2>
+		#FORMULAIRE_EDITER_DASHBOARD_SITE{#ID_DASHBOARD_SITE,#URL_ECRIRE{dashboard_site,id_dashboard_site=#ID_DASHBOARD_SITE}}
+	</div>
+]
+
+[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+<div class="dashboard-fiche" id="caches">
+	<h2><:dashboard:titre_caches:></h2>
+	<table class="spip liste">
+		<thead><tr>
+			<th scope="col"><:dashboard:col_cache:></th>
+			<th scope="col"><:dashboard:col_fichiers:></th>
+			<th scope="col"><:dashboard:col_taille:></th>
+			<th scope="col"><:dashboard:col_actions:></th>
+		</tr></thead>
+		<tbody>
+			<BOUCLE_caches(DATA){source table, #LISTE{pages,squelettes,images,css_js,sessions}}>
+				<tr>
+					<th scope="row">[(#VALEUR|dashboard_libelle_cache)]</th>
+					<td>[(#_site:INFOS|dashboard_cache_info{#VALEUR,fichiers})]</td>
+					<td>[(#_site:INFOS|dashboard_cache_info{#VALEUR,octets}|dashboard_taille)]</td>
+					<td>[(#BOUTON_ACTION{<:dashboard:action_purger:>,#URL_ACTION_AUTEUR{dashboard_operation,purger/#_site:ID_DASHBOARD_SITE/#VALEUR,#_site:GET{retour_caches}},btn btn_secondaire})]</td>
+				</tr>
+			</BOUCLE_caches>
+			<tr>
+				<th scope="row"><:dashboard:purge_tout:></th>
+				<td colspan="2"><em><:dashboard:purge_tout_explication:></em></td>
+				<td>[(#BOUTON_ACTION{<:dashboard:action_purger:>,#URL_ACTION_AUTEUR{dashboard_operation,purger/#ID_DASHBOARD_SITE/tout,#GET{retour_caches}},btn})]</td>
+			</tr>
+		</tbody>
+	</table>
+</div>
+]
+
+<div class="dashboard-fiche">
+	<div class="dashboard-onglets" data-dashboard-onglets>
+		<ul class="dashboard-onglets-liste" role="tablist">
+			<li>
+				<button type="button" role="tab" id="onglet-plugins" aria-controls="panneau-plugins" aria-selected="true">
+					<:dashboard:titre_plugins:> <span class="dashboard-compteur">#NB_PLUGINS</span>[(#NB_PLUGINS_MAJ|>{0}|oui)
+					<span class="dashboard-compteur dashboard-compteur-maj"
+					      title="<:dashboard:plugins_maj_disponibles{nb=#NB_PLUGINS_MAJ}:>">#NB_PLUGINS_MAJ</span>
+					]
+				</button>
+			</li>
+			<li>
+				<button type="button" role="tab" id="onglet-php" aria-controls="panneau-php" aria-selected="false">
+					<:dashboard:titre_php:> <span class="dashboard-compteur">[(#INFOS|dashboard_compter_procures)]</span>
+				</button>
+			</li>
+			[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+			<li>
+				<button type="button" role="tab" id="onglet-serveur" aria-controls="panneau-serveur" aria-selected="false">
+					<:dashboard:titre_serveur:>
+				</button>
+			</li>
+			[(#INFOS|dashboard_a_plugin{waf}|oui)
+			<li>
+				<button type="button" role="tab" id="onglet-waf" aria-controls="panneau-waf" aria-selected="false">
+					<:dashboard:titre_waf:>
+				</button>
+			</li>
+			]
+			]
+		</ul>
+
+		<section id="panneau-plugins" role="tabpanel" aria-labelledby="onglet-plugins">
+	[(#INFOS|dashboard_depots_age|oui)
+		<p class="dashboard-depots[(#INFOS|dashboard_depots_perimes|oui) dashboard-depots-perimes]">
+			<span><:dashboard:depots_relus:> [(#INFOS|dashboard_depots_age)][(#INFOS|dashboard_depots_perimes|oui) — <:dashboard:depots_avertissement:>]</span>
+			[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+			[(#BOUTON_ACTION{<:dashboard:action_depots_maj:>,#URL_ACTION_AUTEUR{dashboard_operation,depots_maj/#ID_DASHBOARD_SITE,#GET{retour_plugins}},btn btn_secondaire})]
+			]
+		</p>
+	]
+	[(#NB_PLUGINS_MAJ|>{0}|oui)
+			[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+			<p class="boutons">
+				[(#REM)
+				Le libellé porte le décompte, donc il se calcule à part : une
+				balise entre parenthèses glissée dans l'argument d'une autre
+				désorganise l'analyse, et tout l'appel ressortait en clair sur
+				la page. La chaîne de langue prend le nombre en paramètre.
+			]
+			#SET{libelle_maj_tous,#VAL{dashboard:action_maj_tous}|_T{#ARRAY{nb,#NB_PLUGINS_MAJ}}}
+			[(#BOUTON_ACTION{#GET{libelle_maj_tous},#URL_ACTION_AUTEUR{dashboard_operation,plugin_maj_tous/#ID_DASHBOARD_SITE,#GET{retour_plugins}},btn})]
+			</p>
+			]
+		]
+
+	[(#REM)
+		Trois vues : ce que l'hébergeur du site a installé, ce que SPIP apporte
+		de lui-même, et tout. La distinction compte — on ne met pas à jour un
+		plugin livré avec le core, il suit le core.
+	]
+	[(#REM)
+		La vue est nommée dans l'URL plutôt que d'y porter directement la valeur
+		filtrée : « installés » est la vue par défaut, et un `distribue` vide ne
+		saurait pas distinguer « pas de préférence » de « tous ». D'où trois
+		noms, et la valeur filtrée calculée ici.
+	]
+	#SET{vue_plugins,#ENV{vue,installes}}
+	[(#REM)
+		Le critère dit ce qu'on écarte, pas ce qu'on garde : `distribue != ''`
+		ne retient rien, donc laisse tout passer, et « tous » se dit sans
+		énumérer. Les deux autres formulations se heurtaient à la syntaxe :
+		`{distribue = #GET{x} ?}` ne rend rien facultatif — le `?` y est pris
+		pour un caractère de la valeur, et la boucle cherchait `'non?'` ; et
+		une liste `#SET{x,non,oui}` est coupée sur sa virgule, `x` valant `non`.
+	]
+	#SET{exclure_plugins,''}
+	[(#GET{vue_plugins}|=={installes}|oui)#SET{exclure_plugins,oui}]
+	[(#GET{vue_plugins}|=={distribues}|oui)#SET{exclure_plugins,non}]
+	#SET{url_plugins_installes,#SELF|parametre_url{vue,installes}|ancre_url{plugins}}
+	#SET{url_plugins_distribues,#SELF|parametre_url{vue,distribues}|ancre_url{plugins}}
+	#SET{url_plugins_tous,#SELF|parametre_url{vue,tous}|ancre_url{plugins}}
+	[(#REM)
+		Les conditions d'exposition sont calculées à part : un filtre à accolades
+		écrit dans l'argument d'un autre filtre (`|=={non}`) est relu comme la
+		suite de la chaîne de filtres, et SPIP cherche alors un filtre nommé
+		« non,btn btn_secondaire ».
+	]
+	#SET{plugins_sur_installes,#GET{vue_plugins}|=={installes}}
+	#SET{plugins_sur_distribues,#GET{vue_plugins}|=={distribues}}
+	#SET{plugins_sur_tous,#GET{vue_plugins}|=={tous}}
+	<ul class="dashboard-filtres liste-items">
+		<li>[(#GET{url_plugins_installes}|lien_ou_expose{<:dashboard:plugins_installes:>,#GET{plugins_sur_installes},btn btn_secondaire})]</li>
+		<li>[(#GET{url_plugins_distribues}|lien_ou_expose{<:dashboard:plugins_distribues:>,#GET{plugins_sur_distribues},btn btn_secondaire})]</li>
+		<li>[(#GET{url_plugins_tous}|lien_ou_expose{<:dashboard:plugins_tous:>,#GET{plugins_sur_tous},btn btn_secondaire})]</li>
+	</ul>
+
+	<B_plugins>
+		<table class="spip liste">
+			<thead><tr>
+				<th scope="col"><:dashboard:col_plugin:></th>
+				<th scope="col"><:dashboard:col_version:></th>
+				<th scope="col"><:dashboard:col_disponible:></th>
+				<th scope="col"><:dashboard:col_source:></th>
+				<th scope="col"><:dashboard:col_actions:></th>
+			</tr></thead>
+			<tbody>
+			<BOUCLE_plugins(DASHBOARD_PLUGINS){id_dashboard_site}{distribue != #GET{exclure_plugins}}{par prefixe}{pagination 30}>
+				<tr class="[(#MAJ_DISPONIBLE|=={oui}|?{dashboard-ligne-maj,})]">
+					<th scope="row">[(#NOM|dashboard_nom_lisible|sinon{#PREFIXE})] <small><code>[(#PREFIXE|entites_html)]</code></small></th>
+					<td><code>[(#VERSION|entites_html)]</code></td>
+					[(#REM)
+						La version retenue après confrontation, et d'où vient
+						cet avis. Quand la tour n'a pas de catalogue pour ce
+						plugin — un dépôt qu'elle ne déclare pas — on garde
+						l'avis du site plutôt que de le jeter, en disant qu'il
+						vient de lui.
+
+						Repli sur la colonne du site pour les inventaires
+						d'avant la confrontation : un chiffre qui disparaît
+						serait pire qu'un chiffre imparfait.
+					]
+					<td>
+						[<code>(#VERSION_RETENUE|sinon{#VERSION_DISPONIBLE}|entites_html)</code>]
+						[(#PROVENANCE|=={site}|oui)
+							<span class="dashboard-provenance" title="<:dashboard:provenance_site_titre|attribut_html:>"><:dashboard:provenance_site:></span>
+						]
+					</td>
+					<td>
+						[(#DISTRIBUE|=={oui}|oui)<em><:dashboard:plugin_distribue:></em>]
+						[(#DISTRIBUE|=={non}|oui)#SOURCE]
+					</td>
+					<td>
+						[(#MAJ_DISPONIBLE|=={oui}|oui)
+							[(#DISTRIBUE|=={non}|oui)
+								[(#AUTORISER{operer,dashboard_site,#_site:ID_DASHBOARD_SITE})
+									[(#BOUTON_ACTION{<:dashboard:action_maj:>,#URL_ACTION_AUTEUR{dashboard_operation,plugin_maj/#_site:ID_DASHBOARD_SITE/#PREFIXE,#_site:GET{retour_plugins}},btn btn_secondaire})]
+								]
+							]
+						]
+					</td>
+				</tr>
+			</BOUCLE_plugins>
+			</tbody>
+		</table>
+		[<nav class="pagination" role="navigation">(#PAGINATION{page_precedent_suivant})</nav>]
+		</B_plugins>
+			<p class="petition"><:dashboard:plugins_vide:></p>
+			<//B_plugins>
+		</section>
+
+		<section id="panneau-php" role="tabpanel" aria-labelledby="onglet-php">
+			<p class="explication"><:dashboard:explication_php:></p>
+			<B_procures>
+			<table class="spip liste">
+				<thead><tr>
+					<th scope="col"><:dashboard:col_composant:></th>
+					<th scope="col"><:dashboard:col_version:></th>
+					<th scope="col"><:dashboard:col_origine:></th>
+				</tr></thead>
+				<tbody>
+				<BOUCLE_procures(DATA){source table, #_site:INFOS|dashboard_procures}>
+					<tr>
+						<th scope="row"><code>[(#VALEUR|table_valeur{nom}|entites_html)]</code></th>
+						<td>[(#VALEUR|table_valeur{version}|entites_html)]</td>
+						<td>
+							[(#VALEUR|table_valeur{origine}|=={plugin}|oui)<:dashboard:origine_plugin:> <code>[(#VALEUR|table_valeur{fournie_par}|entites_html)]</code>]
+							[(#VALEUR|table_valeur{origine}|=={php}|oui)<:dashboard:origine_hebergement:>]
+							[(#VALEUR|table_valeur{origine}|=={spip}|oui)<:dashboard:origine_spip:>]
+						</td>
+					</tr>
+				</BOUCLE_procures>
+				</tbody>
+			</table>
+			</B_procures>
+			<p class="petition"><:dashboard:php_vide:></p>
+			<//B_procures>
+		</section>
+
+		[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+		[(#INFOS|dashboard_a_plugin{waf}|oui)
+		<section id="panneau-waf" role="tabpanel" aria-labelledby="onglet-waf"
+		         data-dashboard-waf="[(#URL_ACTION_AUTEUR{dashboard_serveur,#ID_DASHBOARD_SITE})]">
+			<p class="explication"><:dashboard:explication_waf:></p>
+
+			[(#REM)
+				La tendance vient de notre base, remplie à chaque synchronisation :
+				elle s'affiche donc tout de suite, sans attendre l'appel distant qui
+				remplit le reste de l'onglet.
+
+				Le JSON porte quatre-vingt-dix jours ; le sélecteur y découpe les
+				fenêtres plus courtes sans rien redemander.
+			]
+			#SET{serie,#ID_DASHBOARD_SITE|dashboard_waf_serie}
+			[(#GET{serie}|count|>{0}|oui)
+			<div class="dashboard-graphe" data-dashboard-waf-graphe data-jours="30"
+				data-libelle-requetes="<:dashboard:graphe_requetes:>"
+				data-libelle-ips="<:dashboard:graphe_ips:>"
+				data-libelle-jour="<:dashboard:graphe_jour:>"
+				data-libelle-tableau="<:dashboard:graphe_tableau:>">
+				<div class="dashboard-graphe-fenetres">
+					<button type="button" class="btn btn_secondaire" data-fenetre="7" aria-pressed="false"><:dashboard:graphe_7j:></button>
+					<button type="button" class="btn btn_secondaire" data-fenetre="30" aria-pressed="true"><:dashboard:graphe_30j:></button>
+					<button type="button" class="btn btn_secondaire" data-fenetre="90" aria-pressed="false"><:dashboard:graphe_90j:></button>
+				</div>
+				<div class="dashboard-graphe-cadre"><canvas data-graphe="requetes"></canvas></div>
+				<div class="dashboard-graphe-cadre"><canvas data-graphe="ips"></canvas></div>
+				<script type="application/json">[(#GET{serie}|dashboard_waf_json)]</script>
+			</div>
+			]
+
+			<div data-waf-bloc="resume" class="dashboard-serveur-bloc"><p class="petition"><:dashboard:serveur_attente:></p></div>
+		</section>
+		]
+		]
+
+		[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+		<section id="panneau-serveur" role="tabpanel" aria-labelledby="onglet-serveur"
+		         data-dashboard-serveur="[(#URL_ACTION_AUTEUR{dashboard_serveur,#ID_DASHBOARD_SITE})]">
+			<p class="explication"><:dashboard:explication_serveur:></p>
+
+			<div class="dashboard-serveur-sections">
+				<h3><:dashboard:titre_serveur_resume:></h3>
+				<div data-serveur-bloc="resume" class="dashboard-serveur-bloc"><p class="petition"><:dashboard:serveur_attente:></p></div>
+
+				<h3><:dashboard:titre_serveur_tables:></h3>
+				<div data-serveur-bloc="tables" class="dashboard-serveur-bloc"><p class="petition"><:dashboard:serveur_attente:></p></div>
+
+				<h3><:dashboard:titre_serveur_fichiers:></h3>
+				<div data-serveur-bloc="fichiers" class="dashboard-serveur-bloc"><p class="petition"><:dashboard:serveur_attente:></p></div>
+
+				<h3><:dashboard:titre_serveur_phpinfo:></h3>
+				<div data-serveur-bloc="phpinfo" class="dashboard-serveur-bloc"><p class="petition"><:dashboard:serveur_attente:></p></div>
+			</div>
+		</section>
+		]
+	</div>
+</div>
+
+[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+<div class="dashboard-fiche" id="sauvegardes">
+	<h2><:dashboard:titre_sauvegardes:></h2>
+
+	<p class="boutons dashboard-actions">
+		[(#BOUTON_ACTION{<:dashboard:action_sauvegarder:>,#URL_ACTION_AUTEUR{dashboard_operation,sauvegarde/#ID_DASHBOARD_SITE,#GET{retour_sauvegardes}},btn})]
+		[(#BOUTON_ACTION{<:dashboard:action_sauvegarder_legere:>,#URL_ACTION_AUTEUR{dashboard_operation,sauvegarde/#ID_DASHBOARD_SITE/legere,#GET{retour_sauvegardes}},btn btn_secondaire})]
+	</p>
+
+	<B_sauvegardes>
+	<table class="spip liste">
+		<thead><tr>
+			<th scope="col"><:dashboard:col_date:></th>
+			<th scope="col"><:dashboard:col_taille:></th>
+			<th scope="col"><:dashboard:col_statut:></th>
+			<th scope="col"><:dashboard:col_actions:></th>
+		</tr></thead>
+		<tbody>
+		<BOUCLE_sauvegardes(DASHBOARD_SAUVEGARDES){id_dashboard_site}{par date}{inverse}{pagination 15}>
+			<tr>
+				<td>[(#DATE|affdate_heure)]</td>
+				<td>[(#OCTETS|dashboard_taille)]</td>
+				<td>[(#STATUT|=={locale}|oui)<:dashboard:sauvegarde_locale:>][(#STATUT|=={locale}|non)<:dashboard:sauvegarde_distante:>]</td>
+				<td>[(#STATUT|=={locale}|oui)
+					<a class="btn btn_secondaire" href="[(#URL_ACTION_AUTEUR{dashboard_telecharger,#ID_DASHBOARD_SAUVEGARDE})]"><:dashboard:action_telecharger:></a>
+				]</td>
+			</tr>
+		</BOUCLE_sauvegardes>
+		</tbody>
+	</table>
+	[<nav class="pagination" role="navigation">(#PAGINATION{page_precedent_suivant})</nav>]
+	</B_sauvegardes>
+	<p class="petition"><:dashboard:sauvegardes_vide:></p>
+	<//B_sauvegardes>
+</div>
+
+#SET{retour_loader,#SELF|ancre_url{loader}}
+[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+<div class="dashboard-fiche" id="loader"
+     data-dashboard-loader="[(#URL_ACTION_AUTEUR{dashboard_serveur,#ID_DASHBOARD_SITE})]">
+	<h2><:dashboard:titre_loader:></h2>
+	<p class="explication"><:dashboard:explication_loader:></p>
+	[(#REM)
+		L'état n'est pas relevé à l'affichage de la page : c'est un aller-retour
+		de plus vers le site géré, pour une information qu'on ne consulte qu'au
+		moment d'agir. Même principe que l'onglet Serveur.
+	]
+	[(#REM)
+		Deux gestes distincts : relever l'état, qui interroge le site par le
+		protocole signé, et ouvrir le script chez lui, qui n'est qu'un lien de
+		navigation — donc un `a`, pas un formulaire d'action.
+	]
+	#SET{url_loader,#URL_SITE|dashboard_url_loader}
+	<p class="boutons">
+		<button type="button" class="btn btn_secondaire" data-dashboard-loader-etat><:dashboard:action_loader_etat:></button>
+		[(#GET{url_loader}|oui)
+		<a class="btn btn_secondaire" href="[(#GET{url_loader}|attribut_url)]" target="_blank" rel="noreferrer noopener"><:dashboard:action_loader_ouvrir:></a>
+		]
+	</p>
+	<div data-loader-bloc="etat"></div>
+	[(#REM)
+		Le retrait compte autant que le dépôt : posé à la racine web, ce script
+		installe ce qu'on lui dit d'installer et n'importe qui peut l'appeler.
+		Il n'a de raison d'être que le jour où l'on s'en sert — et il se
+		retélécharge d'un clic le jour suivant.
+	]
+	<p class="boutons">
+		[(#BOUTON_ACTION{<:dashboard:action_loader_maj:>,#URL_ACTION_AUTEUR{dashboard_operation,loader_maj/#ID_DASHBOARD_SITE,#GET{retour_loader}},btn btn_danger,<:dashboard:loader_confirmation:>})]
+		[(#BOUTON_ACTION{<:dashboard:action_loader_retirer:>,#URL_ACTION_AUTEUR{dashboard_operation,loader_retirer/#ID_DASHBOARD_SITE,#GET{retour_loader}},btn btn_secondaire,<:dashboard:loader_retrait_confirmation:>})]
+	</p>
+</div>
+]
+
+[(#REM)
+	SPIP Check : un contrôle d'intégrité tiers, déposé comme le spip_loader et
+	ouvert dans le navigateur — mais qui, lui, se retire après usage. C'est la
+	seule différence de fond entre les deux encadrés, et elle explique le
+	troisième bouton.
+
+	Le parc ne lance pas le contrôle et n'en lit pas les résultats : SPIP Check
+	s'autorise sur une session d'administrateur du site géré, là où l'agent
+	s'authentifie par signature. Contourner cette autorisation pour le piloter à
+	distance reviendrait à poser une porte dérobée sur tout le parc.
+]
+#SET{retour_check,#SELF|ancre_url{check}}
+#SET{url_check_source,#VAL|dashboard_url_check_source}
+#SET{empreinte_check,#VAL|dashboard_empreinte_check}
+[(#AUTORISER{operer,dashboard_site,#ID_DASHBOARD_SITE})
+<div class="dashboard-fiche" id="check"
+     data-dashboard-check="[(#URL_ACTION_AUTEUR{dashboard_serveur,#ID_DASHBOARD_SITE})]">
+	<h2><:dashboard:titre_check:></h2>
+	<p class="explication"><:dashboard:explication_check:></p>
+	#SET{url_check,#URL_SITE|dashboard_url_check}
+	<p class="boutons">
+		<button type="button" class="btn btn_secondaire" data-dashboard-check-etat><:dashboard:action_check_etat:></button>
+		[(#GET{url_check}|oui)
+		<a class="btn btn_secondaire" href="[(#GET{url_check}|attribut_url)]" target="_blank" rel="noreferrer noopener"><:dashboard:action_check_ouvrir:></a>
+		]
+	</p>
+	<div data-check-bloc="etat"></div>
+	[(#GET{empreinte_check}|oui)
+	<p class="explication"><:dashboard:check_epingle:> : <code>[(#GET{empreinte_check}|entites_html)]</code></p>
+	]
+	[(#GET{url_check_source}|oui)
+	<p class="boutons">
+		[(#BOUTON_ACTION{<:dashboard:action_check_maj:>,#URL_ACTION_AUTEUR{dashboard_operation,check_maj/#ID_DASHBOARD_SITE,#GET{retour_check}},btn btn_danger,<:dashboard:check_confirmation:>})]
+		[(#BOUTON_ACTION{<:dashboard:action_check_retirer:>,#URL_ACTION_AUTEUR{dashboard_operation,check_retirer/#ID_DASHBOARD_SITE,#GET{retour_check}},btn btn_secondaire})]
+	</p>
+	]
+	[(#GET{url_check_source}|non)
+	<p class="reponse_formulaire reponse_formulaire_erreur"><:dashboard:check_sans_source:></p>
+	]
+</div>
+]
+
+]
+
+<div class="dashboard-fiche" id="journal">
+	<h2><:dashboard:titre_journal:></h2>
+	<B_journal>
+	<table class="spip liste">
+		<thead><tr>
+			<th scope="col"><:dashboard:col_date:></th>
+			<th scope="col"><:dashboard:col_operation:></th>
+			<th scope="col"><:dashboard:col_statut:></th>
+			<th scope="col"><:dashboard:col_message:></th>
+		</tr></thead>
+		<tbody>
+		<BOUCLE_journal(DASHBOARD_JOURNAL){id_dashboard_site}{par date}{inverse}{pagination 20}>
+			<tr class="dashboard-journal-#STATUT">
+				<td>[(#DATE|affdate_heure)]</td>
+				<td>[(#OPERATION|dashboard_libelle_operation)]</td>
+				<td>#STATUT</td>
+				<td>[(#MESSAGE|couper{160})]</td>
+			</tr>
+		</BOUCLE_journal>
+		</tbody>
+	</table>
+	[<nav class="pagination" role="navigation">(#PAGINATION{page_precedent_suivant})</nav>]
+	</B_journal>
+	<p class="petition"><:dashboard:journal_vide:></p>
+	<//B_journal>
+</div>
+
+</BOUCLE_site>
+
+<script type="text/javascript">
+/* Onglets : sans JavaScript, les deux panneaux restent visibles l'un sous
+   l'autre, ce qui reste parfaitement lisible. */
+(function () {
+	document.querySelectorAll('[data-dashboard-onglets]').forEach(function (groupe) {
+		var onglets = groupe.querySelectorAll('[role="tab"]');
+		var panneaux = groupe.querySelectorAll('[role="tabpanel"]');
+
+		/* Chaque onglet désigne son panneau par aria-controls : c'est ce lien
+		   qu'on suit, jamais le rang. Les apparier par leur ordre d'apparition
+		   supposait que les deux listes soient écrites dans le même ordre — un
+		   onglet conditionnel inséré ailleurs qu'à sa place, et l'on affichait
+		   le panneau du voisin. */
+		function activer(index) {
+			onglets.forEach(function (onglet, i) {
+				var choisi = (i === index);
+				onglet.setAttribute('aria-selected', choisi ? 'true' : 'false');
+				onglet.tabIndex = choisi ? 0 : -1;
+			});
+			var vise = onglets[index] ? onglets[index].getAttribute('aria-controls') : '';
+			panneaux.forEach(function (panneau) {
+				panneau.hidden = (panneau.id !== vise);
+			});
+		}
+
+		onglets.forEach(function (onglet, i) {
+			onglet.addEventListener('click', function () { activer(i); });
+			onglet.addEventListener('keydown', function (e) {
+				if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') { return; }
+				e.preventDefault();
+				var suivant = (i + (e.key === 'ArrowRight' ? 1 : onglets.length - 1)) % onglets.length;
+				activer(suivant);
+				onglets[suivant].focus();
+			});
+		});
+
+		activer(0);
+	});
+})();
+</script>
+
+<script type="text/javascript">
+/* Pilote de chantier : chaque appel fait avancer l'opération d'une étape et
+   rend son état. Sans JavaScript, rien ne se perd — la tâche de fond reprend
+   les chantiers laissés en plan, il suffit de recharger la page plus tard. */
+(function () {
+	var bloc = document.querySelector('[data-dashboard-chantier]');
+	if (!bloc) { return; }
+
+	var url = bloc.getAttribute('data-dashboard-chantier');
+	var rang = bloc.querySelector('.dashboard-chantier-rang');
+	var etape = bloc.querySelector('.dashboard-chantier-travail');
+	var message = bloc.querySelector('.dashboard-chantier-message');
+
+	// Une requête d'avancement peut mourir en route : temps d'exécution PHP
+	// dépassé, coupure réseau, réponse tronquée. Abandonner au premier échec
+	// laissait la page figée sur l'étape précédente, alors que la tâche de fond
+	// finissait le travail sans que rien ne le montre.
+	var echecs = 0;
+	var ECHECS_MAX = 5;
+	var ATTENTE_LONGUE = 30000;
+
+	function reessayer() {
+		echecs++;
+
+		// Passé quelques échecs rapprochés, on ralentit — mais on ne renonce
+		// jamais tant que l'onglet est ouvert. Renoncer laissait le chantier en
+		// plan, et avec lui un site géré dont les fichiers sont remplacés mais
+		// dont la base n'est pas encore migrée : son espace privé est alors
+		// bloqué jusqu'à ce que quelqu'un s'en aperçoive. Une tentative toutes
+		// les trente secondes ne coûte rien et finit le travail.
+		var attente = (echecs > ECHECS_MAX) ? ATTENTE_LONGUE : echecs * 5000;
+		if (message) {
+			message.textContent = message.textContent.replace(/ — (interruption|reprise)[^—]*$/, '')
+				+ (echecs > ECHECS_MAX
+					? ' — reprise automatique toutes les ' + (ATTENTE_LONGUE / 1000) + ' s ; vous pouvez fermer cette page, la tâche de fond prendra le relais'
+					: ' — interruption, nouvel essai (' + echecs + '/' + ECHECS_MAX + ')');
+		}
+		window.setTimeout(avancer, attente);
+	}
+
+	function avancer() {
+		fetch(url, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+			.then(function (r) {
+				if (!r.ok) { throw new Error('HTTP ' + r.status); }
+				return r.json();
+			})
+			.then(function (etat) {
+				echecs = 0;
+				if (rang && etat.rang) { rang.textContent = etat.rang + '/' + etat.total; }
+				if (etape && etat.etape) { etape.textContent = etat.travail || etat.etape; }
+				if (message && etat.message) { message.textContent = etat.message; }
+				if (etat.fini) {
+					// L'opération est terminée : la page rechargée montre le
+					// site dans son nouvel état, et le compte rendu au journal.
+					window.location.reload();
+					return;
+				}
+				avancer();
+			})
+			.catch(reessayer);
+	}
+
+	avancer();
+})();
+</script>
+
+<script type="text/javascript">
+/* Onglet « Serveur » : rempli au premier affichage, pas à la synchronisation.
+   Un phpinfo() pèse cent kilo-octets et le contenu d'une table bien davantage ;
+   rien de tout cela n'a de raison d'être recopié dans la base du tableau de
+   bord. On regarde, on ne conserve pas. */
+(function () {
+	var panneau = document.getElementById('panneau-serveur');
+	if (!panneau) { return; }
+
+	var gabarit = panneau.getAttribute('data-dashboard-serveur');
+	var charge = false;
+
+	function url(operation, parametres) {
+		var adresse = gabarit + '&operation=' + encodeURIComponent(operation);
+		Object.keys(parametres || {}).forEach(function (clef) {
+			if (parametres[clef] !== '' && parametres[clef] !== null) {
+				adresse += '&' + encodeURIComponent(clef) + '=' + encodeURIComponent(parametres[clef]);
+			}
+		});
+		return adresse;
+	}
+
+	function demander(operation, parametres) {
+		return fetch(url(operation, parametres), {
+			credentials: 'same-origin',
+			headers: { 'X-Requested-With': 'XMLHttpRequest' }
+		}).then(function (r) { return r.json(); });
+	}
+
+	function bloc(nom) { return panneau.querySelector('[data-serveur-bloc="' + nom + '"]'); }
+
+	function echouer(cible, message) {
+		cible.innerHTML = '';
+		var p = document.createElement('p');
+		p.className = 'reponse_formulaire reponse_formulaire_erreur';
+		p.textContent = message || 'Le site n’a pas répondu.';
+		cible.appendChild(p);
+	}
+
+	function attendre(cible) {
+		cible.innerHTML = '';
+		var p = document.createElement('p');
+		p.className = 'petition';
+		p.textContent = 'Interrogation du site…';
+		cible.appendChild(p);
+	}
+
+	/* --- tableau clé/valeur, construit sans concaténer de HTML --- */
+	function definitions(paires) {
+		var table = document.createElement('table');
+		table.className = 'spip';
+		var corps = document.createElement('tbody');
+		paires.forEach(function (paire) {
+			var tr = document.createElement('tr');
+			var th = document.createElement('th');
+			th.scope = 'row';
+			th.textContent = paire[0];
+			var td = document.createElement('td');
+			td.textContent = paire[1] === null || paire[1] === undefined ? '—' : String(paire[1]);
+			tr.appendChild(th); tr.appendChild(td); corps.appendChild(tr);
+		});
+		table.appendChild(corps);
+		return table;
+	}
+
+	function octets(n) {
+		if (n === null || n === undefined) { return '—'; }
+		var unites = ['o', 'Ko', 'Mo', 'Go'], rang = 0;
+		n = Number(n);
+		while (n >= 1024 && rang < unites.length - 1) { n = n / 1024; rang++; }
+		return (rang ? n.toFixed(1) : n) + ' ' + unites[rang];
+	}
+
+	/* --- résumé --- */
+	function rendreResume(cible, d) {
+		cible.innerHTML = '';
+		cible.appendChild(definitions([
+			['PHP', d.php.version + ' (' + d.php.sapi + ', ' + d.php.os + ')'],
+			['Mémoire', d.php.memory_limit],
+			['Temps d’exécution', d.php.max_execution_time + ' s'],
+			['Envoi de fichiers', d.php.upload_max_filesize + ' / ' + d.php.post_max_size],
+			['Cache d’opcodes', d.php.opcache ? 'actif' : 'inactif'],
+			['Base de données', (d.base.moteur || '?') + ' ' + (d.base.version || '')],
+			['Poids de la base', octets(d.base.octets) + ' — ' + d.base.nb_tables + ' tables'],
+			['Espace disque libre', octets(d.disque.libre)]
+		]));
+
+		var titre = document.createElement('p');
+		titre.className = 'explication';
+		titre.textContent = d.php.nb_extensions + ' extensions PHP chargées';
+		cible.appendChild(titre);
+
+		var liste = document.createElement('p');
+		liste.className = 'dashboard-serveur-extensions';
+		d.php.extensions.forEach(function (nom) {
+			var code = document.createElement('code');
+			code.textContent = nom;
+			liste.appendChild(code);
+			liste.appendChild(document.createTextNode(' '));
+		});
+		cible.appendChild(liste);
+	}
+
+	/* --- explorateur de tables --- */
+	var etatTable = { table: '', debut: 0, lot: 50, tri: '', sens: 'asc', filtre_colonne: '', filtre_valeur: '' };
+
+	function rendreTables(cible, d) {
+		cible.innerHTML = '';
+		var choix = document.createElement('select');
+		var vide = document.createElement('option');
+		vide.value = ''; vide.textContent = '— choisir une table —';
+		choix.appendChild(vide);
+		d.tables.forEach(function (t) {
+			var o = document.createElement('option');
+			o.value = t.nom;
+			o.textContent = t.nom + ' (' + (t.lignes === null ? '?' : t.lignes) + ' lignes'
+				+ (t.octets ? ', ' + octets(t.octets) : '') + ')';
+			choix.appendChild(o);
+		});
+
+		var filtre = document.createElement('input');
+		filtre.type = 'search';
+		filtre.placeholder = 'filtrer…';
+		filtre.className = 'text';
+		var colonneFiltre = document.createElement('select');
+
+		/* Le privé habille ses champs par `.formulaire_spip .editer` : hors de
+		   cette enveloppe, un select reste celui du navigateur, et détonne. */
+		var barre = document.createElement('div');
+		barre.className = 'formulaire_spip dashboard-serveur-barre';
+		[[choix, 'Table'], [colonneFiltre, 'Colonne'], [filtre, 'Filtre']].forEach(function (paire) {
+			var champ = document.createElement('div');
+			champ.className = 'editer';
+			var etiquette = document.createElement('label');
+			etiquette.textContent = paire[1];
+			champ.appendChild(etiquette);
+			champ.appendChild(paire[0]);
+			barre.appendChild(champ);
+		});
+		cible.appendChild(barre);
+
+		var contenu = document.createElement('div');
+		contenu.className = 'dashboard-serveur-contenu';
+		cible.appendChild(contenu);
+
+		function recharger() {
+			if (!etatTable.table) { contenu.innerHTML = ''; return; }
+			attendre(contenu);
+			demander('serveur_table', etatTable).then(function (r) {
+				if (!r.ok) { echouer(contenu, r.message); return; }
+				rendreContenu(contenu, r, recharger);
+				majColonnesFiltre(r);
+			}).catch(function () { echouer(contenu); });
+		}
+
+		function majColonnesFiltre(r) {
+			if (colonneFiltre.dataset.table === r.table) { return; }
+			colonneFiltre.dataset.table = r.table;
+			colonneFiltre.innerHTML = '';
+			var aucune = document.createElement('option');
+			aucune.value = ''; aucune.textContent = '— colonne —';
+			colonneFiltre.appendChild(aucune);
+			r.colonnes.forEach(function (c) {
+				if (c.masquee) { return; }
+				var o = document.createElement('option');
+				o.value = c.nom; o.textContent = c.nom;
+				colonneFiltre.appendChild(o);
+			});
+			colonneFiltre.value = etatTable.filtre_colonne;
+		}
+
+		choix.addEventListener('change', function () {
+			etatTable = { table: choix.value, debut: 0, lot: 50, tri: '', sens: 'asc', filtre_colonne: '', filtre_valeur: '' };
+			filtre.value = '';
+			recharger();
+		});
+		colonneFiltre.addEventListener('change', function () {
+			etatTable.filtre_colonne = colonneFiltre.value;
+			etatTable.debut = 0;
+			if (filtre.value) { recharger(); }
+		});
+		var minuteur = null;
+		filtre.addEventListener('input', function () {
+			clearTimeout(minuteur);
+			minuteur = setTimeout(function () {
+				etatTable.filtre_valeur = filtre.value;
+				etatTable.debut = 0;
+				recharger();
+			}, 350);
+		});
+	}
+
+	function rendreContenu(cible, r, recharger) {
+		cible.innerHTML = '';
+
+		var table = document.createElement('table');
+		table.className = 'spip liste';
+		var tete = document.createElement('thead');
+		var ligneTete = document.createElement('tr');
+		r.colonnes.forEach(function (c) {
+			var th = document.createElement('th');
+			th.scope = 'col';
+			var bouton = document.createElement('button');
+			bouton.type = 'button';
+			bouton.className = 'dashboard-serveur-tri'
+				+ (r.tri === c.nom ? ' on ' + (r.sens === 'desc' ? 'desc' : 'asc') : '');
+			bouton.textContent = c.nom + (r.tri === c.nom ? (r.sens === 'desc' ? ' ↓' : ' ↑') : '');
+			bouton.addEventListener('click', function () {
+				etatTable.sens = (etatTable.tri === c.nom && etatTable.sens === 'asc') ? 'desc' : 'asc';
+				etatTable.tri = c.nom;
+				etatTable.debut = 0;
+				recharger();
+			});
+			th.appendChild(bouton);
+			if (c.masquee) {
+				var marque = document.createElement('span');
+				marque.className = 'dashboard-serveur-masquee';
+				marque.textContent = ' (masquée)';
+				th.appendChild(marque);
+			}
+			ligneTete.appendChild(th);
+		});
+		tete.appendChild(ligneTete);
+		table.appendChild(tete);
+
+		var corps = document.createElement('tbody');
+		r.lignes.forEach(function (l) {
+			var tr = document.createElement('tr');
+			r.colonnes.forEach(function (c) {
+				var td = document.createElement('td');
+				var v = l[c.nom];
+				td.textContent = (v === null || v === undefined) ? '' : String(v);
+				tr.appendChild(td);
+			});
+			corps.appendChild(tr);
+		});
+		table.appendChild(corps);
+
+		var enveloppe = document.createElement('div');
+		enveloppe.className = 'dashboard-serveur-defilement';
+		enveloppe.appendChild(table);
+		cible.appendChild(enveloppe);
+
+		if (!r.lignes.length) {
+			var rien = document.createElement('p');
+			rien.className = 'petition';
+			rien.textContent = 'Aucune ligne.';
+			cible.appendChild(rien);
+		}
+
+		/* Ces lignes viennent du site géré : aucune boucle SPIP ne les a
+		   produites, donc pas de balise de pagination possible ici. On reprend
+		   son balisage mot pour mot, pour hériter des styles du privé plutôt
+		   que d'en inventer — c'est ce qui donnait des libellés blancs sur fond
+		   blanc. Ne jamais écrire de syntaxe de balise dans un commentaire,
+		   fût-il en JavaScript : SPIP la compile quand même. */
+		var fin = r.debut + r.lignes.length;
+		var pagination = document.createElement('nav');
+		pagination.className = 'pagination';
+		pagination.setAttribute('role', 'navigation');
+
+		var compte = document.createElement('span');
+		compte.className = 'pagination-label';
+		var etiquette = document.createElement('span');
+		etiquette.className = 'label';
+		etiquette.textContent = r.lignes.length
+			? (r.debut + 1) + '–' + fin + (r.total === null ? '' : ' sur ' + r.total)
+			: '';
+		compte.appendChild(etiquette);
+		pagination.appendChild(compte);
+
+		var items = document.createElement('ul');
+		items.className = 'pagination-items pagination_page_precedent_suivant';
+
+		/* Un élément de pagination : un lien quand il mène quelque part, un span
+		   inerte sinon — c'est ainsi que le privé distingue l'actif du figé. */
+		function item(classe, libelle, debutCible, actif) {
+			var li = document.createElement('li');
+			li.className = 'pagination-item' + (classe ? ' ' + classe : '');
+			var lien;
+			if (actif) {
+				lien = document.createElement('a');
+				lien.href = '#';
+				lien.className = 'pagination-item-label lien_pagination';
+				lien.addEventListener('click', function (e) {
+					e.preventDefault();
+					etatTable.debut = debutCible;
+					recharger();
+				});
+			} else {
+				lien = document.createElement('span');
+				lien.className = 'pagination-item-label';
+			}
+			lien.textContent = libelle;
+			li.appendChild(lien);
+			items.appendChild(li);
+			return li;
+		}
+
+		var suivantPossible = (r.total === null) ? (r.lignes.length === r.lot) : (fin < r.total);
+		item('prev' + (r.debut > 0 ? '' : ' disabled'), '\u2039 pr\u00e9c\u00e9dent',
+			Math.max(0, r.debut - r.lot), r.debut > 0);
+
+		/* Les numéros de page supposent qu'on sache combien il y en a : certains
+		   moteurs ne rendent pas de total sur une table volumineuse, et l'on s'en
+		   tient alors à précédent/suivant. */
+		if (r.total !== null && r.lot > 0) {
+			var pages = Math.max(1, Math.ceil(r.total / r.lot));
+			var courante = Math.floor(r.debut / r.lot) + 1;
+			// Même fenêtre que l'espace privé de SPIP : cinq liens autour.
+			var premiere = Math.max(1, Math.min(courante - 2, pages - 4));
+			var derniere = Math.min(pages, premiere + 4);
+			if (premiere > 1) {
+				item('', '1', 0, true);
+				if (premiere > 2) { item('tbc disabled', '\u2026', 0, false); }
+			}
+			for (var n = premiere; n <= derniere; n++) {
+				item(n === courante ? 'on active' : '', String(n), (n - 1) * r.lot, n !== courante);
+			}
+			if (derniere < pages) {
+				if (derniere < pages - 1) { item('tbc disabled', '\u2026', 0, false); }
+				item('', String(pages), (pages - 1) * r.lot, true);
+			}
+		}
+
+		item('next' + (suivantPossible ? '' : ' disabled'), 'suivant \u203a',
+			r.debut + r.lot, suivantPossible);
+
+		pagination.appendChild(items);
+		cible.appendChild(pagination);
+	}
+
+	/* --- fichiers de configuration --- */
+	function rendreFichiers(cible) {
+		cible.innerHTML = '';
+		[['htaccess', '.htaccess'],
+		 ['mes_options', 'config/mes_options.php'],
+		 ['mes_fonctions', 'squelettes/mes_fonctions.php']].forEach(function (f) {
+			var details = document.createElement('details');
+			details.className = 'dashboard-serveur-fichier';
+			var resume = document.createElement('summary');
+			resume.textContent = f[1];
+			details.appendChild(resume);
+			var corps = document.createElement('div');
+			corps.appendChild(document.createTextNode(''));
+			details.appendChild(corps);
+			details.addEventListener('toggle', function () {
+				if (!details.open || details.dataset.charge) { return; }
+				details.dataset.charge = '1';
+				attendre(corps);
+				demander('serveur_fichier', { fichier: f[0] }).then(function (r) {
+					corps.innerHTML = '';
+					if (!r.ok) { echouer(corps, r.message); return; }
+					if (!r.existe) {
+						var absent = document.createElement('p');
+						absent.className = 'petition';
+						absent.textContent = 'Ce fichier n’existe pas sur le site.';
+						corps.appendChild(absent);
+						return;
+					}
+					var meta = document.createElement('p');
+					meta.className = 'explication';
+					meta.textContent = octets(r.octets) + ', modifié le ' + r.modifie
+						+ (r.tronque ? ' — affichage tronqué' : '');
+					corps.appendChild(meta);
+					var pre = document.createElement('pre');
+					pre.className = 'dashboard-serveur-source';
+					pre.textContent = r.contenu;
+					corps.appendChild(pre);
+				}).catch(function () { echouer(corps); });
+			});
+			cible.appendChild(details);
+		});
+	}
+
+	/* --- phpinfo, dans un cadre isolé pour que ses styles restent chez lui --- */
+	function rendrePhpinfo(cible) {
+		cible.innerHTML = '';
+		var details = document.createElement('details');
+		var resume = document.createElement('summary');
+		resume.textContent = 'Afficher le phpinfo() du site';
+		details.appendChild(resume);
+		var corps = document.createElement('div');
+		details.appendChild(corps);
+		details.addEventListener('toggle', function () {
+			if (!details.open || details.dataset.charge) { return; }
+			details.dataset.charge = '1';
+			attendre(corps);
+			demander('serveur_phpinfo', {}).then(function (r) {
+				corps.innerHTML = '';
+				if (!r.ok) { echouer(corps, r.erreur || r.message); return; }
+				var cadre = document.createElement('iframe');
+				cadre.className = 'dashboard-serveur-phpinfo';
+				cadre.setAttribute('sandbox', '');
+				cadre.setAttribute('title', 'phpinfo du site géré');
+				cadre.srcdoc = '<!doctype html><meta charset="utf-8">'
+					+ '<style>body{font:13px/1.4 sans-serif;margin:0}table{border-collapse:collapse;width:100%;margin:0 0 1em}'
+					+ 'td,th{border:1px solid #ccc;padding:.2em .4em;word-break:break-word}h2{font-size:1.1em}</style>'
+					+ r.html;
+				corps.appendChild(cadre);
+			}).catch(function () { echouer(corps); });
+		});
+		cible.appendChild(details);
+	}
+
+	function remplir() {
+		if (charge) { return; }
+		charge = true;
+
+		attendre(bloc('resume'));
+		demander('serveur_resume', {}).then(function (r) {
+			if (!r.ok) { echouer(bloc('resume'), r.message); return; }
+			rendreResume(bloc('resume'), r);
+		}).catch(function () { echouer(bloc('resume')); });
+
+		attendre(bloc('tables'));
+		demander('serveur_tables', {}).then(function (r) {
+			if (!r.ok) { echouer(bloc('tables'), r.message); return; }
+			rendreTables(bloc('tables'), r);
+		}).catch(function () { echouer(bloc('tables')); });
+
+		rendreFichiers(bloc('fichiers'));
+		rendrePhpinfo(bloc('phpinfo'));
+	}
+
+	// Rien n'est demandé au site tant que l'onglet n'est pas ouvert.
+	var onglet = document.getElementById('onglet-serveur');
+	if (onglet) { onglet.addEventListener('click', remplir); }
+})();
+</script>
+
+<script type="text/javascript">
+/* Onglet « SPIP WAF » : les chiffres du pare-feu du site géré.
+   Ils arrivent en données, jamais en balisage : la page d'analyse du plugin
+   charge ses sections en AJAX, un cadre isolé les rendrait vides, et hors cadre
+   isolé ce serait accueillir ici le HTML d'un site qui peut être compromis.
+   Tout est donc redessiné par textContent. */
+(function () {
+	var panneau = document.getElementById('panneau-waf');
+	if (!panneau) { return; }
+
+	var gabarit = panneau.getAttribute('data-dashboard-waf');
+	var cible = panneau.querySelector('[data-waf-bloc="resume"]');
+	var charge = false;
+	var etat = { debut: 0, lot: 25 };
+
+	function texte(balise, contenu, classe) {
+		var n = document.createElement(balise);
+		n.textContent = contenu;
+		if (classe) { n.className = classe; }
+		return n;
+	}
+
+	function attendre() {
+		cible.textContent = '';
+		cible.appendChild(texte('p', 'Interrogation du site…', 'petition'));
+	}
+
+	function echouer(message) {
+		cible.textContent = '';
+		cible.appendChild(texte('p', message || 'Le site n’a pas répondu.',
+			'reponse_formulaire reponse_formulaire_erreur'));
+	}
+
+	function demander() {
+		var adresse = gabarit + '&operation=waf_resume'
+			+ '&debut=' + encodeURIComponent(etat.debut)
+			+ '&lot=' + encodeURIComponent(etat.lot);
+		return fetch(adresse, {
+			credentials: 'same-origin',
+			headers: { 'X-Requested-With': 'XMLHttpRequest' }
+		}).then(function (r) {
+			if (!r.ok) { throw new Error('HTTP ' + r.status); }
+			return r.json();
+		});
+	}
+
+	function chiffres(r) {
+		var v = r.vue_ensemble || {};
+		var liste = document.createElement('ul');
+		liste.className = 'dashboard-synthese liste-items';
+		[['Requêtes bloquées', v.requetes_bloquees],
+		 ['Adresses bloquées', v.ips_bloquees],
+		 ['Par les règles', v.regles_requetes],
+		 ['Par les listes noires', v.listes_requetes]].forEach(function (p) {
+			var li = document.createElement('li');
+			li.appendChild(texte('strong', String(p[1] === undefined ? 0 : p[1])));
+			li.appendChild(document.createTextNode(' ' + p[0]));
+			liste.appendChild(li);
+		});
+		return liste;
+	}
+
+	function tableau(entetes, lignes) {
+		var table = document.createElement('table');
+		table.className = 'spip liste';
+		var thead = document.createElement('thead');
+		var tr = document.createElement('tr');
+		entetes.forEach(function (t) {
+			var th = texte('th', t);
+			th.setAttribute('scope', 'col');
+			tr.appendChild(th);
+		});
+		thead.appendChild(tr);
+		table.appendChild(thead);
+		var tbody = document.createElement('tbody');
+		lignes.forEach(function (cellules) {
+			var ligne = document.createElement('tr');
+			cellules.forEach(function (c) { ligne.appendChild(texte('td', c === null ? '' : String(c))); });
+			tbody.appendChild(ligne);
+		});
+		table.appendChild(tbody);
+		return table;
+	}
+
+	/* La pagination du journal reprend le balisage du privé, comme celle du
+	   parcours des tables : précédent, les numéros, suivant. */
+	function pagination(journal) {
+		var total = journal.total;
+		var nav = document.createElement('nav');
+		nav.className = 'pagination';
+		nav.setAttribute('role', 'navigation');
+		var items = document.createElement('ul');
+		items.className = 'pagination-items pagination_page_precedent_suivant';
+
+		function item(classe, libelle, debut, actif) {
+			var li = document.createElement('li');
+			li.className = 'pagination-item' + (classe ? ' ' + classe : '');
+			var lien;
+			if (actif) {
+				lien = document.createElement('a');
+				lien.href = '#';
+				lien.className = 'pagination-item-label lien_pagination';
+				lien.addEventListener('click', function (e) {
+					e.preventDefault();
+					etat.debut = debut;
+					remplir(true);
+				});
+			} else {
+				lien = document.createElement('span');
+				lien.className = 'pagination-item-label';
+			}
+			lien.textContent = libelle;
+			li.appendChild(lien);
+			items.appendChild(li);
+		}
+
+		var fin = journal.debut + (journal.evenements || []).length;
+		var suivant = (total === null) ? ((journal.evenements || []).length === journal.lot) : (fin < total);
+		item('prev' + (journal.debut > 0 ? '' : ' disabled'), '\u2039 précédent',
+			Math.max(0, journal.debut - journal.lot), journal.debut > 0);
+		if (total !== null && journal.lot > 0) {
+			var pages = Math.max(1, Math.ceil(total / journal.lot));
+			var courante = Math.floor(journal.debut / journal.lot) + 1;
+			var premiere = Math.max(1, Math.min(courante - 2, pages - 4));
+			var derniere = Math.min(pages, premiere + 4);
+			if (premiere > 1) {
+				item('', '1', 0, true);
+				if (premiere > 2) { item('tbc disabled', '\u2026', 0, false); }
+			}
+			for (var n = premiere; n <= derniere; n++) {
+				item(n === courante ? 'on active' : '', String(n), (n - 1) * journal.lot, n !== courante);
+			}
+			if (derniere < pages) {
+				if (derniere < pages - 1) { item('tbc disabled', '\u2026', 0, false); }
+				item('', String(pages), (pages - 1) * journal.lot, true);
+			}
+		}
+		item('next' + (suivant ? '' : ' disabled'), 'suivant \u203a', journal.debut + journal.lot, suivant);
+		nav.appendChild(items);
+		return nav;
+	}
+
+	function rendre(r) {
+		cible.textContent = '';
+
+		if (!r.ok) { echouer(r.message || r.erreur); return; }
+		if (!r.present) { echouer('Le plugin SPIP WAF n’est pas installé sur ce site.'); return; }
+
+		if (r.version) {
+			cible.appendChild(texte('p', 'SPIP WAF ' + r.version, 'explication'));
+		}
+		cible.appendChild(chiffres(r));
+
+		var attaques = (r.attaques && r.attaques.motifs) || [];
+		cible.appendChild(texte('h3', 'Motifs de blocage des ' + ((r.attaques && r.attaques.jours) || 7) + ' derniers jours'));
+		if (attaques.length) {
+			cible.appendChild(tableau(['Motif', 'Requêtes', 'Adresses'],
+				attaques.map(function (a) { return [a.motif, a.requetes, a.ips]; })));
+		} else {
+			cible.appendChild(texte('p', 'Rien de bloqué sur la période.', 'petition'));
+		}
+
+		var bans = r.bans || [];
+		cible.appendChild(texte('h3', 'Derniers bannissements'));
+		if (bans.length) {
+			cible.appendChild(tableau(['Date', 'Adresse', 'Motif'],
+				bans.map(function (b) { return [b.date, b.ip, b.motif]; })));
+		} else {
+			cible.appendChild(texte('p', 'Aucun bannissement.', 'petition'));
+		}
+
+		var journal = r.journal || { debut: 0, lot: 25, total: 0, evenements: [] };
+		var compte = journal.total === null
+			? String((journal.evenements || []).length) + ' événement(s)'
+			: String(journal.total) + ' événement(s)';
+		cible.appendChild(texte('h3', 'Journal — ' + compte));
+		if ((journal.evenements || []).length) {
+			cible.appendChild(tableau(['Date', 'Adresse', 'Type', 'Motif', 'Méthode', 'URI'],
+				journal.evenements.map(function (e) {
+					return [e.date, e.ip, e.type, e.motif, e.methode, e.uri];
+				})));
+			cible.appendChild(pagination(journal));
+		} else {
+			cible.appendChild(texte('p', 'Aucun événement enregistré.', 'petition'));
+		}
+
+		var reglages = r.reglages || {};
+		var clefs = Object.keys(reglages);
+		if (clefs.length) {
+			cible.appendChild(texte('h3', 'Réglages'));
+			cible.appendChild(tableau(['Réglage', 'Valeur'],
+				clefs.map(function (c) { return [c, reglages[c]]; })));
+		}
+	}
+
+	function remplir(force) {
+		if (charge && !force) { return; }
+		charge = true;
+		attendre();
+		demander().then(rendre).catch(function () { echouer(); });
+	}
+
+	// Rien n'est demandé au site tant que l'onglet n'est pas ouvert.
+	var onglet = document.getElementById('onglet-waf');
+	if (onglet) { onglet.addEventListener('click', function () { remplir(false); }); }
+})();
+</script>
+
+<script type="text/javascript">
+/* État du spip_loader.php distant, relevé à la demande. */
+(function () {
+	var bloc = document.getElementById('loader');
+	if (!bloc) { return; }
+	var bouton = bloc.querySelector('[data-dashboard-loader-etat]');
+	var cible = bloc.querySelector('[data-loader-bloc="etat"]');
+	if (!bouton || !cible) { return; }
+
+	function ligne(libelle, valeur) {
+		var p = document.createElement('p');
+		var b = document.createElement('strong');
+		b.textContent = libelle + ' : ';
+		p.appendChild(b);
+		p.appendChild(document.createTextNode(String(valeur)));
+		return p;
+	}
+
+	bouton.addEventListener('click', function () {
+		bouton.disabled = true;
+		cible.textContent = '';
+		var attente = document.createElement('p');
+		attente.className = 'petition';
+		attente.textContent = 'Interrogation du site…';
+		cible.appendChild(attente);
+
+		fetch(bloc.getAttribute('data-dashboard-loader') + '&operation=loader_etat', {
+			credentials: 'same-origin',
+			headers: { 'X-Requested-With': 'XMLHttpRequest' }
+		})
+			.then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.json(); })
+			.then(function (r) {
+				cible.textContent = '';
+				bouton.disabled = false;
+				if (!r.ok) {
+					var e = document.createElement('p');
+					e.className = 'reponse_formulaire reponse_formulaire_erreur';
+					e.textContent = r.message || 'Le site n’a pas répondu.';
+					cible.appendChild(e);
+					return;
+				}
+				cible.appendChild(ligne('Présent', r.present ? 'oui' : 'non'));
+				if (r.present) {
+					cible.appendChild(ligne('Version annoncée', r.version || 'non déclarée'));
+					// La date du script, pas celle du dépôt : un script publié il y
+					// a deux ans mis en place hier paraîtrait neuf.
+					if (r.date_version) { cible.appendChild(ligne('Publié le', r.date_version)); }
+					cible.appendChild(ligne('Déposé le', r.modifie || '—'));
+					cible.appendChild(ligne('Poids', (r.octets || 0) + ' octets'));
+				}
+				cible.appendChild(ligne('Racine inscriptible', r.racine_ecrit ? 'oui' : 'non'));
+			})
+			.catch(function () {
+				cible.textContent = '';
+				bouton.disabled = false;
+				var e = document.createElement('p');
+				e.className = 'reponse_formulaire reponse_formulaire_erreur';
+				e.textContent = 'Le site n’a pas répondu.';
+				cible.appendChild(e);
+			});
+	});
+})();
+</script>
+
+<script type="text/javascript">
+/* L'état de SPIP Check chez le site géré, relevé à la demande — comme celui du
+   spip_loader, et pour la même raison : c'est un aller-retour de plus vers le
+   site, pour une information qu'on ne consulte qu'au moment d'agir. */
+(function () {
+	var bloc = document.querySelector('[data-dashboard-check]');
+	if (!bloc) { return; }
+
+	var bouton = bloc.querySelector('[data-dashboard-check-etat]');
+	var cible = bloc.querySelector('[data-check-bloc="etat"]');
+	if (!bouton || !cible) { return; }
+
+	/* Tout passe par textContent : ce qui vient d'un site géré est inerte. */
+	function ligne(libelle, valeur) {
+		var p = document.createElement('p');
+		var b = document.createElement('strong');
+		b.textContent = libelle + ' : ';
+		p.appendChild(b);
+		p.appendChild(document.createTextNode(String(valeur)));
+		return p;
+	}
+
+	bouton.addEventListener('click', function () {
+		bouton.disabled = true;
+		cible.textContent = '';
+		var attente = document.createElement('p');
+		attente.className = 'petition';
+		attente.textContent = 'Interrogation du site…';
+		cible.appendChild(attente);
+
+		fetch(bloc.getAttribute('data-dashboard-check') + '&operation=check_etat', {
+			credentials: 'same-origin',
+			headers: { 'X-Requested-With': 'XMLHttpRequest' }
+		})
+			.then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.json(); })
+			.then(function (r) {
+				cible.textContent = '';
+				bouton.disabled = false;
+				if (!r.ok) {
+					var e = document.createElement('p');
+					e.className = 'reponse_formulaire reponse_formulaire_erreur';
+					e.textContent = r.message || 'Le site n’a pas répondu.';
+					cible.appendChild(e);
+					return;
+				}
+				cible.appendChild(ligne('Présent', r.present ? 'oui' : 'non'));
+				if (r.present) {
+					cible.appendChild(ligne('Version', r.version || 'non déclarée'));
+					// L'édition complète embarque le détecteur antimalware, la
+					// lite non — et c'est elle qu'il faut sur les hébergements
+					// dont l'antivirus supprime la première au dépôt.
+					if (r.edition) { cible.appendChild(ligne('Édition', r.edition)); }
+					cible.appendChild(ligne('Déposé le', r.modifie || '—'));
+					cible.appendChild(ligne('Poids', (r.octets || 0) + ' octets'));
+				}
+				cible.appendChild(ligne('Racine inscriptible', r.racine_ecrit ? 'oui' : 'non'));
+				// Sans fichier de configuration, SPIP Check n'ouvre son
+				// interface qu'à l'auteur nº 1 du site géré. Le dire ici évite
+				// de déposer l'outil pour découvrir au clic qu'on n'y a pas accès.
+				cible.appendChild(ligne('Accès',
+					r.config ? ('réglé par ' + r.config) : 'auteur nº 1 du site uniquement'));
+			})
+			.catch(function () {
+				cible.textContent = '';
+				bouton.disabled = false;
+				var e = document.createElement('p');
+				e.className = 'reponse_formulaire reponse_formulaire_erreur';
+				e.textContent = 'Le site n’a pas répondu.';
+				cible.appendChild(e);
+			});
+	});
+})();
+</script>
+
+[(#REM)
+	Chart.js est embarqué dans le plugin, jamais appelé sur un CDN : l'espace privé
+	de la tour de contrôle détient les secrets de tout le parc, il n'a pas à
+	joindre un hôte extérieur à chaque affichage — et il peut très bien être
+	derrière un pare-feu sortant.
+]
+<script src="[(#CHEMIN{javascript/chart.umd.min.js}|timestamp)]"></script>
+<script src="[(#CHEMIN{javascript/dashboard_waf_graphes.js}|timestamp)]"></script>
+
+</BOUCLE_installe>
+<div class="dashboard-fiche dashboard-fiche-alerte">
+	<h2><:dashboard:titre_tables_absentes:></h2>
+	<p><:dashboard:explication_tables_absentes:></p>
+	[<p><:dashboard:tables_manquantes:> <code>(#VAL|dashboard_tables_absentes)</code></p>]
+	[(#AUTORISER{configurer,_dashboard})
+	<p class="boutons">
+		[(#BOUTON_ACTION{<:dashboard:action_installer:>,#URL_ACTION_AUTEUR{dashboard_installer,installer,#SELF},btn})]
+	</p>
+	]
+</div>
+<//B_installe>

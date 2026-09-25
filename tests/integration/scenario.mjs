@@ -996,7 +996,12 @@ dit('mise à jour du core autorisée sur le site géré',
 
 await aller(page, '/ecrire/?exec=configurer_tourdecontrole');
 await page.fill('[name="url_archives_spip"]', base + '/core-archives/');
-await page.fill('[name="versions_manuelles"]', `4.4 = ${coreCible}`);
+// L'annuaire local, aux deux formats. On ne renseigne **pas** les versions
+// imposées : elles écraseraient la fiche de l'annuaire, donc son empreinte
+// SHA-256 et son adresse absolue — et c'est précisément ce chemin qu'on veut
+// éprouver. La version cible vient donc de l'annuaire, comme en production.
+await page.fill('[name="url_versions_spip"]', base + '/versions-api');
+await page.fill('[name="versions_manuelles"]', '');
 // Zéro seconde de validité : une sauvegarde neuve est exigée, ce qui vérifie
 // que la règle « une sauvegarde avant toute mise à jour » n'a pas d'échappatoire.
 await page.fill('[name="fraicheur_sauvegarde"]', '0');
@@ -1004,6 +1009,29 @@ await page.locator('form input[type=submit]').first().click();
 await page.waitForLoadState('domcontentloaded').catch(() => {});
 await page.waitForTimeout(500);
 dit('dépôt d’archives de core configuré', (await page.locator('body').innerText()).includes('enregistrée'));
+
+// L'annuaire est lu, et ce qu'il porte arrive jusqu'à la base. Sans l'empreinte,
+// `dashagent_core_maj()` ne vérifie rien : le contrôle existe depuis le premier
+// jour et n'avait jamais servi, faute de source qui publie un SHA-256.
+// La configuration d'un plugin est **sérialisée** dans sa meta, pas en JSON :
+// `ecrire_config()` du core passe par serialize(). La relire en JSON rendait un
+// tableau vide, et les contrôles ci-dessous auraient échoué en accusant
+// l'annuaire alors qu'il avait parfaitement été lu.
+const fiches = JSON.parse(execFileSync('php', ['-r',
+	`$db=new SQLite3(getenv("BDD"));`
+	+ `$c=unserialize($db->querySingle('SELECT valeur FROM spip_meta WHERE nom=\"dashboard\"'));`
+	+ `echo json_encode($c['cache_api']['versions'] ?? []);`,
+], { env: { ...process.env, BDD: bdd } }).toString() || '{}');
+dit('l’annuaire local a été lu et mémorisé', Object.keys(fiches).length >= 2,
+	Object.keys(fiches).join(', '));
+dit('la branche que le format 3 ignore est venue du format 2', !!fiches['4.1.20'],
+	Object.keys(fiches).join(', '));
+dit('l’empreinte SHA-256 de l’archive est connue',
+	/^[0-9a-f]{64}$/.test((fiches[coreCible] || {}).sha256 || ''),
+	JSON.stringify(fiches[coreCible] || {}));
+dit('l’adresse de l’archive est celle que l’annuaire publie',
+	((fiches[coreCible] || {}).url || '').endsWith(`/SPIP-v${coreCible}.zip`),
+	(fiches[coreCible] || {}).url || '');
 
 // Le retard de core est décidé à la synchronisation : il faut la rejouer pour
 // que la nouvelle version cible soit prise en compte.
@@ -1075,6 +1103,12 @@ dit(`le journal porte la transition 4.4.23 → ${coreCible}`,
 	lignesCore.join(' | '));
 dit('le journal porte la conclusion du chantier',
 	lignesCore.some((m) => /terminé/.test(m)), lignesCore.join(' | '));
+// La preuve que l'empreinte a servi. Sans elle, la mise à jour se serait
+// déroulée exactement de la même façon : `dashagent_core_maj()` n'exige rien, il
+// vérifie ce qu'on lui donne. Un « ça a marché » ne dit donc rien du contrôle —
+// il faut que le journal l'atteste.
+dit('l’empreinte de l’archive a bien été vérifiée',
+	lignesCore.some((m) => /empreinte vérifiée/.test(m)), lignesCore.join(' | '));
 
 const sauvegardesApres = JSON.parse(sql('SELECT count(*) AS n FROM spip_dashboard_sauvegardes'))[0].n;
 dit('une sauvegarde neuve a précédé la mise à jour', Number(sauvegardesApres) > Number(sauvegardesAvant),
@@ -1102,9 +1136,112 @@ dit('l’espace privé répond encore après le remplacement', (await erreurs(pa
 // « la page contient 4.4.99 » ne prouverait rien : le badge « 4.4.23 → 4.4.99 »
 // l'affiche aussi quand rien ne s'est passé. C'est la version enregistrée qui
 // compte, et la disparition de la proposition de mise à jour.
-const apres = JSON.parse(sql('SELECT version_spip, core_maj, base_maj FROM spip_dashboard_sites WHERE id_dashboard_site = 1'))[0];
+const apres = JSON.parse(sql('SELECT version_spip, core_maj, core_etat, core_provenance, base_maj'
+	+ ' FROM spip_dashboard_sites WHERE id_dashboard_site = 1'))[0];
 dit('version du site mise à jour dans le parc', apres.version_spip === coreCible, JSON.stringify(apres));
 dit('plus de retard de core signalé', apres.core_maj === 'non', apres.core_maj);
+dit('l’état du core dit « à jour », pas « inconnu »', apres.core_etat === 'a_jour', apres.core_etat);
+dit('l’avis vient de la tour, qui a lu l’annuaire', apres.core_provenance === 'tour', apres.core_provenance);
+
+console.log('\n### Les quatre états du core, à l’écran');
+
+// Les trois états qui n'existaient pas se rendent sur la même page que le
+// premier, et c'est là que les pièges du compilateur mordent : un crochet
+// littéral dans un bloc optionnel, deux balises dans le même bloc, un argument
+// composite. Rien de tout cela ne lève d'erreur — la page s'affiche, et seul le
+// bloc manque. On pose donc chaque état en base et on relit la page.
+const etats = [
+	{
+		etat: 'bloque', cible: '4.4.30', majeure: '',
+		attendu: ['impossible', '4.4.30'],
+		badge: 'PHP à mettre à jour',
+	},
+	{
+		etat: 'inconnu', cible: '', majeure: '',
+		attendu: ['inconnue'],
+		badge: 'version inconnue',
+	},
+	{
+		etat: 'a_jour', cible: '', majeure: '4.5.0',
+		attendu: ['4.5.0'],
+		badge: null,
+	},
+];
+
+for (const cas of etats) {
+	sqlEcrire(`UPDATE spip_dashboard_sites SET core_etat = '${cas.etat}', core_cible = '${cas.cible}',`
+		+ ` core_majeure = '${cas.majeure}' WHERE id_dashboard_site = 1`);
+
+	const fiche = await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
+	dit(`état « ${cas.etat} » : la fiche ne tombe pas`, (await erreurs(page)).length === 0,
+		(await erreurs(page)).join(' ; '));
+	for (const mot of cas.attendu) {
+		dit(`état « ${cas.etat} » : la fiche dit « ${mot} »`, fiche.includes(mot),
+			fiche.slice(0, 300));
+	}
+	// Le contrôle qui discrimine : aucun bouton de mise à jour du core. Un état
+	// qui en armerait un enverrait le webmestre lancer une opération vouée à
+	// casser le site, ou fondée sur une version qu'on ne connaît pas.
+	dit(`état « ${cas.etat} » : aucun bouton de mise à jour du core`,
+		(await page.locator('form[action*="core_maj"]').count()) === 0);
+
+	const parc = await aller(page, '/ecrire/?exec=dashboard');
+	dit(`état « ${cas.etat} » : la vue d’ensemble ne tombe pas`, (await erreurs(page)).length === 0,
+		(await erreurs(page)).join(' ; '));
+	if (cas.badge) {
+		dit(`état « ${cas.etat} » : le badge du parc le dit`, parc.includes(cas.badge),
+			parc.slice(0, 400));
+	}
+}
+
+// Le compte du parc ne range plus « bloqué » et « inconnu » avec les sites
+// sains : c'est ce qui a fait passer un parc entier pour à jour pendant que sa
+// seule source de versions répondait 500.
+// Le contrôle qui discrimine est l'inverse de « la ligne est là » : une ligne
+// présente en permanence passerait au vert sans rien prouver. C'est son absence
+// sur un parc sain, puis son apparition, qui montre qu'elle est calculée.
+const ligne = async () => {
+	await aller(page, '/ecrire/?exec=dashboard');
+	const items = await page.locator('ul.dashboard-synthese li').allInnerTexts();
+	return items.filter((t) => /bloqué/i.test(t));
+};
+
+sqlEcrire("UPDATE spip_dashboard_sites SET core_etat = 'a_jour', core_cible = '' WHERE id_dashboard_site = 1");
+dit('parc sain : aucune ligne de blocage dans la synthèse',
+	(await ligne()).length === 0, JSON.stringify(await ligne()));
+
+sqlEcrire("UPDATE spip_dashboard_sites SET core_etat = 'bloque', core_cible = '4.4.30' WHERE id_dashboard_site = 1");
+const lignes = await ligne();
+dit('un site bloqué fait apparaître la ligne, avec son compte',
+	lignes.length === 1 && lignes[0].includes('1'), JSON.stringify(lignes));
+const synthese = JSON.parse(sql(
+	"SELECT COUNT(*) AS n FROM spip_dashboard_sites WHERE statut = 'publie' AND core_etat = 'a_jour'"))[0];
+dit('un site bloqué n’est pas compté « à jour »', Number(synthese.n) === 0, synthese.n);
+
+// Remise en état : la suite du parcours attend un site à jour.
+sqlEcrire("UPDATE spip_dashboard_sites SET core_etat = 'a_jour', core_cible = '', core_majeure = '' WHERE id_dashboard_site = 1");
+
+// Et l'annuaire vidé rend la tour muette, sans la faire mentir. Le réglage est
+// vidable exprès : `dashboard_config()` rendrait son défaut sur une chaîne vide,
+// et le champ serait impossible à éteindre.
+await aller(page, '/ecrire/?exec=configurer_tourdecontrole');
+await page.fill('[name="url_versions_spip"]', '');
+await page.locator('form input[type=submit]').first().click();
+await page.waitForLoadState('domcontentloaded').catch(() => {});
+await page.waitForTimeout(500);
+await aller(page, '/ecrire/?exec=dashboard_site&id_dashboard_site=1');
+await bouton(page, 'Synchroniser');
+const muet = JSON.parse(sql('SELECT core_etat, core_cible FROM spip_dashboard_sites WHERE id_dashboard_site = 1'))[0];
+dit('annuaire vidé : la tour dit qu’elle ne sait pas', muet.core_etat === 'inconnu',
+	JSON.stringify(muet));
+dit('et n’annonce aucune cible', muet.core_cible === '', muet.core_cible);
+
+// On le remet, pour ne pas laisser le parcours sur un réglage éteint.
+await aller(page, '/ecrire/?exec=configurer_tourdecontrole');
+await page.fill('[name="url_versions_spip"]', base + '/versions-api');
+await page.locator('form input[type=submit]').first().click();
+await page.waitForLoadState('domcontentloaded').catch(() => {});
+await page.waitForTimeout(500);
 
 console.log('\n### Migration du schéma de base');
 const baseCible = process.env.BASE_CIBLE || '2026090100';

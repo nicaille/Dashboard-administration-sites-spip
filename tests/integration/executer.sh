@@ -295,6 +295,36 @@ cp "$ZIP" "$SITE/core-archives/SPIP-v$CORE_CIBLE.zip"
 php "$RACINE/tests/integration/preparer-core.php" "$SITE/core-archives/SPIP-v$CORE_CIBLE.zip" "$CORE_CIBLE" "$BASE_CIBLE" \
 	|| { echo "archive de core non préparée" >&2; exit 1; }
 
+# L'annuaire des versions, servi en local aux deux formats que publie spip.net.
+# Deux fichiers et non un : le format 3 ne liste pas toutes les branches que le
+# format 2 publie, et un jeu d'essai qui servirait la même charge aux deux
+# adresses ne prouverait rien de la fusion. Le répertoire porte donc un fichier
+# « 3 » et un index, aux adresses exactes que la tour construit.
+mkdir -p "$SITE/versions-api"
+cat > "$SITE/versions-api/3" <<JSON
+{"api":3,"versions":{
+"dev":{"url":"$BASE/core-archives/spip-master.zip","php":["8.4"]},
+"$CORE_CIBLE":{"url":"$BASE/core-archives/SPIP-v$CORE_CIBLE.zip","php":["7.4","8.0","8.1","8.2","8.3","8.4","8.5"],
+"ram":134217728,"freespace":157286400,"sha256":"$(php -r 'echo hash_file("sha256", $argv[1]);' "$SITE/core-archives/SPIP-v$CORE_CIBLE.zip")"}
+}}
+JSON
+# Le format 2 publie en plus une branche 4.1, que le format 3 ignore — le cas
+# réel : un site d'une branche ancienne ne doit pas devenir invisible.
+cat > "$SITE/versions-api/index.php" <<'JSON'
+<?php
+header('Content-Type: application/json');
+echo json_encode([
+	'api' => 2,
+	'versions' => [
+		'dev'    => 'spip/dev/spip-master.zip',
+		'4.1.20' => 'spip/archives/spip-v4.1.20.zip',
+	],
+	'default_branch' => '4.4',
+	'requirements' => ['php' => ['4.4' => '7.4.0', '4.1' => '7.3.0']],
+	'digests' => ['4.1.20' => ['sha1' => '05fecbf918f889526e6ab22a86d0ae838b57f83b']],
+]);
+JSON
+
 # Témoins dans les répertoires que la mise à jour ne doit jamais toucher.
 for garde in config IMG local squelettes plugins; do
 	mkdir -p "$SITE/$garde"

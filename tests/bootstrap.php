@@ -68,13 +68,34 @@ function ecrire_config($chemin, $valeur) {
 	return true;
 }
 
-/* Aucun appel sortant depuis les tests unitaires. Deux simulations : l'index des
-   archives, et la liste des adresses auxquelles un HEAD répond 200. */
+/* Aucun appel sortant depuis les tests unitaires. Trois simulations : l'annuaire
+   des versions de SPIP, adresse par adresse ; l'index des archives ; et la liste
+   des adresses auxquelles un HEAD répond 200.
+
+   L'annuaire est indexé par adresse exacte, et non par un contenu unique : les
+   deux formats de `spip_loader.api` ne rendent pas la même chose, et un stub qui
+   servirait la même charge aux deux ne prouverait rien de la fusion. */
 function recuperer_url($url, $options = []) {
 	if (($options['methode'] ?? 'GET') === 'HEAD') {
 		$servies = $GLOBALS['dashboard_archives_servies_test'] ?? [];
 
 		return ['status' => in_array($url, $servies, true) ? 200 : 404];
+	}
+
+	$annuaire = $GLOBALS['dashboard_api_test'] ?? null;
+	if (is_array($annuaire) && array_key_exists($url, $annuaire)) {
+		$reponse = $annuaire[$url];
+
+		// Une valeur fausse simule une panne de transport, un entier un code
+		// d'erreur : les deux doivent laisser l'annuaire muet sans le vider.
+		if ($reponse === false) {
+			return false;
+		}
+		if (is_int($reponse)) {
+			return ['status' => $reponse, 'page' => ''];
+		}
+
+		return ['status' => 200, 'page' => (string) $reponse];
 	}
 
 	$page = $GLOBALS['dashboard_index_archives_test'] ?? null;

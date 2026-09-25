@@ -1,0 +1,331 @@
+<?php
+/**
+ * Installation / désinstallation du tableau de bord.
+ *
+ * @package SPIP\Dashboard\Installation
+ */
+
+if (!defined('_ECRIRE_INC_VERSION')) {
+	return;
+}
+
+/**
+ * Reprend la version de schéma laissée par l'ancien préfixe.
+ *
+ * Le plugin du tableau de bord s'appelait « dashboard » jusqu'en 1.0.19, et le
+ * préfixe a changé pour éviter une collision : un autre plugin SPIP occupe déjà
+ * « dashboard », et SVP indexe les plugins par préfixe tous dépôts confondus —
+ * il aurait fini par proposer l'un pour l'autre.
+ *
+ * Or SPIP nomme la meta de version de schéma d'après le préfixe. Sous le nouveau
+ * nom, il ne trouve rien, en conclut que le plugin vient d'être installé, et
+ * rejoue toutes les migrations depuis l'origine. Elles sont pour la plupart
+ * inoffensives — `maj_tables()` ne détruit pas ce qui existe — mais les rejouer
+ * sur une base déjà à jour n'a aucun sens, et la moindre migration destructrice
+ * ajoutée un jour rendrait ce détour dangereux.
+ *
+ * L'ancienne meta n'est pas effacée : elle ne gêne personne, et elle laisse la
+ * possibilité de revenir à la version précédente du plugin sans rien perdre.
+ *
+ * @param string $nom_meta_base_version Nom que SPIP donne à la meta aujourd'hui
+ * @return void
+ */
+function dashboard_reprendre_schema($nom_meta_base_version) {
+	include_spip('inc/meta');
+
+	$ancienne = 'dashboard_base_version';
+	if ($nom_meta_base_version === $ancienne) {
+		return;
+	}
+	if (isset($GLOBALS['meta'][$nom_meta_base_version]) || !isset($GLOBALS['meta'][$ancienne])) {
+		return;
+	}
+
+	ecrire_meta($nom_meta_base_version, $GLOBALS['meta'][$ancienne]);
+	lire_metas();
+}
+
+/**
+ * Création / mise à jour du schéma.
+ *
+ * @param string $nom_meta_base_version
+ * @param string $version_cible
+ * @return void
+ */
+function tourdecontrole_upgrade($nom_meta_base_version, $version_cible) {
+	dashboard_reprendre_schema($nom_meta_base_version);
+
+	$maj = [];
+
+	$maj['create'] = [
+		['tourdecontrole_creer_tables'],
+		['tourdecontrole_initialiser_configuration'],
+	];
+
+	// L'étape « create » n'est jamais rejouée une fois la version enregistrée en
+	// meta. Cette étape versionnée rattrape les installations où les tables
+	// n'ont pas été créées ; elle est sans effet quand tout est déjà en place.
+	$maj['1.0.2'] = [
+		['tourdecontrole_creer_tables'],
+		['tourdecontrole_initialiser_configuration'],
+	];
+
+	// 1.0.2 créait les tables sans prévenir le compilateur : les squelettes
+	// gardaient une vue du schéma antérieure à leur création.
+	$maj['1.0.3'] = [
+		['tourdecontrole_creer_tables'],
+	];
+
+	// 1.0.3 ne créait pas la table de l'objet « site géré » : elle n'était
+	// déclarée que comme objet éditorial, registre que maj_tables() ne consulte
+	// pas. Elle est désormais aussi déclarée en table principale.
+	$maj['1.0.4'] = [
+		['tourdecontrole_creer_tables'],
+	];
+
+	// 1.0.4 échouait encore : la colonne « spip_version » était réécrite en nom
+	// de table par la couche SQL de SPIP, rendant le CREATE TABLE invalide.
+	// Elle s'appelle désormais « version_spip ».
+	$maj['1.0.5'] = [
+		['tourdecontrole_creer_tables'],
+	];
+
+	// 1.0.6 : les mises à jour distantes deviennent des chantiers suivis pas à
+	// pas, et la synchronisation retient si la base du site attend sa migration.
+	$maj['1.0.6'] = [
+		['tourdecontrole_creer_tables'],
+	];
+
+	// 1.0.7 : l'activité du WAF des sites est retenue jour par jour, pour en
+	// lire la tendance — et pour la garder au-delà des quatre-vingt-dix jours
+	// que le WAF conserve lui-même.
+	$maj['1.0.7'] = [
+		['tourdecontrole_creer_tables'],
+	];
+
+	// 1.0.8 : un site gardé par un htpasswd renvoie un 401 avant que PHP ne
+	// s'exécute — la signature du protocole n'y peut rien, le code qui la
+	// vérifie n'est jamais atteint. D'où deux colonnes pour les identifiants
+	// HTTP du serveur.
+	$maj['1.0.8'] = [
+		['tourdecontrole_creer_tables'],
+	];
+
+	// 1.0.9 : les abonnements Web Push de l'espace privé. Une table de plus,
+	// sans reprise de données — un abonnement ne se devine pas, il se redemande
+	// au navigateur.
+	$maj['1.0.9'] = [
+		['tourdecontrole_creer_tables'],
+	];
+
+	// 1.0.10 : la tour confronte son propre catalogue à celui de chaque site.
+	// Deux colonnes de plus sur l'inventaire des plugins, sans reprise de
+	// données : la prochaine synchronisation les remplit.
+	$maj['1.0.10'] = [
+		['tourdecontrole_creer_tables'],
+	];
+
+	// 1.0.11 : l'état du core prend quatre valeurs — à jour, en retard, bloqué
+	// par le PHP du site, inconnu — là où `core_maj` n'en portait que deux.
+	// Quatre colonnes de plus sur les sites, remplies à la synchronisation
+	// suivante ; d'ici là elles valent « inconnu », ce qui est exact.
+	$maj['1.0.11'] = [
+		['tourdecontrole_creer_tables'],
+	];
+
+	include_spip('base/upgrade');
+	maj_plugin($nom_meta_base_version, $version_cible, $maj);
+}
+
+/**
+ * Suppression complète des données du plugin.
+ *
+ * @param string $nom_meta_base_version
+ * @return void
+ */
+function tourdecontrole_vider_tables($nom_meta_base_version) {
+	include_spip('inc/meta');
+
+	sql_drop_table('spip_dashboard_sites');
+	sql_drop_table('spip_dashboard_plugins');
+	sql_drop_table('spip_dashboard_journal');
+	sql_drop_table('spip_dashboard_chantiers');
+	sql_drop_table('spip_dashboard_sauvegardes');
+	sql_drop_table('spip_dashboard_waf_jours');
+	sql_drop_table('spip_dashboard_push');
+
+	effacer_meta('dashboard');
+	effacer_meta($nom_meta_base_version);
+}
+
+/**
+ * Crée les tables du plugin, et vérifie qu'elles existent réellement ensuite.
+ *
+ * `maj_tables()` ne traite que les tables présentes dans le registre de SPIP au
+ * moment de l'appel ; si le plugin vient d'être activé et que ce registre n'est
+ * pas encore peuplé, elle ne fait rien — sans le signaler. On repasse donc
+ * derrière avec les descripteurs du plugin lui-même, qui ne dépendent de rien.
+ *
+ * @return array {restantes: array, erreurs: array}
+ */
+function tourdecontrole_creer_tables() {
+	include_spip('base/create');
+	include_spip('base/tourdecontrole_tables');
+
+	$descriptions = tourdecontrole_descriptions_tables();
+	$noms = array_keys($descriptions);
+
+	if (function_exists('maj_tables')) {
+		maj_tables($noms);
+	}
+
+	$manquantes = dashboard_tables_manquantes($noms);
+	$erreurs = [];
+	foreach ($manquantes as $nom) {
+		$erreur = dashboard_creer_table($nom, $descriptions[$nom]);
+		if ($erreur !== '') {
+			$erreurs[$nom] = $erreur;
+		}
+	}
+
+	$restantes = dashboard_tables_manquantes($noms);
+
+	// Créer des tables sans réinitialiser les caches laisse le compilateur sur
+	// une vue périmée du schéma, et les boucles échouent sur une table qui
+	// existe pourtant.
+	dashboard_vider_caches();
+
+	if ($restantes) {
+		spip_log('installation : tables toujours absentes après création : ' . implode(', ', $restantes), 'dashboard');
+		foreach ($erreurs as $nom => $erreur) {
+			spip_log("installation : $nom refusée par le serveur SQL : $erreur", 'dashboard');
+		}
+	} elseif ($manquantes) {
+		spip_log('installation : tables créées directement depuis les descripteurs : ' . implode(', ', $manquantes), 'dashboard');
+	}
+
+	return ['restantes' => $restantes, 'erreurs' => $erreurs];
+}
+
+/**
+ * Crée une table à partir de son descripteur.
+ *
+ * @param string $nom
+ * @param array $description
+ * @return string Message d'erreur du serveur SQL, vide si tout s'est bien passé
+ */
+function dashboard_creer_table($nom, $description) {
+	if (!function_exists('sql_create')) {
+		return 'sql_create() indisponible';
+	}
+	if (empty($description['field'])) {
+		return 'descripteur sans colonnes';
+	}
+
+	sql_create(
+		$nom,
+		$description['field'],
+		$description['key'] ?? [],
+		dashboard_table_autoincrement($description),
+		false,
+		'',
+		'continue'
+	);
+
+	// Sans cette remontée, un refus du serveur (droits, type de colonne) reste
+	// parfaitement invisible et l'installation semble avoir réussi.
+	if (function_exists('sql_error')) {
+		$erreur = sql_error();
+		if ($erreur) {
+			return (string) $erreur;
+		}
+	}
+
+	return '';
+}
+
+/**
+ * La clef primaire de cette table est-elle un identifiant auto-incrémenté ?
+ *
+ * @param array $description
+ * @return bool
+ */
+function dashboard_table_autoincrement($description) {
+	$primaire = $description['key']['PRIMARY KEY'] ?? '';
+
+	// Une clef composite ou textuelle ne s'auto-incrémente pas.
+	return (strpos($primaire, ',') === false) && (strncmp($primaire, 'id_', 3) === 0);
+}
+
+/**
+ * Réinitialise ce que SPIP a mémorisé du schéma et des squelettes compilés.
+ *
+ * @return void
+ */
+function dashboard_vider_caches() {
+	// Cache des descriptions de tables, consulté par le compilateur.
+	$trouver_table = charger_fonction('trouver_table', 'base', true);
+	if ($trouver_table) {
+		$trouver_table('');
+	}
+
+	// purger_repertoire() vit dans inc/invalideur, pas dans inc/flock.
+	include_spip('inc/invalideur');
+	include_spip('inc/meta');
+	if (function_exists('purger_repertoire') && defined('_DIR_CACHE') && is_dir(_DIR_CACHE)) {
+		purger_repertoire(_DIR_CACHE, ['subdir' => true]);
+	}
+
+	if (function_exists('ecrire_meta')) {
+		ecrire_meta('derniere_modif', (string) time());
+	}
+}
+
+/**
+ * Parmi ces tables, lesquelles n'existent pas en base ?
+ *
+ * @param array $noms
+ * @return array
+ */
+function dashboard_tables_manquantes($noms) {
+	$existantes = sql_alltable('%');
+	$existantes = is_array($existantes) ? array_flip($existantes) : [];
+
+	$manquantes = [];
+	foreach ($noms as $nom) {
+		if (!isset($existantes[$nom])) {
+			$manquantes[] = $nom;
+		}
+	}
+
+	return $manquantes;
+}
+
+/**
+ * Configuration par défaut.
+ *
+ * @return void
+ */
+function tourdecontrole_initialiser_configuration() {
+	include_spip('inc/config');
+
+	$config = lire_config('dashboard', []);
+	if (!is_array($config)) {
+		$config = [];
+	}
+
+	$defaut = [
+		'timeout'              => 30,
+		'timeout_long'         => 300,
+		'sync_auto'            => 'on',
+		'sync_frequence'       => 6,
+		'url_archives_spip'    => 'https://files.spip.net/spip/archives/',
+		'url_spip_loader'      => 'https://get.spip.net/spip_loader.php',
+		'fraicheur_depots'     => 86400,
+		'version_spip_cible'   => '',
+		'confirmer_core_maj'   => 'on',
+		'retention_sauvegardes' => 30,
+	];
+
+	ecrire_config('dashboard', array_merge($defaut, $config));
+}
