@@ -757,6 +757,28 @@ foreach ($plugins as $plugin) {
 			premiere_occurrence($imbrique, $source)
 		);
 
+		// Les accolades d'un filtre ne supportent pas celles d'une expression
+		// régulière. `|match{^[0-9a-f]{16}$}` se lit « filtre `match` avec
+		// l'argument `^[0-9a-f]{16` », puis « filtre `$` » — d'où un
+		// « Filtre $ non défini » sur une page qui par ailleurs fonctionne, et qui
+		// ne désigne rien de ce qu'on cherche.
+		//
+		// Le motif ne vise que le quantificateur, `{n}` ou `{n,m}`, imbriqué dans
+		// l'argument d'un filtre. Un contrôle plus large accuse sept écritures
+		// saines du dépôt — `|_T{#ARRAY{…}}`, `|in_any{#GET{…}}`,
+		// `|lien_ou_expose{…,#GET{…}}` —, où les accolades intérieures sont
+		// celles d'une balise et non d'une expression régulière.
+		//
+		// La règle qui suit : une expression régulière ne se met pas dans un
+		// squelette, elle se met dans une fonction, qui devient alors le seul
+		// lecteur de sa propre règle.
+		$quantificateur = '/\|[a-zA-Z_][a-zA-Z0-9_]*\{[^{}]*\{[0-9]+(,[0-9]*)?\}/';
+		verifier(
+			"$affiche : pas de quantificateur d'expression régulière dans un filtre",
+			!preg_match($quantificateur, $source),
+			premiere_occurrence($quantificateur, $source)
+		);
+
 		// SPIP compile les balises jusque dans les commentaires : une syntaxe
 		// de balise écrite là pour l'explication est évaluée pour de bon, et
 		// une balise invalide emporte silencieusement le bloc entier. Les

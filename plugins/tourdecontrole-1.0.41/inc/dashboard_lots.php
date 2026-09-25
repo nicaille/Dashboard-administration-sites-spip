@@ -130,6 +130,22 @@ function dashboard_lot_valider($choix, $connus, $operables) {
 }
 
 /**
+ * Ce jeton a-t-il la forme d'un lot ?
+ *
+ * Un seul lecteur de cette règle, et il est en PHP. La tentation était de la
+ * poser dans le squelette avec `|match` : impossible, et silencieusement — les
+ * accolades d'un quantificateur ferment l'argument du filtre, et ce qui suit est
+ * pris pour un nom de filtre. « Filtre `$` non défini », sur une page qui par
+ * ailleurs fonctionne.
+ *
+ * @param string $jeton
+ * @return bool
+ */
+function dashboard_lot_jeton_valide($jeton) {
+	return (bool) preg_match('/^[0-9a-f]{16}$/', trim((string) $jeton));
+}
+
+/**
  * Un jeton de lot.
  *
  * Aléatoire, et non une séquence : il voyage dans une adresse, et un identifiant
@@ -255,7 +271,7 @@ function dashboard_lot_chantiers($lot) {
 	include_spip('inc/autoriser');
 
 	$lot = trim((string) $lot);
-	if (!preg_match('/^[0-9a-f]{16}$/', $lot)) {
+	if (!dashboard_lot_jeton_valide($lot)) {
 		return [];
 	}
 

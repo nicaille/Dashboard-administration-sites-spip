@@ -36,7 +36,7 @@
 
 <BOUCLE_installe(CONDITION){si #VAL|dashboard_tables_presentes}>
 
-#SET{lot,#ENV{lot}|match{^[0-9a-f]{16}$}}
+#SET{lot,#ENV{lot}|dashboard_lot_jeton_lu}
 
 [(#REM)
 	ÉTAT DEUX : un lot est en cours ou achevé.

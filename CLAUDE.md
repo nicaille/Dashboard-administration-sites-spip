@@ -729,6 +729,22 @@ le rendu, charge utile à l'appui.
    pages visitées. Aucun faux positif possible, et le contrôle couvre les
    pages à venir sans qu'on y pense.
 
+7. **Les accolades d'un filtre ne supportent pas celles d'une expression
+   régulière.** `|match{^[0-9a-f]{16}$}` se lit « filtre `match`, argument
+   `^[0-9a-f]{16` », puis « filtre `$` » — d'où un « Filtre $ non défini » qui ne
+   désigne rien de ce qu'on cherche, sur une page dont tout le reste fonctionne.
+
+   La règle qui en découle vaut au-delà du cas : **une expression régulière ne se
+   met pas dans un squelette, elle se met dans une fonction.** Celle-ci devient
+   alors le seul lecteur de sa propre règle, ce qui est de toute façon ce qu'on
+   veut — ici `dashboard_lot_jeton_valide()`, appelée par le filtre du squelette et
+   par la lecture du lot.
+
+   Le contrôle statique ne vise que le quantificateur, `{n}` ou `{n,m}`, imbriqué
+   dans l'argument d'un filtre. Plus large, il accuse sept écritures saines du
+   dépôt — `|_T{#ARRAY{…}}`, `|in_any{#GET{…}}`, `|lien_ou_expose{…,#GET{…}}` —
+   où les accolades intérieures sont celles d'une balise.
+
 `tests/test_structure.php` vérifie les cinq premiers — le quatrième en refusant
 toute valeur d'attribut qui s'ouvre sur une parenthèse littérale, le cinquième
 tout `<script src>` rangé dans une branche « sinon ». Il refuse aussi tout

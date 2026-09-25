@@ -1638,3 +1638,21 @@ function dashboard_lot_ids($lot) {
 
 	return $ids;
 }
+
+/**
+ * Le jeton de lot d'une adresse, ou la chaîne vide s'il n'en a pas la forme.
+ *
+ * Rendu en filtre plutôt que contrôlé dans le squelette : la règle est une
+ * expression régulière à quantificateur, et les accolades d'un quantificateur
+ * ferment l'argument d'un filtre SPIP. `|match{^[0-9a-f]{16}$}` produisait un
+ * « Filtre $ non défini » sur une page qui par ailleurs fonctionnait.
+ *
+ * @filtre
+ * @param string $jeton
+ * @return string
+ */
+function dashboard_lot_jeton_lu($jeton) {
+	include_spip('inc/dashboard_lots');
+
+	return dashboard_lot_jeton_valide($jeton) ? trim((string) $jeton) : '';
+}
