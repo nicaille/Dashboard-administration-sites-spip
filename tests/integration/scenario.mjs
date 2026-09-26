@@ -2689,7 +2689,13 @@ dit('le retour à la vue d’ensemble est proposé',
 
 const finLot = JSON.parse(sql(
 	`SELECT statut, message FROM spip_dashboard_chantiers WHERE lot = '${lot}'`))[0] || {};
-dit('le chantier du lot est terminé', finLot.statut === 'fini', JSON.stringify(finLot));
+/* Les statuts terminaux du moteur sont « ok » et « erreur ». J'avais écrit
+   « fini » ici comme dans le code, et les deux erreurs s'annulaient : le contrôle
+   passait au vert sur un défaut réel. La liste est celle de
+   `dashboard_chantier_fini()`, à qui le vocabulaire appartient. */
+dit('le chantier du lot est terminé', ['ok', 'erreur'].includes(finLot.statut),
+	JSON.stringify(finLot));
+dit('et il est terminé sans erreur', finLot.statut === 'ok', JSON.stringify(finLot));
 
 /* Le verdict se lit sur l'inventaire : plus de retard sur ce plugin. */
 const inventaireApres = JSON.parse(sql(
@@ -2710,7 +2716,10 @@ dit('un jeton mal formé est ignoré',
 /* Le fil d'Ariane, comme pour le journal : sans squelette à nous, SPIP fabrique
    un lien de remontée vers une page qui n'existe pas. */
 await aller(page, '/ecrire/?exec=dashboard_plugins');
-const arianePlugins = await page.locator('.hierarchie, #hierarchie').first().innerText().catch(() => '');
+// `#chemin` : c'est là que SPIP rend son fil d'Ariane. Le sélecteur que j'avais
+// écrit ne désignait rien, et le contrôle échouait sur un squelette correct.
+const arianePlugins = await page.locator('.chemin, #chemin, nav.chemin').first()
+	.innerText().catch(() => '');
 dit('le fil d’Ariane remonte au parc', arianePlugins.includes('Parc de sites SPIP'),
 	arianePlugins.replace(/\s+/g, ' '));
 
