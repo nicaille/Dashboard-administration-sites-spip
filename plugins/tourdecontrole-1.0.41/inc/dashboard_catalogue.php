@@ -344,11 +344,28 @@ function dashboard_catalogue_racines_tour() {
  * « sans avis », ce qui serait un mensonge par omission. La vue d'ensemble le
  * dit alors en clair, avec l'adresse à déclarer.
  *
+ * Elle répondait par `(bool) dashboard_catalogue_tour()`, c'est-à-dire en
+ * **montant tout le catalogue en mémoire pour en tirer un oui ou un non**. Une
+ * tour qui déclare `plugins.spip.net` a des dizaines de milliers de paquets :
+ * la vue d'ensemble les chargeait tous, à chaque affichage, et elle est la
+ * seule page à appeler cette fonction. Compter coûte une requête et rien
+ * d'autre.
+ *
+ * Le décompte reprend les deux conditions du montage — un dépôt, et un préfixe
+ * non vide — pour que les deux réponses ne puissent pas diverger.
+ *
  * @filtre
  * @return bool
  */
 function dashboard_catalogue_present($rien = '') {
-	return (bool) dashboard_catalogue_tour();
+	if (!dashboard_catalogue_table_existe('spip_paquets')) {
+		return false;
+	}
+
+	return (bool) sql_countsel('spip_paquets', [
+		'id_depot > 0',
+		'prefixe != ' . sql_quote(''),
+	]);
 }
 
 /**
