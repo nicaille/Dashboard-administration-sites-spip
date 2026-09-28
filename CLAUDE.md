@@ -1293,6 +1293,21 @@ et qui ne concerne que le site public : SPIP pose `_DIRECT_CRON_FORCE` pour un
 robot, et `ecrire/public.php` appelle `cron()` en fin de requête. C'est le budget
 qui protège ce cas-là.
 
+Ce chemin-là, la tour en production se l'ouvrait à toutes les visites : son
+`mes_options.php` posait `_DIRECT_CRON_FORCE` — le remède documenté par SPIP pour
+un site derrière `htpasswd` **sans** tâche planifiée, où le déclenchement par les
+pages se fait refuser par le 401. Une fois `outils/cron.php` en place, ce « faute
+de mieux » devient une charge : chaque requête publique exécute la file dans son
+propre processus. Mesuré, un travail échu en attente : **3,39 s** de visite et la
+date du génie qui bouge, contre **0,19 s** et rien sans la constante. La retirer
+ne casse rien — `outils/cron.php` la pose lui-même sous garde.
+
+Et la limite, pour ne pas lui attribuer plus qu'elle ne fait : **l'espace privé
+n'appelle jamais `cron()` en fin de requête**. Il n'existe que deux appels de
+`cron(` dans une installation complète, plugins compris — `ecrire/public.php` et
+`action_cron()`. Une page privée qui traîne ne s'explique donc pas par cette
+constante, mais par le processus séparé que `queue_affichage_cron()` lance.
+
 ## Le serveur intégré de PHP n'est pas exempt d'opcache
 
 `php -S` tourne sous le SAPI **`cli-server`**, pas `cli` : c'est donc
