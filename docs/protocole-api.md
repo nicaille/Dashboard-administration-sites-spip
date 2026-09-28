@@ -369,6 +369,18 @@ jamais servi une fois. Il reste facultatif pour qu'un miroir privé sans annuair
 demeure utilisable ; le journal du parc dit laquelle des deux situations s'est
 produite.
 
+### Un lot de mises à jour, côté tour
+
+Aucune opération nouvelle du côté de l'agent : un lot est une **suite d'appels
+`plugin_maj` déjà existants**, un par couple site-plugin, ordonnancés par la tour.
+L'agent ne sait rien du lot, et c'est voulu — il n'a pas à connaître l'état du
+parc pour faire son travail.
+
+Ce que la tour ajoute est un chantier par site, de l'opération
+`plugin_maj_choix`, dont la file des préfixes est **reçue** et non calculée. Les
+étapes sont celles de `plugin_maj_tous` : relire les dépôts, sauvegarder,
+inventorier, mettre à jour un plugin après l'autre, inventorier de nouveau.
+
 ### `base_maj_preflight`
 
 Sans argument. Retourne l'état du schéma : `version` (la branche de SPIP que le

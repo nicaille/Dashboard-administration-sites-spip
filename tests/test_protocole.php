@@ -1966,6 +1966,96 @@ verifier('une valeur inattendue ne la rallume pas', dashboard_sync_auto() === fa
 $GLOBALS['dashboard_config_test'] = [];
 
 
+echo "\n== Une tâche de fond a un budget, pas seulement un lot ==\n";
+
+/* Un plafond en nombre de sites ne protège pas du temps. Dix sites dont chacun
+   peut prendre trente secondes font cinq minutes dans **un seul travail**, et
+   SPIP ne borne que le nombre de travaux lancés par passage, jamais la durée de
+   l'un d'eux une fois parti.
+
+   Ça ne serait qu'une lenteur si la tâche tournait à part. Mais
+   `queue_affichage_cron()` appelle `spip.php?action=cron` à la fin de chaque
+   page de l'espace privé dès que la file est échue, et cet appel pose
+   `_DIRECT_CRON_FORCE` : les génies s'exécutent alors dans un processus web. Sur
+   un hébergement qui compte ses processus PHP, une synchronisation de parc prend
+   la place des pages que le webmestre essaie d'afficher.
+
+   C'est la leçon déjà écrite pour l'inventaire des caches et pour la sauvegarde
+   découpée, transposée à la file de travaux. */
+
+$GLOBALS['dashboard_config_test'] = [];
+verifier('un budget par défaut, jamais nul', dashboard_sync_budget() === 30);
+
+$GLOBALS['dashboard_config_test'] = ['sync_budget' => 120];
+verifier('le réglage est suivi', dashboard_sync_budget() === 120);
+
+/* Les deux formes de « pas de valeur » ne se confondent pas, et c'est voulu :
+   `dashboard_config()` traite la **chaîne vide** comme une absence et rend le
+   défaut, tandis qu'un **zéro** est une valeur, qu'on relève au minimum plutôt
+   que de la réinterpréter. Un budget nul arrêterait la passe après le premier
+   site indéfiniment, et le parc n'avancerait plus que d'un site par heure sans
+   que rien ne le dise.
+
+   Le premier jet de ce contrôle attendait le défaut dans les deux cas. Il
+   affirmait ce que je croyais du lecteur, pas ce qu'il fait. */
+$GLOBALS['dashboard_config_test'] = ['sync_budget' => ''];
+verifier('un budget vidé retombe sur le défaut', dashboard_sync_budget() === 30);
+
+$GLOBALS['dashboard_config_test'] = ['sync_budget' => 0];
+verifier('un budget nul est relevé au minimum', dashboard_sync_budget() === 5);
+
+$GLOBALS['dashboard_config_test'] = ['sync_budget' => 1];
+verifier('un budget absurde aussi', dashboard_sync_budget() === 5);
+
+/* La période est lue à un seul endroit, que le pipeline déclarant la tâche et
+   le génie décidant du rafraîchissement amont appellent tous deux. Deux défauts
+   écrits à deux endroits finissent toujours par diverger — la bascule de
+   synchronisation l'a déjà montré, quelques lignes plus haut. */
+$GLOBALS['dashboard_config_test'] = [];
+verifier('la période par défaut vaut six heures', dashboard_sync_periode() === 21600);
+
+$GLOBALS['dashboard_config_test'] = ['sync_frequence' => 2];
+verifier('et suit le réglage', dashboard_sync_periode() === 7200);
+
+$GLOBALS['dashboard_config_test'] = ['sync_frequence' => 0];
+verifier('une fréquence nulle ne fait pas une période nulle', dashboard_sync_periode() === 3600);
+
+$GLOBALS['dashboard_config_test'] = [];
+
+
+echo "\n== L'amont se rafraîchit par cycle, pas par passe ==\n";
+
+/* La synchronisation commence par trois rafraîchissements forcés : l'annuaire
+   des versions, l'index des archives, le catalogue SVP de la tour. Tant qu'une
+   passe couvrait tout le parc, les faire à chaque passage allait de soi. Une
+   passe budgétée se replanifie aussitôt pour reprendre le parc où elle l'a
+   laissé — et les refaire alors coûterait trois appels réseau par tranche de
+   sites, pour un amont qui n'a pas bougé entre deux tranches. */
+
+verifier('jamais rafraîchi, on rafraîchit',
+	dashboard_sync_amont_due(0, 3600, 100000) === true);
+
+verifier('rafraîchi à l’instant, on ne recommence pas',
+	dashboard_sync_amont_due(100000, 3600, 100010) === false);
+
+verifier('un cycle écoulé, on recommence',
+	dashboard_sync_amont_due(100000, 3600, 103600) === true);
+
+/* Une date dans le futur est ce que laisse une horloge serveur reculée. S'y
+   fier suspendrait l'amont jusqu'à ce que le temps la rattrape — des heures
+   pendant lesquelles aucune version de SPIP ne serait relevée, sans une ligne
+   de journal. C'est la règle du silence : on ne conclut pas d'une date qu'on ne
+   comprend pas. */
+verifier('une date dans le futur ne suspend pas l’amont',
+	dashboard_sync_amont_due(200000, 3600, 100000) === true);
+
+/* Une période absurde ne doit pas transformer la décision en « toujours oui » :
+   ce serait trois appels réseau par tranche, c'est-à-dire exactement ce que la
+   fonction existe pour éviter. */
+verifier('une période nulle est relevée à une minute',
+	dashboard_sync_amont_due(100000, 0, 100030) === false);
+
+
 echo "\n== Relire un dépôt, et savoir ce qu'on a lu ==\n";
 
 /* SVP ne télécharge pas le catalogue : il appelle `copie_locale($url, 'modif')`,
@@ -2222,6 +2312,254 @@ verifier('429 : refus, mais l’abonnement reste', dashboard_push_verdict(429) =
 verifier('503 : panne du service, donc silence', dashboard_push_verdict(503) === 'silence');
 verifier('500 : panne du service, donc silence', dashboard_push_verdict(500) === 'silence');
 verifier('aucune réponse : silence', dashboard_push_verdict(0) === 'silence');
+
+echo "\n== Lots de mises à jour de plugins ==\n";
+
+require_once chemin_plugin('tourdecontrole') . '/inc/dashboard_lots.php';
+
+/* Ce que le navigateur envoie : des couples `<id>:<PREFIXE>`, et rien de plus.
+   Ni version visée, ni adresse — la version est redéduite au moment d'agir, sur
+   un inventaire tout juste rafraîchi. */
+$lu = dashboard_lot_lire(['3:SAISIES', '3:GIS', '7:SAISIES']);
+verifier('deux sites reconnus', array_keys($lu) === [3, 7], json_encode(array_keys($lu)));
+verifier('les préfixes du site sont groupés et triés',
+	($lu[3] ?? []) === ['GIS', 'SAISIES'], json_encode($lu[3] ?? []));
+
+verifier('le préfixe est normalisé en capitales',
+	(dashboard_lot_lire(['3:saisies'])[3] ?? []) === ['SAISIES']);
+verifier('un souligné dans le préfixe est accepté',
+	(dashboard_lot_lire(['3:PORTE_PLUME'])[3] ?? []) === ['PORTE_PLUME'],
+	json_encode(dashboard_lot_lire(['3:PORTE_PLUME'])));
+verifier('un doublon ne compte qu’une fois',
+	count(dashboard_lot_lire(['3:GIS', '3:GIS'])[3] ?? []) === 1);
+
+/* Tout ce qui vient du navigateur finira dans une requête et dans un message :
+   ce qui n’a pas la forme d’un préfixe de plugin est écarté ici, pas plus loin. */
+foreach (['3:', ':GIS', '3', 'GIS', '0:GIS', '-2:GIS', '3:GI S', '3:GIS;DROP', '3:<svg>'] as $vilain) {
+	verifier('entrée refusée : ' . $vilain, dashboard_lot_lire([$vilain]) === [],
+		json_encode(dashboard_lot_lire([$vilain])));
+}
+verifier('ce qui n’est pas un tableau ne rend rien', dashboard_lot_lire('3:GIS') === []);
+verifier('un tableau vide ne rend rien', dashboard_lot_lire([]) === []);
+
+/* Une borne, et non un plafond arbitraire : chaque site du lot reçoit une
+   sauvegarde complète, et un lot de plusieurs centaines d’entrées tiendrait des
+   heures sans que personne ne puisse le suivre. */
+$enorme = [];
+for ($i = 1; $i <= _DASHBOARD_LOT_MAX + 50; $i++) {
+	$enorme[] = $i . ':GIS';
+}
+verifier('un lot démesuré est borné',
+	count(dashboard_lot_lire($enorme)) === _DASHBOARD_LOT_MAX,
+	count(dashboard_lot_lire($enorme)));
+
+echo "\n== La case désigne, elle n’autorise pas ==\n";
+
+/* La règle des cases à cocher du parc, appliquée au couple site-plugin. Trois
+   raisons d’écarter, et la page n’en propose aucune : le plugin n’est pas en
+   retard sur ce site, il n’y existe pas, ou le site n’est pas opérable. */
+$connus = [3 => ['GIS', 'SAISIES'], 7 => ['SAISIES'], 9 => ['GIS']];
+$operables = [3, 7];
+
+$retenus = dashboard_lot_valider(['3' => ['GIS', 'SAISIES'], '7' => ['SAISIES']], $connus, $operables);
+verifier('une sélection légitime passe entière',
+	$retenus === [3 => ['GIS', 'SAISIES'], 7 => ['SAISIES']], json_encode($retenus));
+
+$forge = dashboard_lot_valider([9 => ['GIS']], $connus, $operables);
+verifier('un site non opérable est écarté, même si le plugin y est en retard',
+	$forge === [], json_encode($forge));
+
+$forge = dashboard_lot_valider([3 => ['GIS', 'INCONNU']], $connus, $operables);
+verifier('un plugin absent de l’inventaire est écarté, les autres passent',
+	$forge === [3 => ['GIS']], json_encode($forge));
+
+$forge = dashboard_lot_valider([3 => ['INCONNU']], $connus, $operables);
+verifier('un site dont plus rien n’est retenu disparaît du lot',
+	$forge === [], json_encode($forge));
+verifier('une sélection vide ne retient rien', dashboard_lot_valider([], $connus, $operables) === []);
+
+/* Le jeton d’un lot : aléatoire, et non une séquence. Il voyage dans une
+   adresse, et un identifiant qui s’incrémente inviterait à essayer le voisin. */
+$jeton = dashboard_lot_jeton();
+verifier('le jeton a la forme attendue', preg_match('/^[0-9a-f]{16}$/', $jeton) === 1, $jeton);
+verifier('deux jetons diffèrent', dashboard_lot_jeton() !== dashboard_lot_jeton());
+
+echo "\n== Le succès se constate, il ne se déduit pas ==\n";
+
+/* Un site qui se tait pendant qu’il se met à jour lui-même est le cas normal,
+   pas une panne. Le verdict se prend donc sur l’inventaire d’après : un plugin
+   est à jour s’il n’y figure plus comme en retard, quoi qu’ait répondu l’appel.
+
+   Ici le chantier a retenu un échec sur GIS, et l’inventaire ne le déclare plus
+   en retard : c’est un succès. L’inverse serait de croire le message plutôt que
+   le site. */
+$chantiers = [[
+	'id_dashboard_chantier' => 11,
+	'id_dashboard_site'     => 3,
+	'statut'                => 'ok',
+	'reste'                 => '',
+	'detail'                => json_encode([
+		'demandes' => ['GIS', 'SAISIES', 'CEXTRAS'],
+		'echecs'   => ['GIS' => 'le site n’a pas répondu'],
+	]),
+]];
+$bilan = dashboard_lot_verdict($chantiers, [3 => ['SAISIES']]);
+verifier('un seul site au bilan', count($bilan) === 1);
+verifier('le plugin encore en retard est le seul échec',
+	array_keys($bilan[0]['rates']) === ['SAISIES'], json_encode($bilan[0]['rates']));
+verifier('celui dont le chantier se plaignait mais qui a bougé compte pour un succès',
+	in_array('GIS', $bilan[0]['reussis'], true), json_encode($bilan[0]['reussis']));
+verifier('celui dont personne n’a parlé et qui a bougé aussi',
+	in_array('CEXTRAS', $bilan[0]['reussis'], true), json_encode($bilan[0]['reussis']));
+
+/* Et le message d’échec du chantier est repris quand il existe : sans lui, la
+   page dirait « échec » sans dire pourquoi. */
+$bilan_msg = dashboard_lot_verdict([[
+	'id_dashboard_chantier' => 12, 'id_dashboard_site' => 3, 'statut' => 'ok', 'reste' => '',
+	'detail' => json_encode(['demandes' => ['GIS'], 'echecs' => ['GIS' => 'verrou SVP posé']]),
+]], [3 => ['GIS']]);
+verifier('le motif de l’échec est repris',
+	($bilan_msg[0]['rates']['GIS'] ?? '') === 'verrou SVP posé',
+	json_encode($bilan_msg[0]['rates']));
+
+/* Un chantier interrompu avant d’avoir écrit son compte rendu : la file porte
+   encore ce qui était demandé, et elle fait l’affaire. */
+$tot = dashboard_lot_verdict([[
+	'id_dashboard_chantier' => 13, 'id_dashboard_site' => 5, 'statut' => 'encours',
+	'reste' => 'GIS,SAISIES', 'detail' => '',
+]], [5 => ['GIS', 'SAISIES']]);
+verifier('la file tient lieu de demande avant tout compte rendu',
+	$tot[0]['demandes'] === ['GIS', 'SAISIES'], json_encode($tot[0]['demandes']));
+verifier('un chantier en cours n’est pas déclaré fini', $tot[0]['fini'] === false);
+
+echo "\n== Achèvement, succès, sites touchés ==\n";
+
+/* Le vocabulaire des statuts appartient au moteur de chantiers, et mes jeux
+   d'essai portaient le même mot faux que le code : « fini » là où il dit « ok ».
+   Ils passaient donc au vert sur un défaut réel — un chantier terminé n'était
+   jamais vu comme tel, et l'écran de suivi ne basculait jamais en résultat.
+
+   Ce contrôle-ci ne recopie pas la liste : il demande au moteur. Si son
+   vocabulaire change, c'est lui qui aura raison. */
+verifier('le statut terminal est celui que le moteur reconnaît',
+	dashboard_chantier_fini(['statut' => 'ok']) && dashboard_chantier_fini(['statut' => 'erreur'])
+	&& !dashboard_chantier_fini(['statut' => 'encours'])
+	&& !dashboard_chantier_fini(['statut' => 'attente']));
+verifier('et « fini » n’en fait pas partie, contrairement à ce que je croyais',
+	!dashboard_chantier_fini(['statut' => 'fini']));
+
+verifier('un lot dont un chantier tourne n’est pas achevé', !dashboard_lot_acheve($tot));
+verifier('un lot dont tout est fini l’est', dashboard_lot_acheve($bilan));
+verifier('un lot vide n’est pas achevé : il n’existe pas', !dashboard_lot_acheve([]));
+
+verifier('un lot avec un échec n’est pas sans échec', !dashboard_lot_sans_echec($bilan));
+$parfait = dashboard_lot_verdict([[
+	'id_dashboard_chantier' => 14, 'id_dashboard_site' => 3, 'statut' => 'ok', 'reste' => '',
+	'detail' => json_encode(['demandes' => ['GIS'], 'echecs' => []]),
+]], []);
+verifier('un lot tout réussi l’est', dashboard_lot_sans_echec($parfait));
+
+/* Seuls les sites qui ont réellement reçu une mise à jour sont à resynchroniser :
+   un site dont rien n’a bougé n’a pas d’inventaire à rafraîchir. */
+verifier('le site touché est retenu', dashboard_lot_sites_touches($parfait) === [3],
+	json_encode(dashboard_lot_sites_touches($parfait)));
+$rien = dashboard_lot_verdict([[
+	'id_dashboard_chantier' => 15, 'id_dashboard_site' => 8, 'statut' => 'ok', 'reste' => '',
+	'detail' => json_encode(['demandes' => ['GIS'], 'echecs' => ['GIS' => 'refus']]),
+]], [8 => ['GIS']]);
+verifier('un site dont rien n’a abouti n’est pas à resynchroniser',
+	dashboard_lot_sites_touches($rien) === [], json_encode(dashboard_lot_sites_touches($rien)));
+
+echo "\n== Le lien d’échec vers le site distant ==\n";
+
+/* `?exec=admin_plugin` existe sur tout SPIP, avec ou sans SVP : c’est de là qu’on
+   voit l’état réel. Pointer la page de SVP tomberait en erreur précisément sur
+   les sites où une mise à jour a le plus de raisons d’avoir échoué. */
+verifier('l’adresse mène à la gestion des plugins',
+	dashboard_lot_url_plugins('https://exemple.org') === 'https://exemple.org/ecrire/?exec=admin_plugin',
+	dashboard_lot_url_plugins('https://exemple.org'));
+verifier('la barre oblique finale ne double pas',
+	dashboard_lot_url_plugins('https://exemple.org/') === 'https://exemple.org/ecrire/?exec=admin_plugin');
+verifier('un sous-répertoire est conservé',
+	dashboard_lot_url_plugins('https://exemple.org/blog') === 'https://exemple.org/blog/ecrire/?exec=admin_plugin');
+verifier('une adresse vide ne rend rien', dashboard_lot_url_plugins('') === '');
+verifier('un schéma exotique ne rend rien', dashboard_lot_url_plugins('javascript:alert(1)') === '');
+
+echo "\n== Une file reçue ne se reconstitue jamais ==\n";
+
+/* Le contrôle qui compte, et il vaut d’être écrit à l’envers : si la garde
+   manquait, deux cases cochées deviendraient autant de mises à jour que le site
+   a de plugins en retard — sur tout le parc, et sans que rien ne le signale,
+   puisque chacune réussirait.
+
+   L’étape est la même pour « tous » et pour « choisis » ; ce qui les sépare est
+   l’opération, seul endroit qui dise d’où la file devait venir. */
+require_once chemin_plugin('tourdecontrole') . '/inc/dashboard_chantiers.php';
+
+verifier('l’opération du choix est connue du moteur',
+	dashboard_chantier_operation_connue('plugin_maj_choix'));
+verifier('elle a les mêmes étapes que « tous »',
+	dashboard_chantier_etapes('plugin_maj_choix') === dashboard_chantier_etapes('plugin_maj_tous'),
+	implode(' → ', dashboard_chantier_etapes('plugin_maj_choix')));
+verifier('et son libellé ne dit pas « tous »',
+	strpos(dashboard_chantier_libelle('plugin_maj_choix'), 'tous') === false,
+	dashboard_chantier_libelle('plugin_maj_choix'));
+
+$epuise = dashboard_chantier_etape_plugins([
+	'id_dashboard_site' => 3, 'operation' => 'plugin_maj_choix', 'reste' => '', 'detail' => '',
+]);
+verifier('file reçue et vide : l’étape s’arrête au lieu de tout prendre',
+	!empty($epuise['ok']) && empty($epuise['reste']), json_encode($epuise));
+verifier('et elle n’a lancé aucune mise à jour',
+	strpos((string) $epuise['message'], 'restant') !== false, (string) $epuise['message']);
+
+echo "\n== Ce que le cron affirme avoir exécuté ==\n";
+
+require_once chemin_plugin('tourdecontrole') . '/inc/dashboard_cron.php';
+
+/* Un génie exécuté replanifie son propre travail : sa date en base a bougé.
+   C'est la seule preuve disponible — `cron()` ne rend rien, et lister les
+   travaux échus ne dirait que ce qui **devait** passer. Le contrôle à écrire
+   est donc celui qui échouerait si l'on se contentait de cette liste. */
+$avant = ['dashboard_sync' => 1000, 'dashboard_chantiers' => 1000];
+
+$bouge = dashboard_cron_bilan_tour($avant, ['dashboard_sync' => 1120, 'dashboard_chantiers' => 1120]);
+verifier('deux génies dont la date a bougé sont dits passés',
+	strpos($bouge, 'génies passés : dashboard_chantiers, dashboard_sync') === 0, $bouge);
+verifier('et rien ne reste échu', strpos($bouge, 'encore échus') === false, $bouge);
+
+/* Le cas qui compte : un génie qui a explosé. La boucle le rattrape et continue,
+   son travail n'est pas repris — et sa date n'a pas bougé. Le dire « passé »
+   serait affirmer le contraire de ce qui s'est produit. */
+$casse = dashboard_cron_bilan_tour($avant, ['dashboard_sync' => 1120, 'dashboard_chantiers' => 1000]);
+verifier('celui dont la date n’a pas bougé n’est pas dit passé',
+	strpos($casse, 'passés : dashboard_sync') !== false
+	&& strpos($casse, 'encore échus : dashboard_chantiers') !== false, $casse);
+
+$aucun = dashboard_cron_bilan_tour($avant, $avant);
+verifier('aucune date bougée : aucun génie passé',
+	strpos($aucun, 'génies passés : aucun') === 0, $aucun);
+verifier('et les deux sont dits encore échus',
+	strpos($aucun, 'encore échus : dashboard_chantiers, dashboard_sync') !== false, $aucun);
+
+/* Un travail non périodique disparaît au lieu d'être replanifié : sa
+   disparition prouve qu'il a tourné. Le confondre avec « pas passé » ferait
+   annoncer un échec sur une tâche parfaitement exécutée. */
+$parti = dashboard_cron_bilan_tour(['maj_une_fois' => 1000], []);
+verifier('un travail disparu a bien tourné',
+	strpos($parti, 'génies passés : maj_une_fois') === 0, $parti);
+
+/* Rien d'échu : il n'y a rien à affirmer, et surtout pas « aucun génie passé »,
+   qui se lirait comme une panne. */
+verifier('aucun travail échu se dit comme tel',
+	dashboard_cron_bilan_tour([], []) === 'aucun travail échu à ce tour');
+verifier('et un après vide n’y change rien',
+	dashboard_cron_bilan_tour([], ['dashboard_sync' => 1120]) === 'aucun travail échu à ce tour');
+
+/* La fonction décide de ce qu'un journal d'exploitation affirme : elle ne doit
+   pas tomber sur une entrée inattendue. */
+verifier('un argument non tableau ne fait pas tomber',
+	dashboard_cron_bilan_tour(null, null) === 'aucun travail échu à ce tour');
 
 echo "\n== Alertes : on n'écrit que s'il y a du nouveau ==\n";
 

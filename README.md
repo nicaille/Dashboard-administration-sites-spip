@@ -88,6 +88,15 @@ les versions de PHP supportées ; l'autre couvre des branches que le premier
 ignore. L'empreinte est transmise à l'agent, qui refuse toute archive qui n'y
 répond pas.
 
+Les mises à jour de plugins se prennent aussi **par lot**, depuis une page qui
+liste tout le parc groupé par site : on coche les couples site-plugin voulus, on
+valide, et chaque site reçoit son chantier — donc sa sauvegarde et son inventaire
+relu. L'écran de résultat dit ce qui est passé et ce qui a échoué, avec un lien
+vers la gestion des plugins du site distant pour ce qui n'a pas abouti. Le succès
+y est **constaté sur l'inventaire d'après**, jamais déduit de ce qu'a répondu
+l'appel : un site qui se tait pendant qu'il se met à jour lui-même est le cas
+normal.
+
 L'état du core a donc quatre valeurs et non deux : à jour, en retard, **bloqué**
 quand le PHP de l'hébergement ne supporte pas la version disponible, et
 **inconnu** quand l'annuaire n'a rien répondu. Les deux derniers étaient comptés

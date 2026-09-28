@@ -704,8 +704,24 @@ le rendu, charge utile à l'appui.
    d'intégration cherchait « Argument manquant » et « erreur_squelette » : il
    cherchait une erreur là où il n'y en a pas.
 
-   **Ce piège-là ne se vérifie pas statiquement**, et l'essayer coûte des
-   faux positifs : un bloc optionnel s'écrit aussi `[texte(#BALISE)texte]`,
+   **Un bloc de remarque est un bloc optionnel**, et la règle vaut donc pour
+   lui. Le nom d'un champ de formulaire à valeurs multiples porte une paire de
+   crochets ; l'écrire dans une remarque pour l'expliquer a fait rendre trente
+   lignes de prose technique en clair, sous le titre de la page, sans lever la
+   moindre erreur. On nomme les crochets, on ne les écrit pas — la même règle
+   que pour les syntaxes de balise, dont celle-ci est le pendant.
+
+   Ce cas-là, lui, **se vérifie statiquement** : les bornes d'un
+   `[(#REM) … ]` écrit sur ses propres lignes sont sûres, là où celles d'un bloc
+   optionnel quelconque ne le sont pas. `tests/test_structure.php` le contrôle,
+   un squelette à la fois. À ne pas confondre avec les **balises** dans une
+   remarque, qui ne posent aucun problème : neuf en vivent dans les squelettes
+   du dépôt, sur des pages qui fonctionnent. La règle « SPIP compile les balises
+   jusque dans les commentaires » vaut pour les commentaires HTML et JavaScript,
+   pas pour les blocs de remarque.
+
+   **Le cas général, lui, ne se vérifie pas statiquement**, et l'essayer coûte
+   des faux positifs : un bloc optionnel s'écrit aussi `[texte(#BALISE)texte]`,
    si bien qu'un crochet suivi d'autre chose qu'une parenthèse peut
    parfaitement en ouvrir un — cinq squelettes sains du dépôt se sont fait
    accuser. Ce qui l'attrape est dans `ouvrir()`, côté parcours : **une
@@ -713,11 +729,87 @@ le rendu, charge utile à l'appui.
    pages visitées. Aucun faux positif possible, et le contrôle couvre les
    pages à venir sans qu'on y pense.
 
+7. **Les accolades d'un filtre ne supportent pas celles d'une expression
+   régulière.** `|match{^[0-9a-f]{16}$}` se lit « filtre `match`, argument
+   `^[0-9a-f]{16` », puis « filtre `$` » — d'où un « Filtre $ non défini » qui ne
+   désigne rien de ce qu'on cherche, sur une page dont tout le reste fonctionne.
+
+   La règle qui en découle vaut au-delà du cas : **une expression régulière ne se
+   met pas dans un squelette, elle se met dans une fonction.** Celle-ci devient
+   alors le seul lecteur de sa propre règle, ce qui est de toute façon ce qu'on
+   veut — ici `dashboard_lot_jeton_valide()`, appelée par le filtre du squelette et
+   par la lecture du lot.
+
+   Le contrôle statique ne vise que le quantificateur, `{n}` ou `{n,m}`, imbriqué
+   dans l'argument d'un filtre. Plus large, il accuse sept écritures saines du
+   dépôt — `|_T{#ARRAY{…}}`, `|in_any{#GET{…}}`, `|lien_ou_expose{…,#GET{…}}` —
+   où les accolades intérieures sont celles d'une balise.
+
 `tests/test_structure.php` vérifie les cinq premiers — le quatrième en refusant
 toute valeur d'attribut qui s'ouvre sur une parenthèse littérale, le cinquième
 tout `<script src>` rangé dans une branche « sinon ». Il refuse aussi tout
 `#ARRAY{…#GET{…}}`, variante du premier. Le sixième appartient au parcours,
 pour la raison dite plus haut.
+
+## Une file reçue ne se reconstitue jamais
+
+`dashboard_chantier_etape_plugins()` sert deux opérations : `plugin_maj_tous`,
+qui **calcule** sa file depuis l'inventaire, et `plugin_maj_choix`, qui la
+**reçoit** — la liste des préfixes cochés sur la page unifiée est posée dans
+`reste` à la création du chantier.
+
+Or la fonction constituait sa file dès qu'elle la trouvait vide. Pour une file
+reçue, vide veut dire **épuisée**, et la retomber sur l'inventaire
+transformerait deux cases cochées en autant de mises à jour que le site a de
+plugins en retard. Sur tout un parc, et sans que rien ne le signale : chacune
+réussirait.
+
+La distinction ne peut pas se lire dans l'état de la file. Elle tient à
+l'opération, seul endroit qui dise d'où la file devait venir — d'où la garde
+explicite, et un contrôle unitaire écrit à l'envers : sans elle, l'étape part
+chercher en base, ce qui, dans le bac à sable des contrôles, la fait tomber tout
+net.
+
+La liste voyage dans `reste` et non dans une colonne à elle, parce qu'**aucune
+des étapes qui précèdent `plugins` ne touche cette colonne** — vérifié fonction
+par fonction avant de s'y fier, pas supposé. `cible` n'aurait pas convenu : un
+`varchar(255)` ne tient pas la liste des plugins d'un site bien fourni.
+
+### Un vocabulaire d'états ne se recopie pas, il se demande
+
+Les statuts terminaux d'un chantier sont **`ok` et `erreur`**, et
+`dashboard_chantier_fini()` est seule à le dire. `dashboard_lot_verdict()` avait
+recopié cette liste en y écrivant « fini », mot qui n'existe nulle part dans le
+moteur. Conséquence : un chantier terminé n'était jamais vu comme tel, l'écran de
+suivi ne basculait jamais en résultat, et le lot avait pourtant abouti — message
+« terminé » en base, plugin à jour sur le site.
+
+Le pire est que **les contrôles unitaires passaient**. Ils portaient le même mot
+faux dans leurs jeux d'essai : j'avais écrit `'statut' => 'fini'` des deux côtés,
+et les deux erreurs s'annulaient. C'est la faute des versions normalisées de SVP
+à l'identique — un contrôle bâti sur la forme qu'on croit bonne n'éprouve que sa
+propre croyance.
+
+D'où deux règles : **s'appuyer sur la fonction du moteur** plutôt que sur une
+copie de sa liste, et, quand un état vient d'ailleurs, écrire un contrôle qui
+**interroge la source** au lieu de réaffirmer ce qu'on en a compris.
+
+### Le succès se constate sur l'inventaire, pas sur la réponse
+
+`dashboard_lot_verdict()` ne croit pas ce qu'a répondu l'appel : un plugin est à
+jour si l'inventaire relu **après** ne le déclare plus en retard. C'est la règle
+du silence poussée jusqu'à l'écran — un site qui se tait pendant qu'il se
+remplace lui-même est le cas normal, et l'étape ne retient déjà pas ce silence
+comme un échec.
+
+Conséquence contre-intuitive, et voulue : un plugin dont le chantier a retenu une
+erreur mais qui est passé à la bonne version compte pour un **succès**. C'est ce
+que le site montre, et c'est lui qui a raison.
+
+Ce qui a été demandé se mémorise donc au premier passage de l'étape, dans son
+compte rendu. Sans cela il n'y aurait plus rien à confronter : `reste` est vide
+au terme, et une liste reconstituée depuis les plugins encore en retard ne
+mentionnerait jamais ceux qui ont réussi.
 
 ## Une case à cocher ne donne aucun droit
 
@@ -736,6 +828,19 @@ Trois écritures doivent donc s'accorder, et rien ne les relie à l'exécution :
 bouton (`data-parc-action="sync"`), la file (`data-parc-file="sync"`) et le
 `case 'sync':` de l'action. Qu'une seule manque et le bouton ne fait rien, sans
 erreur ni message — `tests/test_structure.php` les confronte.
+
+Et la même règle vaut pour un couple site-plugin. La page unifiée des mises à
+jour coche `<id_site>:<PREFIXE>` ; l'action revalide chaque couple contre
+l'inventaire (`maj_disponible`, `distribue`) **et** contre
+`autoriser('operer')`, et écarte le reste sans bruit. Une adresse forgée ne
+donne donc rien, et un inventaire qui a bougé entre l'affichage et le clic le
+dit au lieu d'agir sur du périmé.
+
+Ici l'adresse signée ne peut pas porter la sélection : elle autorise
+« lancer un lot », et le nombre de sous-ensembles cochables est combinatoire.
+C'est donc **le contenu du formulaire** qui désigne, et il est revalidé comme
+une case à cocher l'est. Le jeton du lot qui suit obéit à la même règle : il
+retrouve l'écran de suivi, et chaque site y repasse par `autoriser()`.
 
 Le contrat de réponse est le même pour les quatre opérations : tant que
 `termine` est faux, le pilote rappelle **la même adresse**. C'est ainsi qu'une
@@ -1104,6 +1209,104 @@ Deux choses apprises en l'éprouvant :
 
 La mesure, sur un SPIP réel, est ce qui tranche : vingt tours forcés, vingt
 passages du génie ; sans l'option, deux tours et aucun passage.
+
+### Une tâche de fond prend la place d'une page
+
+`?exec=dashboard` a rendu une 500 après une longue attente, sur une tour en
+production, un matin — et s'est remise à fonctionner seule avant qu'on ait
+touché à quoi que ce soit. Un défaut de code ne guérit pas tout seul : c'est
+une contention, pas une faute de calcul.
+
+La sonde `outils/diagnostic-parc.php` a chronométré la page : **tous ses
+calculs à 0,00 s, 6 Mo au plus haut sur 512 autorisés**, 767 paquets au
+catalogue, douze sites. Rien, dans ce que la page fait, ne prend les 165
+secondes que l'hébergeur accorde. Mesure prise après le rétablissement, donc :
+elle dit que la page est saine, elle ne dit rien de l'incident. **Un état sain
+mesuré après coup n'innocente rien** — c'est la règle du silence appliquée à
+une mesure.
+
+Ce qui reste est ce qui tourne *à côté* de la page :
+
+- `queue_affichage_cron()` déclenche `spip.php?action=cron` à la fin de chaque
+  page de l'espace privé dès que la file est échue — une fois par socket
+  pendant la génération, une fois par XHR dans le navigateur ;
+- cet appel pose `_DIRECT_CRON_FORCE` et **exécute donc les génies dans un
+  processus web** ;
+- SPIP borne le nombre de travaux lancés par passage
+  (`_JQ_MAX_JOBS_TIME_TO_EXECUTE`), **jamais la durée d'un travail une fois
+  parti**.
+
+Or `genie_dashboard_sync_dist()` interrogeait jusqu'à dix sites en HTTP
+d'affilée, chacun avec trente secondes de patience : plusieurs minutes dans un
+seul travail. Sur un hébergement qui compte ses processus PHP, ouvrir le
+tableau de bord déclenchait la synchronisation qui empêchait de le rouvrir.
+
+D'où un **budget de temps** (`dashboard_sync_budget()`, trente secondes par
+défaut) en plus du lot, et un retour **négatif** quand il est épuisé : SPIP
+replanifie alors le travail aussitôt, en baissant sa priorité d'un cran. C'est
+la leçon déjà écrite pour l'inventaire des caches et pour la sauvegarde
+découpée, transposée à la file de travaux — *un plafond en nombre ne protège
+pas du temps*.
+
+Trois choses qu'on n'invente pas en relisant :
+
+- **le budget se regarde avant chaque site, jamais avant le premier.** Un
+  budget plus court qu'une synchronisation ferait se replanifier la tâche sans
+  fin sans que le parc avance d'un pas. Dépasser le budget de la durée d'un
+  site est le prix à payer ; entamer un site sans budget ne l'est pas ;
+- **l'amont se rafraîchit par cycle, pas par passe.** Les trois
+  rafraîchissements forcés du début — annuaire des versions, index d'archives,
+  catalogue SVP de la tour — allaient de soi tant qu'une passe couvrait tout le
+  parc. Une passe budgétée se replanifie aussitôt : les refaire coûterait trois
+  appels réseau par tranche de sites, pour un amont qui n'a pas bougé
+  (`dashboard_sync_amont_due()`, pure) ;
+- **la durée et le SAPI vont au journal**, pas seulement le décompte. Le jour
+  où une page dépassera de nouveau ce que l'hébergeur accorde, c'est cette
+  ligne qui dira si une synchronisation occupait un processus web au même
+  moment. Un décompte seul ne l'aurait jamais dit — et c'est précisément ce qui
+  a manqué le matin de l'incident.
+
+Et un rappel que ce chantier a fait payer une seconde fois : **un contrôle
+unitaire affirme ce qu'on croit du code tant qu'on ne l'a pas mesuré.** Le
+premier jet attendait le défaut pour un budget réglé à zéro ; `dashboard_config()`
+ne traite comme une absence que la **chaîne vide**, jamais un zéro, qui est une
+valeur. Les deux formes sont désormais éprouvées séparément.
+
+Le budget borne les dégâts ; il ne supprime pas le déclenchement. Un cron
+système en ligne de commande **ne remplace pas** le cron des pages, il s'y
+ajoute — et entre deux passages horaires, la file est échue presque tout le
+temps. Deux constantes l'éteignent sans toucher à l'exécution de la file :
+`_HTML_BG_CRON_FORCE` (pas d'ouverture de socket pendant la génération) et
+`_HTML_BG_CRON_INHIB` (pas de XHR dans le navigateur). À poser dans le
+`config/mes_options.php` du site, **jamais dans le plugin** : sans cron réel,
+elles arrêteraient la tour sans rien dire.
+
+Et **`_DEBUG_BLOCK_QUEUE` n'est pas ce levier**, malgré son nom : elle coupe
+`queue_schedule()`, donc `inc_genie_dist()`, donc `cron()` — le cron en ligne de
+commande s'arrêterait avec le reste. Trouvé en lisant la fonction plutôt qu'en
+se fiant au nom, à une ligne de la recommander.
+
+Mesuré des deux côtés sur un SPIP 4.4 réel : sans les constantes,
+`queue_affichage_cron()` rend 272 octets ; avec elles, zéro — et `outils/cron.php`
+continue de faire passer ses génies. Reste un chemin qu'elles ne couvrent pas,
+et qui ne concerne que le site public : SPIP pose `_DIRECT_CRON_FORCE` pour un
+robot, et `ecrire/public.php` appelle `cron()` en fin de requête. C'est le budget
+qui protège ce cas-là.
+
+Ce chemin-là, la tour en production se l'ouvrait à toutes les visites : son
+`mes_options.php` posait `_DIRECT_CRON_FORCE` — le remède documenté par SPIP pour
+un site derrière `htpasswd` **sans** tâche planifiée, où le déclenchement par les
+pages se fait refuser par le 401. Une fois `outils/cron.php` en place, ce « faute
+de mieux » devient une charge : chaque requête publique exécute la file dans son
+propre processus. Mesuré, un travail échu en attente : **3,39 s** de visite et la
+date du génie qui bouge, contre **0,19 s** et rien sans la constante. La retirer
+ne casse rien — `outils/cron.php` la pose lui-même sous garde.
+
+Et la limite, pour ne pas lui attribuer plus qu'elle ne fait : **l'espace privé
+n'appelle jamais `cron()` en fin de requête**. Il n'existe que deux appels de
+`cron(` dans une installation complète, plugins compris — `ecrire/public.php` et
+`action_cron()`. Une page privée qui traîne ne s'explique donc pas par cette
+constante, mais par le processus séparé que `queue_affichage_cron()` lance.
 
 ## Le serveur intégré de PHP n'est pas exempt d'opcache
 

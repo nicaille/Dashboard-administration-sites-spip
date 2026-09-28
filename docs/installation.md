@@ -54,6 +54,7 @@ Réglages dans *Configuration → Dashboard : configuration* :
 | Synchroniser automatiquement | activé |
 | Fréquence | 6 h |
 | Sites par passage | 10 (à baisser si le cron est court) |
+| Budget de temps par passage | 30 s (voir *exploitation.md* : c'est lui qui protège, pas le lot) |
 | Annuaire des versions de SPIP | `https://www.spip.net/spip_loader.api` (défaut) |
 | Sauvegarder avant mise à jour du core | activé |
 | Prévenir le webmestre | à décider — éteint par défaut |
