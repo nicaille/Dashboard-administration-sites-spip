@@ -257,6 +257,66 @@ diagnostic_mesurer('dashboard_waf_parc_present()', 'dashboard_waf_parc_present')
 diagnostic_mesurer('dashboard_waf_serie_parc()', 'dashboard_waf_serie_parc');
 
 diagnostic_dire(str_repeat('-', 96));
+
+// La file de travaux de SPIP. Elle n'appartient pas au plugin, mais notre cron
+// la sollicite plus que la moyenne — une tâche déclarée à deux minutes —, et
+// `queue_affichage_cron()` la consulte à la fin de **chaque** page.
+diagnostic_mesurer('file : travaux en attente', function () {
+	$tables = sql_alltable('%');
+	if (!is_array($tables) || !in_array('spip_jobs', $tables, true)) {
+		return 'table absente';
+	}
+
+	return sql_countsel('spip_jobs') . ' travaux, dont '
+		. sql_countsel('spip_jobs', 'date < ' . sql_quote(date('Y-m-d H:i:s'))) . ' échu(s)';
+});
+
+diagnostic_mesurer('file : liens de travaux', function () {
+	$tables = sql_alltable('%');
+	if (!is_array($tables) || !in_array('spip_jobs_liens', $tables, true)) {
+		return 'table absente';
+	}
+
+	return sql_countsel('spip_jobs_liens') . ' lien(s)';
+});
+
+// Le détail de la file, et non son seul décompte. Un travail resté au statut
+// « en cours » est la trace d'un processus tué pendant qu'il l'exécutait :
+// SPIP l'inscrit à ce statut **avant** de lancer le génie et ne le repasse à
+// « planifié » qu'une fois rendu. C'est la seule chose qui, dans cette base,
+// garde le souvenir d'une exécution interrompue.
+diagnostic_mesurer('file : le détail', function () {
+	$tables = sql_alltable('%');
+	if (!is_array($tables) || !in_array('spip_jobs', $tables, true)) {
+		return 'table absente';
+	}
+
+	$lignes = sql_allfetsel(
+		['fonction', 'date', 'status', 'priorite'],
+		'spip_jobs',
+		'',
+		'',
+		'date'
+	);
+
+	$maintenant = time();
+	foreach ((array) $lignes as $ligne) {
+		$quand = strtotime((string) $ligne['date']);
+		$retard = $quand ? $maintenant - $quand : 0;
+
+		diagnostic_dire(sprintf(
+			'    %-28s %-20s %-12s %s',
+			(string) $ligne['fonction'],
+			(string) $ligne['date'],
+			((int) $ligne['status'] === 1) ? 'planifié' : 'EN COURS',
+			$retard > 0 ? 'échu depuis ' . round($retard / 60) . ' min' : 'à venir'
+		));
+	}
+
+	return count((array) $lignes) . ' travaux détaillés ci-dessus';
+});
+
+diagnostic_dire(str_repeat('-', 96));
 diagnostic_dire('Terminé. Mémoire au plus haut : '
 	. round(memory_get_peak_usage(true) / 1048576, 1) . ' Mo');
 
