@@ -1272,6 +1272,27 @@ premier jet attendait le défaut pour un budget réglé à zéro ; `dashboard_co
 ne traite comme une absence que la **chaîne vide**, jamais un zéro, qui est une
 valeur. Les deux formes sont désormais éprouvées séparément.
 
+Le budget borne les dégâts ; il ne supprime pas le déclenchement. Un cron
+système en ligne de commande **ne remplace pas** le cron des pages, il s'y
+ajoute — et entre deux passages horaires, la file est échue presque tout le
+temps. Deux constantes l'éteignent sans toucher à l'exécution de la file :
+`_HTML_BG_CRON_FORCE` (pas d'ouverture de socket pendant la génération) et
+`_HTML_BG_CRON_INHIB` (pas de XHR dans le navigateur). À poser dans le
+`config/mes_options.php` du site, **jamais dans le plugin** : sans cron réel,
+elles arrêteraient la tour sans rien dire.
+
+Et **`_DEBUG_BLOCK_QUEUE` n'est pas ce levier**, malgré son nom : elle coupe
+`queue_schedule()`, donc `inc_genie_dist()`, donc `cron()` — le cron en ligne de
+commande s'arrêterait avec le reste. Trouvé en lisant la fonction plutôt qu'en
+se fiant au nom, à une ligne de la recommander.
+
+Mesuré des deux côtés sur un SPIP 4.4 réel : sans les constantes,
+`queue_affichage_cron()` rend 272 octets ; avec elles, zéro — et `outils/cron.php`
+continue de faire passer ses génies. Reste un chemin qu'elles ne couvrent pas,
+et qui ne concerne que le site public : SPIP pose `_DIRECT_CRON_FORCE` pour un
+robot, et `ecrire/public.php` appelle `cron()` en fin de requête. C'est le budget
+qui protège ce cas-là.
+
 ## Le serveur intégré de PHP n'est pas exempt d'opcache
 
 `php -S` tourne sous le SAPI **`cli-server`**, pas `cli` : c'est donc
