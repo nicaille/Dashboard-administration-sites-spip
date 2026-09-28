@@ -1210,6 +1210,68 @@ Deux choses apprises en l'éprouvant :
 La mesure, sur un SPIP réel, est ce qui tranche : vingt tours forcés, vingt
 passages du génie ; sans l'option, deux tours et aucun passage.
 
+### Une tâche de fond prend la place d'une page
+
+`?exec=dashboard` a rendu une 500 après une longue attente, sur une tour en
+production, un matin — et s'est remise à fonctionner seule avant qu'on ait
+touché à quoi que ce soit. Un défaut de code ne guérit pas tout seul : c'est
+une contention, pas une faute de calcul.
+
+La sonde `outils/diagnostic-parc.php` a chronométré la page : **tous ses
+calculs à 0,00 s, 6 Mo au plus haut sur 512 autorisés**, 767 paquets au
+catalogue, douze sites. Rien, dans ce que la page fait, ne prend les 165
+secondes que l'hébergeur accorde. Mesure prise après le rétablissement, donc :
+elle dit que la page est saine, elle ne dit rien de l'incident. **Un état sain
+mesuré après coup n'innocente rien** — c'est la règle du silence appliquée à
+une mesure.
+
+Ce qui reste est ce qui tourne *à côté* de la page :
+
+- `queue_affichage_cron()` déclenche `spip.php?action=cron` à la fin de chaque
+  page de l'espace privé dès que la file est échue — une fois par socket
+  pendant la génération, une fois par XHR dans le navigateur ;
+- cet appel pose `_DIRECT_CRON_FORCE` et **exécute donc les génies dans un
+  processus web** ;
+- SPIP borne le nombre de travaux lancés par passage
+  (`_JQ_MAX_JOBS_TIME_TO_EXECUTE`), **jamais la durée d'un travail une fois
+  parti**.
+
+Or `genie_dashboard_sync_dist()` interrogeait jusqu'à dix sites en HTTP
+d'affilée, chacun avec trente secondes de patience : plusieurs minutes dans un
+seul travail. Sur un hébergement qui compte ses processus PHP, ouvrir le
+tableau de bord déclenchait la synchronisation qui empêchait de le rouvrir.
+
+D'où un **budget de temps** (`dashboard_sync_budget()`, trente secondes par
+défaut) en plus du lot, et un retour **négatif** quand il est épuisé : SPIP
+replanifie alors le travail aussitôt, en baissant sa priorité d'un cran. C'est
+la leçon déjà écrite pour l'inventaire des caches et pour la sauvegarde
+découpée, transposée à la file de travaux — *un plafond en nombre ne protège
+pas du temps*.
+
+Trois choses qu'on n'invente pas en relisant :
+
+- **le budget se regarde avant chaque site, jamais avant le premier.** Un
+  budget plus court qu'une synchronisation ferait se replanifier la tâche sans
+  fin sans que le parc avance d'un pas. Dépasser le budget de la durée d'un
+  site est le prix à payer ; entamer un site sans budget ne l'est pas ;
+- **l'amont se rafraîchit par cycle, pas par passe.** Les trois
+  rafraîchissements forcés du début — annuaire des versions, index d'archives,
+  catalogue SVP de la tour — allaient de soi tant qu'une passe couvrait tout le
+  parc. Une passe budgétée se replanifie aussitôt : les refaire coûterait trois
+  appels réseau par tranche de sites, pour un amont qui n'a pas bougé
+  (`dashboard_sync_amont_due()`, pure) ;
+- **la durée et le SAPI vont au journal**, pas seulement le décompte. Le jour
+  où une page dépassera de nouveau ce que l'hébergeur accorde, c'est cette
+  ligne qui dira si une synchronisation occupait un processus web au même
+  moment. Un décompte seul ne l'aurait jamais dit — et c'est précisément ce qui
+  a manqué le matin de l'incident.
+
+Et un rappel que ce chantier a fait payer une seconde fois : **un contrôle
+unitaire affirme ce qu'on croit du code tant qu'on ne l'a pas mesuré.** Le
+premier jet attendait le défaut pour un budget réglé à zéro ; `dashboard_config()`
+ne traite comme une absence que la **chaîne vide**, jamais un zéro, qui est une
+valeur. Les deux formes sont désormais éprouvées séparément.
+
 ## Le serveur intégré de PHP n'est pas exempt d'opcache
 
 `php -S` tourne sous le SAPI **`cli-server`**, pas `cli` : c'est donc

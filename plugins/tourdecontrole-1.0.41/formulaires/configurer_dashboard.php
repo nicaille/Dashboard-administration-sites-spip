@@ -14,6 +14,9 @@ if (!defined('_ECRIRE_INC_VERSION')) {
  */
 function formulaires_configurer_dashboard_charger_dist() {
 	include_spip('inc/dashboard_client');
+	// `dashboard_sync_budget()` vit ici : le formulaire et le génie doivent lire
+	// le même défaut, et un filtre laissé dans un `inc/` non inclus n'existe pas.
+	include_spip('inc/dashboard_sync');
 	include_spip('inc/dashboard_versions');
 	include_spip('inc/dashboard_alertes');
 	// L'adresse de l'annuaire se lit par `dashboard_url_versions_api()`, qui vit
@@ -29,6 +32,7 @@ function formulaires_configurer_dashboard_charger_dist() {
 		'sync_auto'             => dashboard_sync_auto() ? 'on' : '',
 		'sync_frequence'        => dashboard_config('sync_frequence', 6),
 		'sync_lot'              => dashboard_config('sync_lot', 10),
+		'sync_budget'           => dashboard_sync_budget(),
 		'url_versions_spip'     => dashboard_url_versions_api(),
 		'url_archives_spip'     => dashboard_config('url_archives_spip', 'https://files.spip.net/spip/archives/'),
 		'url_spip_loader'       => dashboard_config('url_spip_loader', _DASHBOARD_LOADER_URL),
@@ -145,6 +149,9 @@ function formulaires_configurer_dashboard_traiter_dist() {
 	$config['timeout_long']          = (int) _request('timeout_long');
 	$config['sync_frequence']        = max(1, (int) _request('sync_frequence'));
 	$config['sync_lot']              = max(1, (int) _request('sync_lot'));
+	// Même borne basse que le lecteur : le formulaire et le génie ne doivent
+	// pas pouvoir se contredire sur ce qu'est un budget acceptable.
+	$config['sync_budget']           = max(5, (int) _request('sync_budget'));
 	$config['url_versions_spip']     = trim((string) _request('url_versions_spip'));
 	$config['url_archives_spip']     = trim((string) _request('url_archives_spip'));
 	$config['url_spip_loader']       = trim((string) _request('url_spip_loader'));

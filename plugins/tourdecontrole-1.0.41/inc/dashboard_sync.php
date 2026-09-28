@@ -301,8 +301,8 @@ function dashboard_sync_rafraichir_depots($id_dashboard_site) {
  * @param int $limite Nombre maximum de sites traités (0 = tous)
  * @return array{traites: int, erreurs: int}
  */
-function dashboard_synchroniser_tous($limite = 0) {
-	$rapport = ['traites' => 0, 'erreurs' => 0];
+function dashboard_synchroniser_tous($limite = 0, $budget = 0) {
+	$rapport = ['traites' => 0, 'erreurs' => 0, 'restants' => 0, 'budget_epuise' => false];
 
 	$ids = sql_allfetsel(
 		'id_dashboard_site',
@@ -313,7 +313,22 @@ function dashboard_synchroniser_tous($limite = 0) {
 		$limite ? '0,' . (int) $limite : ''
 	);
 
-	foreach ($ids as $ligne) {
+	$depart = microtime(true);
+
+	foreach ($ids as $rang => $ligne) {
+		// Le budget se regarde **avant** chaque site, et jamais avant le
+		// premier. Jamais avant le premier, parce qu'un budget plus court
+		// qu'une synchronisation ferait se replanifier la tâche sans fin sans
+		// que le parc avance d'un pas. Avant chaque site plutôt qu'après,
+		// parce qu'un site peut prendre trente secondes à lui seul : le dépasser
+		// de la durée d'un site est le prix à payer, l'entamer sans budget ne
+		// l'est pas.
+		if ($budget > 0 && $rapport['traites'] > 0 && (microtime(true) - $depart) >= $budget) {
+			$rapport['restants'] = count($ids) - (int) $rang;
+			$rapport['budget_epuise'] = true;
+			break;
+		}
+
 		$resultat = dashboard_synchroniser((int) $ligne['id_dashboard_site']);
 		$rapport['traites']++;
 		if (!$resultat['ok']) {
@@ -322,6 +337,63 @@ function dashboard_synchroniser_tous($limite = 0) {
 	}
 
 	return $rapport;
+}
+
+/**
+ * Combien de secondes une passe de synchronisation a le droit de durer.
+ *
+ * Un plafond en nombre de sites ne protège pas du temps : dix sites dont
+ * chacun peut prendre trente secondes font cinq minutes dans **un seul
+ * travail**, et SPIP ne borne que le nombre de travaux lancés par passage, pas
+ * la durée de l'un d'eux une fois parti. Or ce travail s'exécute très souvent
+ * dans un processus web — `queue_affichage_cron()` appelle
+ * `spip.php?action=cron` à la fin de chaque page dès que la file est échue, et
+ * cet appel pose `_DIRECT_CRON_FORCE`. Sur un hébergement qui compte ses
+ * processus PHP, une tâche de fond de plusieurs minutes prend la place des
+ * pages que le webmestre essaie d'afficher.
+ *
+ * Trente secondes par défaut, pour la même raison que le budget d'une tranche
+ * de sauvegarde : c'est la patience d'un frontal qui décide, pas ce que PHP
+ * tolère. Un seul lecteur, ici, pour que le génie et le formulaire ne puissent
+ * pas diverger.
+ *
+ * @return int
+ */
+function dashboard_sync_budget() {
+	return max(5, (int) dashboard_config('sync_budget', 30));
+}
+
+/**
+ * L'amont est-il à rafraîchir, ou l'a-t-il déjà été pour ce cycle ?
+ *
+ * La synchronisation commence par trois rafraîchissements forcés — l'annuaire
+ * des versions de SPIP, l'index des archives, le catalogue SVP de la tour —,
+ * et ils sont justement forcés : ils ne se contentent pas de ce qu'ils ont.
+ * Tant qu'une passe couvrait tout le parc, les faire à chaque passage allait de
+ * soi. Une passe budgétée se replanifie aussitôt pour reprendre le parc où elle
+ * l'a laissé, et les refaire alors coûterait trois appels réseau par tranche de
+ * sites, pour un amont qui n'a pas bougé entre-temps.
+ *
+ * Pure, donc vérifiable sans base ni horloge. Deux cas qu'on ne devine pas en
+ * la relisant : une date jamais posée rend « oui », et une date **dans le
+ * futur** aussi — c'est ce que laisse une horloge serveur reculée, et s'y fier
+ * suspendrait l'amont jusqu'à ce que le temps la rattrape.
+ *
+ * @param int $derniere Horodatage du dernier rafraîchissement, 0 si jamais
+ * @param int $periode Durée d'un cycle, en secondes
+ * @param int $maintenant
+ * @return bool
+ */
+function dashboard_sync_amont_due($derniere, $periode, $maintenant) {
+	$derniere   = (int) $derniere;
+	$maintenant = (int) $maintenant;
+	$periode    = max(60, (int) $periode);
+
+	if ($derniere <= 0 || $derniere > $maintenant) {
+		return true;
+	}
+
+	return ($maintenant - $derniere) >= $periode;
 }
 
 /**

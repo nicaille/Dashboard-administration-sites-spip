@@ -23,8 +23,7 @@ if (!defined('_ECRIRE_INC_VERSION')) {
 function tourdecontrole_taches_generales_cron($taches) {
 	include_spip('inc/dashboard_client');
 
-	$heures = max(1, (int) dashboard_config('sync_frequence', 6));
-	$taches['dashboard_sync'] = $heures * 3600;
+	$taches['dashboard_sync'] = dashboard_sync_periode();
 	$taches['dashboard_entretien'] = 24 * 3600;
 	// L'alerte passe tous les jours, mais n'écrit que si l'état du parc a
 	// changé depuis le dernier envoi : la période dit à quelle fréquence on

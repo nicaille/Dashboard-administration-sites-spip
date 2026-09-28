@@ -1966,6 +1966,96 @@ verifier('une valeur inattendue ne la rallume pas', dashboard_sync_auto() === fa
 $GLOBALS['dashboard_config_test'] = [];
 
 
+echo "\n== Une tâche de fond a un budget, pas seulement un lot ==\n";
+
+/* Un plafond en nombre de sites ne protège pas du temps. Dix sites dont chacun
+   peut prendre trente secondes font cinq minutes dans **un seul travail**, et
+   SPIP ne borne que le nombre de travaux lancés par passage, jamais la durée de
+   l'un d'eux une fois parti.
+
+   Ça ne serait qu'une lenteur si la tâche tournait à part. Mais
+   `queue_affichage_cron()` appelle `spip.php?action=cron` à la fin de chaque
+   page de l'espace privé dès que la file est échue, et cet appel pose
+   `_DIRECT_CRON_FORCE` : les génies s'exécutent alors dans un processus web. Sur
+   un hébergement qui compte ses processus PHP, une synchronisation de parc prend
+   la place des pages que le webmestre essaie d'afficher.
+
+   C'est la leçon déjà écrite pour l'inventaire des caches et pour la sauvegarde
+   découpée, transposée à la file de travaux. */
+
+$GLOBALS['dashboard_config_test'] = [];
+verifier('un budget par défaut, jamais nul', dashboard_sync_budget() === 30);
+
+$GLOBALS['dashboard_config_test'] = ['sync_budget' => 120];
+verifier('le réglage est suivi', dashboard_sync_budget() === 120);
+
+/* Les deux formes de « pas de valeur » ne se confondent pas, et c'est voulu :
+   `dashboard_config()` traite la **chaîne vide** comme une absence et rend le
+   défaut, tandis qu'un **zéro** est une valeur, qu'on relève au minimum plutôt
+   que de la réinterpréter. Un budget nul arrêterait la passe après le premier
+   site indéfiniment, et le parc n'avancerait plus que d'un site par heure sans
+   que rien ne le dise.
+
+   Le premier jet de ce contrôle attendait le défaut dans les deux cas. Il
+   affirmait ce que je croyais du lecteur, pas ce qu'il fait. */
+$GLOBALS['dashboard_config_test'] = ['sync_budget' => ''];
+verifier('un budget vidé retombe sur le défaut', dashboard_sync_budget() === 30);
+
+$GLOBALS['dashboard_config_test'] = ['sync_budget' => 0];
+verifier('un budget nul est relevé au minimum', dashboard_sync_budget() === 5);
+
+$GLOBALS['dashboard_config_test'] = ['sync_budget' => 1];
+verifier('un budget absurde aussi', dashboard_sync_budget() === 5);
+
+/* La période est lue à un seul endroit, que le pipeline déclarant la tâche et
+   le génie décidant du rafraîchissement amont appellent tous deux. Deux défauts
+   écrits à deux endroits finissent toujours par diverger — la bascule de
+   synchronisation l'a déjà montré, quelques lignes plus haut. */
+$GLOBALS['dashboard_config_test'] = [];
+verifier('la période par défaut vaut six heures', dashboard_sync_periode() === 21600);
+
+$GLOBALS['dashboard_config_test'] = ['sync_frequence' => 2];
+verifier('et suit le réglage', dashboard_sync_periode() === 7200);
+
+$GLOBALS['dashboard_config_test'] = ['sync_frequence' => 0];
+verifier('une fréquence nulle ne fait pas une période nulle', dashboard_sync_periode() === 3600);
+
+$GLOBALS['dashboard_config_test'] = [];
+
+
+echo "\n== L'amont se rafraîchit par cycle, pas par passe ==\n";
+
+/* La synchronisation commence par trois rafraîchissements forcés : l'annuaire
+   des versions, l'index des archives, le catalogue SVP de la tour. Tant qu'une
+   passe couvrait tout le parc, les faire à chaque passage allait de soi. Une
+   passe budgétée se replanifie aussitôt pour reprendre le parc où elle l'a
+   laissé — et les refaire alors coûterait trois appels réseau par tranche de
+   sites, pour un amont qui n'a pas bougé entre deux tranches. */
+
+verifier('jamais rafraîchi, on rafraîchit',
+	dashboard_sync_amont_due(0, 3600, 100000) === true);
+
+verifier('rafraîchi à l’instant, on ne recommence pas',
+	dashboard_sync_amont_due(100000, 3600, 100010) === false);
+
+verifier('un cycle écoulé, on recommence',
+	dashboard_sync_amont_due(100000, 3600, 103600) === true);
+
+/* Une date dans le futur est ce que laisse une horloge serveur reculée. S'y
+   fier suspendrait l'amont jusqu'à ce que le temps la rattrape — des heures
+   pendant lesquelles aucune version de SPIP ne serait relevée, sans une ligne
+   de journal. C'est la règle du silence : on ne conclut pas d'une date qu'on ne
+   comprend pas. */
+verifier('une date dans le futur ne suspend pas l’amont',
+	dashboard_sync_amont_due(200000, 3600, 100000) === true);
+
+/* Une période absurde ne doit pas transformer la décision en « toujours oui » :
+   ce serait trois appels réseau par tranche, c'est-à-dire exactement ce que la
+   fonction existe pour éviter. */
+verifier('une période nulle est relevée à une minute',
+	dashboard_sync_amont_due(100000, 0, 100030) === false);
+
+
 echo "\n== Relire un dépôt, et savoir ce qu'on a lu ==\n";
 
 /* SVP ne télécharge pas le catalogue : il appelle `copie_locale($url, 'modif')`,

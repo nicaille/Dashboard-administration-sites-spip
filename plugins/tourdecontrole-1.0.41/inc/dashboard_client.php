@@ -135,6 +135,20 @@ function dashboard_sync_auto() {
 }
 
 /**
+ * La période de la synchronisation du parc, en secondes.
+ *
+ * Un seul lecteur, pour la même raison que la bascule ci-dessus : le pipeline
+ * qui déclare la tâche et le génie qui décide s'il doit rafraîchir l'amont
+ * parlent de la même période, et deux défauts écrits à deux endroits finissent
+ * toujours par diverger.
+ *
+ * @return int
+ */
+function dashboard_sync_periode() {
+	return max(1, (int) dashboard_config('sync_frequence', 6)) * 3600;
+}
+
+/**
  * Les identifiants d'authentification HTTP d'un site, ou la chaîne vide.
  *
  * Un site gardé par un `htpasswd` renvoie un **401 avant que PHP ne
