@@ -1308,6 +1308,61 @@ n'appelle jamais `cron()` en fin de requête**. Il n'existe que deux appels de
 `action_cron()`. Une page privée qui traîne ne s'explique donc pas par cette
 constante, mais par le processus séparé que `queue_affichage_cron()` lance.
 
+## Une action n'amorce pas ce qu'amorce une page
+
+`spip.php?action=dashagent` ne charge ni `inc/texte` ni `inc/filtres`. Tant
+qu'on se contente de lire la base, personne ne s'en aperçoit. Demander au core
+un travail qu'il n'accomplit d'ordinaire que depuis l'espace privé casse net, et
+le message ne désigne jamais le contexte.
+
+En production, après une mise à jour distante du core : **« Erreur interne :
+Call to undefined function typo() »** sur la fiche d'un site. Le remplacement
+des fichiers avait réussi — l'agent n'atteint le ménage qu'après —, et c'est
+`dashagent_apres_maj()` qui est mort, en demandant à `ecrire_plugin_actifs()` de
+revalider les plugins depuis leurs `paquet.xml`. Un nom de plugin peut y porter
+du balisage multilingue, que le core passe donc aux filtres.
+
+Le symptôme n'apparaît **qu'après une mise à jour du core**, parce que c'est le
+seul moment où cette liste est recalculée au lieu d'être lue dans son cache. Un
+défaut qui dort tant qu'on ne touche à rien.
+
+`dashagent_filtres_textes()` garde sur **la fonction, pas sur le fichier** :
+`typo()` n'a pas toujours vécu au même endroit selon les versions de SPIP, et
+c'est sa présence qui compte. On essaie les deux portes d'entrée et on rend ce
+qu'on a obtenu, plutôt que de le supposer.
+
+### Une besogne d'après-coup n'annule pas le travail fait
+
+Le plus coûteux n'était pas l'appel manquant, c'était ce qu'il emportait. Une
+exception dans le ménage remontait à la tour en « Erreur interne » pour une mise
+à jour **qui avait eu lieu** : le webmestre lit un échec, relance, et le parc
+affiche une version fausse. Chaque étape se range donc dans le compte rendu sous
+son nom (`dashagent_apres_maj_etape()`), échec compris, et la suivante se joue
+quand même. Ce qui n'a pas été fait se lit au lieu de se deviner.
+
+### Un message d'erreur sans son endroit ne sert à rien
+
+`getMessage()` suffit pour une erreur qu'on a levée soi-même, et pas du tout
+pour une erreur du langage : « Call to undefined function typo() » décrit
+parfaitement le symptôme et tait le **où**, qui est la seule chose qui se
+corrige. `dashagent_exception_message()` y joint fichier et ligne, le chemin
+ramené à la racine du site quand on la connaît — plus lisible, et moins bavard
+sur l'arborescence d'en face.
+
+Deux fautes trouvées par ses propres contrôles, pas en relisant : un `ltrim()`
+qui retirait la barre de tête même quand la racine n'avait pas été reconnue — un
+`home/user/…` ni absolu ni relatif, désignant un fichier qui n'existe pas —, et
+une vérification écrite en tautologie, donc toujours vraie.
+
+`tests/test_structure.php` exige que tout fichier appelant `ecrire_plugin_actifs()`
+ou `plugin_installes_meta()` charge d'abord les filtres. Deux pièges à ce
+contrôle, tous deux rencontrés : chercher à l'expression régulière sur le source
+brut **compte les mentions**, si bien qu'expliquer la règle dans une remarque
+suffisait à la croire respectée — d'où `php_sans_commentaires()`, qui passe par
+`token_get_all()` ; et ce tamis sépare les jetons par des espaces, si bien qu'une
+recherche de la forme collée `nom(` ne trouve plus rien. Il s'éprouve par
+mutation : retirer l'appel fait tomber deux vérifications.
+
 ## Le serveur intégré de PHP n'est pas exempt d'opcache
 
 `php -S` tourne sous le SAPI **`cli-server`**, pas `cli` : c'est donc

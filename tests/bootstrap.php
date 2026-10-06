@@ -139,6 +139,10 @@ function chemin_plugin($prefixe) {
 }
 
 require_once chemin_plugin('tourdecontrole_agent') . '/tourdecontrole_agent_options.php';
+/* La décision de ce qu'on remonte d'une exception est pure : elle vit dans son
+   propre fichier justement pour être chargeable ici, `inc/dashagent.php` ne
+   l'étant pas (il ouvre la configuration et le chiffrement). */
+require_once chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_erreurs.php';
 require_once chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_securite.php';
 require_once chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_fs.php';
 require_once chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_infos.php';

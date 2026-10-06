@@ -257,3 +257,42 @@ function dashagent_dir_travail() {
 
 	return $dir;
 }
+
+/**
+ * Charge les filtres de texte du core, si l'appel qui suit en a besoin.
+ *
+ * Une action — `spip.php?action=dashagent` — n'amorce pas la même chose qu'une
+ * page : SPIP n'y charge ni `inc/texte` ni `inc/filtres`. Tout va bien tant
+ * qu'on se contente de lire la base, et casse net dès qu'on demande au core un
+ * travail qu'il n'accomplit d'ordinaire que depuis l'espace privé.
+ *
+ * C'est arrivé en production, après une mise à jour distante du core :
+ * « Erreur interne : Call to undefined function typo() ». Le remplacement des
+ * fichiers avait réussi ; c'est le ménage d'après qui est mort, en demandant à
+ * `ecrire_plugin_actifs()` de revalider les plugins depuis leurs `paquet.xml`
+ * — où un nom peut porter du balisage multilingue, que le core passe donc aux
+ * filtres. Depuis l'espace privé la fonction existe, depuis une action elle
+ * n'existe pas, et rien dans la signature ne le dit.
+ *
+ * Le garde-fou porte sur **la fonction, pas sur le fichier** : `typo()` n'a pas
+ * toujours vécu au même endroit selon les versions de SPIP, et c'est sa
+ * présence qui nous intéresse. On essaie les deux portes d'entrée, et on rend
+ * ce qu'on a obtenu plutôt que de le supposer.
+ *
+ * @return bool Les filtres de texte sont-ils disponibles
+ */
+function dashagent_filtres_textes() {
+	if (function_exists('typo')) {
+		return true;
+	}
+
+	include_spip('inc/texte');
+	if (function_exists('typo')) {
+		return true;
+	}
+
+	include_spip('inc/filtres');
+
+	return function_exists('typo');
+}
+

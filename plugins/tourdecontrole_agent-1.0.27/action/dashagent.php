@@ -22,6 +22,7 @@ if (!defined('_ECRIRE_INC_VERSION')) {
  */
 function action_dashagent_dist() {
 	include_spip('inc/dashagent');
+	include_spip('inc/dashagent_erreurs');
 	include_spip('inc/dashagent_securite');
 
 	$debut   = microtime(true);
@@ -38,8 +39,12 @@ function action_dashagent_dist() {
 	try {
 		$resultat = dashagent_executer($op, $args);
 	} catch (Throwable $e) {
-		dashagent_journaliser($op, 'erreur', $e->getMessage(), null, dashagent_duree($debut));
-		dashagent_erreur('exception', 'Erreur interne : ' . $e->getMessage(), 500);
+		// Le fichier et la ligne, pas seulement le message : une erreur du
+		// langage — « Call to undefined function … » — décrit le symptôme et
+		// tait l'endroit, qui est pourtant la seule chose qui se corrige.
+		$dit = dashagent_exception_message($e, defined('_ROOT_RACINE') ? _ROOT_RACINE : '');
+		dashagent_journaliser($op, 'erreur', $dit, null, dashagent_duree($debut));
+		dashagent_erreur('exception', 'Erreur interne : ' . $dit, 500);
 	}
 
 	$duree = dashagent_duree($debut);

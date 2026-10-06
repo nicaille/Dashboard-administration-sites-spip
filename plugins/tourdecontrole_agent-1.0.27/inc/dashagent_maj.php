@@ -844,24 +844,75 @@ function dashagent_apres_maj($dossiers = []) {
 
 	$rapport['cache_purge'] = dashagent_purger(['pages', 'squelettes']);
 
+	// Revalider les plugins fait relire leurs `paquet.xml` au core, dont les
+	// noms peuvent porter du balisage multilingue : il les passe donc aux
+	// filtres de texte, que l'amorçage d'une action ne charge pas.
+	$rapport['filtres_textes'] = dashagent_filtres_textes();
+
 	// « ajoute » avec une liste vide revalide depuis le disque les plugins déjà
 	// actifs, et rien d'autre : c'est le recalcul sûr après remplacement de
 	// fichiers. Surtout pas « raz », qui prend la liste telle qu'on la fournit
 	// et désactiverait tous les plugins du répertoire plugins/ — dont celui-ci.
 	include_spip('inc/plugin');
-	$rapport['plugins_recalcules'] = false;
-	if (function_exists('ecrire_plugin_actifs')) {
-		ecrire_plugin_actifs($dossiers, false, 'ajoute');
-		$rapport['plugins_recalcules'] = true;
-	}
+	$rapport['plugins_recalcules'] = dashagent_apres_maj_etape(
+		$rapport,
+		'plugins_recalcules',
+		'ecrire_plugin_actifs',
+		static function () use ($dossiers) {
+			ecrire_plugin_actifs($dossiers, false, 'ajoute');
+		}
+	);
 
 	// Le plugin mis à jour peut avoir un schéma de base à faire évoluer.
 	include_spip('plugins/installer');
-	$rapport['installations_rejouees'] = false;
-	if (function_exists('plugin_installes_meta')) {
-		plugin_installes_meta();
-		$rapport['installations_rejouees'] = true;
-	}
+	$rapport['installations_rejouees'] = dashagent_apres_maj_etape(
+		$rapport,
+		'installations_rejouees',
+		'plugin_installes_meta',
+		static function () {
+			plugin_installes_meta();
+		}
+	);
 
 	return $rapport;
+}
+
+/**
+ * Joue une étape du ménage d'après mise à jour, sans qu'elle puisse l'annuler.
+ *
+ * Le remplacement des fichiers a déjà réussi quand on arrive ici. Laisser une
+ * de ces étapes s'échapper ferait remonter « Erreur interne » à la tour pour
+ * une mise à jour **qui a eu lieu** : le webmestre lit un échec, la relance, et
+ * le parc affiche une version fausse. C'est arrivé en production sur un
+ * `Call to undefined function typo()`.
+ *
+ * On range donc chaque échec dans le compte rendu, sous le nom de l'étape, et
+ * on continue. Le travail fait reste fait, et ce qui n'a pas été fait se lit —
+ * plutôt que de se deviner.
+ *
+ * @param array $rapport Compte rendu, enrichi d'une clef `<nom>_erreur` en cas d'échec
+ * @param string $nom Nom de l'étape dans le compte rendu
+ * @param string $fonction Fonction du core dont l'absence rend l'étape impossible
+ * @param callable $faire
+ * @return bool L'étape a-t-elle été menée à son terme
+ */
+function dashagent_apres_maj_etape(&$rapport, $nom, $fonction, $faire) {
+	include_spip('inc/dashagent_erreurs');
+
+	if (!function_exists($fonction)) {
+		$rapport[$nom . '_erreur'] = $fonction . '() introuvable';
+
+		return false;
+	}
+
+	try {
+		$faire();
+	} catch (\Throwable $e) {
+		$rapport[$nom . '_erreur'] = dashagent_exception_message($e);
+		spip_log('dashagent : ' . $nom . ' — ' . $rapport[$nom . '_erreur'], 'dashagent' . _LOG_ERREUR);
+
+		return false;
+	}
+
+	return true;
 }

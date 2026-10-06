@@ -699,6 +699,33 @@ foreach ($plugins as $plugin) {
  * @param string $sujet
  * @return string
  */
+/**
+ * Le code d'un fichier PHP, commentaires et chaînes retirés.
+ *
+ * Chercher un appel de fonction à l'expression régulière sur le source brut
+ * compte aussi ses mentions : un nom cité dans une remarque, ou passé à
+ * `function_exists()`, n'appelle rien. `token_get_all()` sait les distinguer,
+ * et c'est la seule façon de le savoir sans deviner.
+ *
+ * @param string $code
+ * @return string
+ */
+function php_sans_commentaires($code) {
+	$garde = [];
+	foreach (token_get_all($code) as $jeton) {
+		if (!is_array($jeton)) {
+			$garde[] = $jeton;
+			continue;
+		}
+		if (in_array($jeton[0], [T_COMMENT, T_DOC_COMMENT, T_CONSTANT_ENCAPSED_STRING, T_ENCAPSED_AND_WHITESPACE, T_INLINE_HTML], true)) {
+			continue;
+		}
+		$garde[] = $jeton[1];
+	}
+
+	return implode(' ', $garde);
+}
+
 function premiere_occurrence($motif, $sujet) {
 	return preg_match($motif, $sujet, $m) ? trim($m[0]) : '';
 }
@@ -1462,6 +1489,58 @@ foreach (array_keys($egares) as $egare) {
 	echo "         $egare\n";
 }
 
+
+echo "\n== Une action n'amorce pas ce qu'amorce une page ==\n";
+
+/* `spip.php?action=dashagent` ne charge ni `inc/texte` ni `inc/filtres`. Tant
+   qu'on se contente de lire la base, personne ne s'en aperçoit ; demander au
+   core un travail qu'il n'accomplit d'ordinaire que depuis l'espace privé casse
+   net, et le message ne désigne pas le contexte.
+
+   Arrivé en production après une mise à jour distante du core, sur un
+   « Call to undefined function typo() » : le ménage d'après mise à jour
+   demandait à `ecrire_plugin_actifs()` de revalider les plugins depuis leurs
+   `paquet.xml`, où un nom peut porter du balisage multilingue — que le core
+   passe donc aux filtres.
+
+   Le contrôle vise les deux fonctions du core qui font relire ces descripteurs.
+   Il tient par le nom, pas par le fichier : si une troisième s'ajoute un jour,
+   c'est ici qu'on l'inscrit. */
+
+$gourmandes = ['ecrire_plugin_actifs', 'plugin_installes_meta'];
+$sources_agent = fichiers(chemin_plugin('tourdecontrole_agent'), ['php']);
+$appels_gourmands = 0;
+
+foreach ($sources_agent as $fichier) {
+	$code = (string) file_get_contents($fichier);
+	// Les commentaires et les chaînes sont écartés avant de chercher, sinon le
+	// contrôle compte les mentions. Le premier jet le faisait : expliquer la
+	// règle dans une remarque suffisait à la croire respectée, sur un fichier
+	// qui n'appelle rien. Un contrôle qui passe au vert sur de la prose ne
+	// vérifie plus rien.
+	$appels = php_sans_commentaires($code);
+
+	foreach ($gourmandes as $gourmande) {
+		if (!preg_match('/(?<![\w$])' . preg_quote($gourmande, '/') . '\s*\(/', $appels)) {
+			continue;
+		}
+		$appels_gourmands++;
+		$court = basename(dirname($fichier)) . '/' . basename($fichier);
+		verifier(
+			"$court charge les filtres avant $gourmande()",
+			// `\s*\(` et non une recherche littérale : le tamis rend les jetons
+			// séparés par des espaces, et une parenthèse n'y est jamais collée
+			// à son nom. Le premier jet cherchait la forme collée et ne
+			// trouvait rien, sur un fichier qui fait pourtant l'appel.
+			(bool) preg_match('/(?<![\w$])dashagent_filtres_textes\s*\(/', $appels)
+		);
+	}
+}
+
+/* Sans ce décompte, le jour où ces appels disparaîtraient ou seraient renommés,
+   la boucle tournerait à vide et le contrôle passerait au vert en ayant cessé
+   de vérifier quoi que ce soit. */
+verifier('les appels visés existent encore', $appels_gourmands >= 2);
 
 echo "\n== Clefs de langue référencées ==\n";
 
