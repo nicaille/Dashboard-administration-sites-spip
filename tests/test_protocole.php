@@ -2865,6 +2865,46 @@ verifier('et retombe sur l’avis du site sinon',
 verifier('un plugin distribué n’est jamais compté',
 	dashboard_compter_maj([['maj_verdict' => true, 'distribue' => 'oui']]) === 0);
 
+echo "\n== Ce qu'on remonte d'une exception ==\n";
+
+/* « Erreur interne : Call to undefined function typo() » : voilà ce que la tour
+   a affiché sur la fiche d'un site, après une mise à jour distante du core qui
+   avait pourtant réussi. Le message décrit parfaitement le symptôme et tait
+   l'endroit — or c'est l'endroit qui se corrige.
+
+   La cause tenait au contexte : `spip.php?action=dashagent` n'amorce pas ce
+   qu'amorce une page, et le ménage d'après mise à jour demandait au core de
+   revalider les plugins depuis leurs `paquet.xml`, ce qu'il ne sait faire
+   qu'avec les filtres de texte chargés. Un fichier et une ligne l'auraient dit
+   tout de suite. */
+
+$leve = new \RuntimeException('Call to undefined function typo()');
+
+verifier('le message porte le fichier et la ligne',
+	strpos(dashagent_exception_message($leve), basename(__FILE__) . ':') !== false,
+	dashagent_exception_message($leve));
+
+/* Le chemin est ramené à la racine du site quand on la connaît : il désigne
+   alors un fichier du dépôt plutôt que l'arborescence d'un hébergeur. */
+$racine = dirname(__DIR__) . '/';
+$ramene = dashagent_exception_message($leve, $racine);
+verifier('la racine du site ne figure plus dans le message',
+	strpos($ramene, $racine) === false, $ramene);
+verifier('et ce qui reste est le chemin relatif',
+	strpos($ramene, '(tests/' . basename(__FILE__) . ':') !== false, $ramene);
+
+/* Une racine qui ne préfixe pas le fichier ne doit rien tronquer : mieux vaut
+   un chemin absolu qu'un chemin faux. */
+$etranger = dashagent_exception_message($leve, '/tmp/ailleurs/');
+verifier('une racine étrangère laisse le chemin entier',
+	strpos($etranger, __FILE__ . ':') !== false, $etranger);
+
+/* Une exception sans message existe, et « Erreur interne :  » ne dit rien du
+   tout. Le nom de la classe en dit au moins le genre. */
+$muette = dashagent_exception_message(new \LogicException(''));
+verifier('une exception muette est nommée par sa classe',
+	strpos($muette, 'LogicException') === 0, $muette);
+
 echo "\n----------------------------------------\n";
 echo ($total - $echecs) . " / $total vérifications passées\n";
 
