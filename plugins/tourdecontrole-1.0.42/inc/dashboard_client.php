@@ -283,6 +283,95 @@ function dashboard_silence($code) {
 }
 
 /**
+ * Un extrait lisible d'une réponse HTML, pour un message d'erreur.
+ *
+ * `strip_tags()` retire les balises et **garde ce qu'elles contenaient** : le
+ * contenu d'un `<style>` survit donc intact. Un défi Cloudflare commence par sa
+ * feuille de style, si bien que le parc affichait
+ * « Réponse non JSON (HTTP 403) : *{box-sizing:border-box;margin:0;padding:0}… »
+ * — deux cents caractères de CSS, et pas un mot de ce qui s'était passé.
+ *
+ * Les entités ne sont **pas** décodées : ce texte vient d'un site géré, et
+ * remettre un `&lt;` en `<` après avoir retiré les balises reviendrait à en
+ * refabriquer. Ce qui vient d'un site géré reste inerte, y compris dans un
+ * message d'erreur.
+ *
+ * @param string $corps
+ * @param int $max Nombre de caractères conservés
+ * @return string
+ */
+function dashboard_extrait_html($corps, $max = 200) {
+	$texte = (string) $corps;
+
+	// D'abord les éléments dont le contenu n'est pas du texte à lire, paire
+	// complète…
+	$texte = (string) preg_replace('#<(script|style|noscript|template)\b[^>]*>.*?</\1\s*>#is', ' ', $texte);
+	// …puis l'ouverture restée seule, qu'une réponse tronquée laisse derrière
+	// elle et que la règle ci-dessus ne peut pas voir.
+	$texte = (string) preg_replace('#<(script|style|noscript|template)\b[^>]*>.*$#is', ' ', $texte);
+
+	$texte = strip_tags($texte);
+	$texte = (string) preg_replace('/\s+/u', ' ', $texte);
+	$texte = trim($texte);
+
+	if ($texte === '') {
+		return '';
+	}
+
+	$max = max(20, (int) $max);
+	// `preg` en mode `u` coupe sur un caractère, pas sur un octet, sans exiger
+	// mbstring. Sur une charge qui n'est pas de l'UTF-8 valide il ne rend rien :
+	// on retombe alors sur une coupe à l'octet, quitte à mordre un caractère.
+	if (preg_match('/^.{0,' . $max . '}/su', $texte, $trouve) && isset($trouve[0])) {
+		$coupe = $trouve[0];
+	} else {
+		$coupe = substr($texte, 0, $max);
+	}
+
+	return ($coupe === $texte) ? $texte : rtrim($coupe) . '…';
+}
+
+/**
+ * Ce qui a répondu à notre place, quand ce n'est pas l'agent.
+ *
+ * Une réponse en HTML n'innocente pas seulement l'agent : elle dit souvent
+ * **qui** a parlé, et le remède n'est pas le même selon la réponse. Un défi de
+ * navigateur se règle dans la console du frontal ; un délai dépassé se règle en
+ * découpant l'opération. Nommer le frontal évite de chercher du côté du site,
+ * où il n'y a rien à trouver.
+ *
+ * Les marqueurs sont cherchés dans la **réponse entière**, jamais dans
+ * l'extrait : une page de défi commence par sa feuille de style, et ce qui
+ * l'identifie arrive bien après les deux cents premiers caractères.
+ *
+ * Pure : aucun réseau, aucune base.
+ *
+ * @param int $code Code HTTP
+ * @param string $corps Réponse entière
+ * @return string Phrase à afficher, ou chaîne vide si rien n'est reconnu
+ */
+function dashboard_frontal_nomme($code, $corps) {
+	$corps = (string) $corps;
+	$code  = (int) $code;
+
+	// `cdn-cgi/challenge-platform` est servi par Cloudflare et par lui seul ;
+	// les trois autres sont les noms que prennent ses défis selon les versions.
+	if (preg_match('#cdn-cgi/challenge-platform|cf-browser-verification|__cf_chl|cf_chl_opt#i', $corps)) {
+		return 'Cloudflare interpose un défi de navigateur : l’appel n’a pas atteint le site.';
+	}
+
+	if (preg_match('#Attention Required!?\s*\|\s*Cloudflare|error code:\s*10[0-9]{2}#i', $corps)) {
+		return 'Cloudflare a bloqué l’appel par une règle de sécurité : l’agent n’a pas été atteint.';
+	}
+
+	if (in_array($code, [502, 503, 504], true)) {
+		return 'Un cache ou répartiteur en frontal a coupé avant l’agent : l’opération a pu aboutir côté site.';
+	}
+
+	return '';
+}
+
+/**
  * Appelle une opération sur l'agent d'un site.
  *
  * @param array $site Ligne de spip_dashboard_sites
@@ -323,9 +412,17 @@ function dashboard_appeler($site, $op, $args = [], $options = []) {
 
 	$reponse = json_decode((string) $http['corps'], true);
 	if (!is_array($reponse)) {
+		// Nommer le frontal quand on le reconnaît, et ne retomber sur l'extrait
+		// que faute de mieux : une phrase qui dit qui a répondu vaut mieux que
+		// deux cents caractères de la page qu'il a servie.
+		$dit = dashboard_frontal_nomme($http['code'], (string) $http['corps']);
+		if ($dit === '') {
+			$dit = dashboard_extrait_html((string) $http['corps']);
+		}
+
 		return dashboard_reponse_erreur(
 			'reponse_illisible',
-			'Réponse non JSON (HTTP ' . $http['code'] . ') : ' . substr(strip_tags((string) $http['corps']), 0, 200),
+			'Réponse non JSON (HTTP ' . $http['code'] . ')' . ($dit === '' ? '' : ' : ' . $dit),
 			$debut,
 			$http['code']
 		);

@@ -1308,6 +1308,61 @@ n'appelle jamais `cron()` en fin de requête**. Il n'existe que deux appels de
 `action_cron()`. Une page privée qui traîne ne s'explique donc pas par cette
 constante, mais par le processus séparé que `queue_affichage_cron()` lance.
 
+## `strip_tags()` garde ce que les balises contenaient
+
+Un site du parc passé derrière Cloudflare a rendu ceci à la synchronisation :
+
+    Réponse non JSON (HTTP 403) : Just a moment...*{box-sizing:border-box;
+    margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%…
+
+Deux cents caractères de CSS, et pas un mot de ce qui s'était passé. La cause
+n'est pas Cloudflare : `strip_tags()` retire les **balises** et garde leur
+contenu, si bien que le texte d'un `<style>` survit entier — et une page de défi
+commence justement par sa feuille de style. Le filtre était appliqué, il avait
+l'air de faire son travail, et il recopiait une feuille de style dans l'espace
+privé.
+
+`dashboard_extrait_html()` retire d'abord `<script>`, `<style>`, `<noscript>` et
+`<template>` **avec leur contenu**, en deux passes : la paire complète, puis
+l'ouverture restée seule — qu'une réponse tronquée laisse derrière elle, et que
+la première règle ne peut pas voir.
+
+Et les entités **ne sont pas décodées**. Remettre un `&lt;` en `<` après avoir
+retiré les balises reviendrait à en refabriquer : ce qui vient d'un site géré
+reste inerte, y compris dans un message d'erreur.
+
+La coupe se fait sur un caractère et non sur un octet, par `preg` en mode `u`,
+qui n'exige pas mbstring — avec repli sur une coupe à l'octet quand la charge
+n'est pas de l'UTF-8 valide, puisque `preg` ne rend alors rien.
+
+### Nommer le frontal, plutôt que citer sa page
+
+Une réponse en HTML n'innocente pas seulement l'agent : elle dit souvent **qui**
+a parlé, et le remède diffère selon la réponse. Un défi de navigateur se règle
+dans la console du frontal ; un délai dépassé se règle en découpant l'opération.
+`dashboard_frontal_nomme()` reconnaît trois cas — défi Cloudflare, blocage par
+règle de sécurité, frontal impatient sur 502/503/504 — et rend une phrase à la
+place de l'extrait.
+
+Deux précautions qui tiennent tout :
+
+- **les marqueurs se cherchent dans la réponse entière**, jamais dans
+  l'extrait. Ce qui identifie un défi (`cdn-cgi/challenge-platform`) arrive bien
+  après les deux cents premiers caractères : chercher dans l'extrait ne
+  reconnaîtrait jamais rien ;
+- **ce qu'on ne reconnaît pas ne se nomme pas.** Un diagnostic inventé coûte
+  plus cher qu'un extrait brut, et la fonction rend la chaîne vide plutôt que de
+  baptiser une page inconnue.
+
+Le verdict de silence, lui, ne bouge pas : `reponse_illisible` reste un silence
+quelle que soit la page reçue. Nommer le frontal dit d'où vient la panne, pas ce
+qu'il est advenu de l'opération.
+
+Le contournement documenté pour ces sites — pointer `url_agent` vers un nom que
+le frontal ne couvre pas — ne dégrade pas la sécurité du parc, et c'est ce qui
+le rend acceptable : **le frontal n'authentifie rien de ce protocole**. La
+signature le fait, et elle seule.
+
 ## Une action n'amorce pas ce qu'amorce une page
 
 `spip.php?action=dashagent` ne charge ni `inc/texte` ni `inc/filtres`. Tant
