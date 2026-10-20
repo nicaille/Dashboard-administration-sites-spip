@@ -3045,6 +3045,42 @@ verifier('le nom par défaut sert quand on ne le règle pas',
 $GLOBALS['dashboard_config_test'] = ['frontal_entete' => 'X-Parc', 'frontal_cle' => 'ouvre-toi'];
 verifier('et le nom réglé l’emporte', dashboard_frontal_entete() === 'X-Parc: ouvre-toi');
 
+/* La clef d'un site l'emporte sur celle de la tour, et c'est ce qui rend le
+   réglage tenable : une valeur unique part vers *tous* les sites gérés, donc un
+   site compromis l'apprend et pourrait franchir le frontal d'un autre — où la
+   signature l'arrêtera, mais le frontal aura été franchi. Une clef propre ne
+   voyage que vers son site. */
+$GLOBALS['dashboard_config_test'] = ['frontal_cle' => 'celle-de-la-tour'];
+
+$site_sans = ['frontal_cle' => ''];
+verifier('un site sans clef propre hérite de celle de la tour',
+	dashboard_frontal_entete($site_sans) === _DASHBOARD_FRONTAL_ENTETE . ': celle-de-la-tour');
+
+$site_avec = ['frontal_cle' => dashboard_chiffrer('la-sienne')];
+verifier('une clef propre l’emporte',
+	dashboard_frontal_entete($site_avec) === _DASHBOARD_FRONTAL_ENTETE . ': la-sienne',
+	dashboard_frontal_entete($site_avec));
+
+/* Elle est chiffrée en base, comme le mot de passe htpasswd : la lire sans la
+   déchiffrer enverrait au frontal une valeur qui ne correspond à aucune règle,
+   et l'appel serait intercepté sans que rien ne dise pourquoi. */
+verifier('la clef du site voyage en clair, pas chiffrée',
+	strpos(dashboard_frontal_entete($site_avec), (string) $site_avec['frontal_cle']) === false);
+
+/* Un appelant qui ne passe pas le site retombe sur la valeur de la tour.
+   Dégradé, jamais muet : l'inverse laisserait un appel partir sans en-tête et
+   se faire intercepter, pour un diagnostic introuvable. */
+verifier('sans site, la tour fait foi',
+	dashboard_frontal_entete() === _DASHBOARD_FRONTAL_ENTETE . ': celle-de-la-tour');
+verifier('un site mal formé ne fait pas tomber la lecture',
+	dashboard_frontal_entete('pas un tableau') === _DASHBOARD_FRONTAL_ENTETE . ': celle-de-la-tour');
+
+/* Et une clef propre suffit, même si la tour n'en a aucune : un parc peut
+   n'avoir qu'un seul site derrière un frontal. */
+$GLOBALS['dashboard_config_test'] = [];
+verifier('une clef propre vaut sans clef de tour',
+	dashboard_frontal_entete($site_avec) === _DASHBOARD_FRONTAL_ENTETE . ': la-sienne');
+
 $GLOBALS['dashboard_config_test'] = [];
 
 echo "\n----------------------------------------\n";

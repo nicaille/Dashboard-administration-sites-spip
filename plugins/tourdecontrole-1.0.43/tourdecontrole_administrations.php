@@ -139,6 +139,13 @@ function tourdecontrole_upgrade($nom_meta_base_version, $version_cible) {
 		['tourdecontrole_creer_tables'],
 	];
 
+	// 1.0.13 : la clef de reconnaissance propre à un site, pour une règle de
+	// frontal qui ne vaut que pour lui. Vide, le site garde celle de la tour —
+	// donc rien ne change pour un parc qui n'y touche pas.
+	$maj['1.0.13'] = [
+		['tourdecontrole_creer_tables'],
+	];
+
 	include_spip('base/upgrade');
 	maj_plugin($nom_meta_base_version, $version_cible, $maj);
 }

@@ -46,6 +46,11 @@ function formulaires_editer_dashboard_site_charger_dist($id_dashboard_site = 'ne
 	// secret — il s'édite comme n'importe quel champ, et le voir aide.
 	$valeurs['auth_pass_present'] = (isset($site) && $site && (string) $site['auth_pass'] !== '') ? 'oui' : 'non';
 	$valeurs['auth_pass_clair']   = '';
+	// Jamais la valeur, seulement sa présence : elle est chiffrée en base, et
+	// la réafficher en clair à chaque ouverture de la fiche la ferait traîner
+	// dans les caches du navigateur pour un confort nul.
+	$valeurs['frontal_cle_presente'] = (isset($site) && $site && (string) ($site['frontal_cle'] ?? '') !== '') ? 'oui' : 'non';
+	$valeurs['frontal_cle_clair']    = '';
 	$valeurs['auth_retirer']      = '';
 	$valeurs['_hidden'] = ($valeurs['_hidden'] ?? '');
 
@@ -134,6 +139,20 @@ function formulaires_editer_dashboard_site_traiter_dist($id_dashboard_site = 'ne
 		sql_updateq(
 			'spip_dashboard_sites',
 			['auth_pass' => dashboard_chiffrer(trim((string) _request('auth_pass_clair')))],
+			'id_dashboard_site = ' . $id
+		);
+	}
+
+	/* La clef de reconnaissance du frontal, propre à ce site. Mêmes trois
+	   gestes, et le même silence : un champ vide la laisse en place. La retirer
+	   ne la supprime pas des appels — le site retombe sur celle de la tour, ce
+	   que le formulaire dit en toutes lettres. */
+	if (_request('frontal_retirer') === 'on') {
+		sql_updateq('spip_dashboard_sites', ['frontal_cle' => ''], 'id_dashboard_site = ' . $id);
+	} elseif (trim((string) _request('frontal_cle_clair')) !== '') {
+		sql_updateq(
+			'spip_dashboard_sites',
+			['frontal_cle' => dashboard_chiffrer(trim((string) _request('frontal_cle_clair')))],
 			'id_dashboard_site = ' . $id
 		);
 	}

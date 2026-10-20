@@ -73,6 +73,16 @@
 					<input type="checkbox" name="auth_retirer" id="auth_retirer" value="on" />
 					<label for="auth_retirer"><:dashboard:label_auth_retirer:></label>
 				</li>
+				[(#ENV{frontal_cle_presente}|=={oui}|oui)<p class="explication"><:dashboard:frontal_cle_configuree:></p>]
+				<li class="editer editer_frontal_cle_clair">
+					<label for="frontal_cle_clair"><:dashboard:label_frontal_cle_site:></label>
+					<input type="password" class="text" name="frontal_cle_clair" id="frontal_cle_clair" value="" autocomplete="new-password" />
+					<p class="explication"><:dashboard:explication_frontal_cle_site:></p>
+				</li>
+				<li class="editer editer_frontal_retirer">
+					<input type="checkbox" name="frontal_retirer" id="frontal_retirer" value="on" />
+					<label for="frontal_retirer"><:dashboard:label_frontal_retirer:></label>
+				</li>
 			</ul>
 		</fieldset>
 

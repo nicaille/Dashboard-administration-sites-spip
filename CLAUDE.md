@@ -1380,11 +1380,19 @@ porte**, la signature **authentifie l'appel**. Le code doit le dire, parce que
 rien dans la forme ne l'indique — un en-tête secret ressemble à s'y méprendre à
 une authentification, et quelqu'un finirait par s'y fier.
 
-Deux conséquences qu'on ne tait pas : la valeur part vers **tous** les sites
-gérés, donc un site compromis l'apprend et pourrait franchir le frontal d'un
-autre — où la signature l'arrêtera ; et elle voyage protégée par le seul https.
-Un site dont le frontal doit rester la seule barrière prend un `url_agent` non
-proxifié.
+**La clef d'un site l'emporte sur celle de la tour**, et c'est ce qui rend le
+réglage tenable. Une valeur unique part vers *tous* les sites gérés : un site
+compromis l'apprend, et pourrait s'en servir pour franchir le frontal d'un autre
+— où la signature l'arrêtera, mais le frontal aura été franchi. Une clef propre
+ne voyage que vers son site. Celle de la tour reste le défaut parce qu'elle vaut
+pour le cas courant, une seule règle à écrire pour dix zones.
+
+Le **nom** de l'en-tête reste commun : c'est la valeur qui distingue, et un nom
+par site obligerait à autant de règles différentes sans rien protéger de plus.
+
+Elle voyage protégée par le seul https, et se stocke chiffrée comme le mot de
+passe `htpasswd` voisin. Un site dont le frontal doit rester la seule barrière
+prend de toute façon un `url_agent` non proxifié.
 
 **Le refus qui compte est celui du retour à la ligne.** Une valeur qui en porte
 un **injecte des en-têtes** dans toutes les requêtes sortantes de la tour. La
@@ -1400,7 +1408,23 @@ et laisserait enregistrer une valeur qui ne partirait jamais — sans rien dire.
 
 L'en-tête se lit dans `dashboard_http_post()` et non chez l'appelant : tout ce
 qui part vers un agent passe par elle, et un nouveau chemin l'oublierait s'il
-fallait y penser à chaque fois.
+fallait y penser à chaque fois. Le site y voyage en argument, et un appelant qui
+l'omettrait retomberait sur la valeur de la tour — dégradé, jamais muet. C'est
+le bon sens de la panne : l'inverse laisserait un appel partir sans rien et se
+faire intercepter, pour un diagnostic introuvable.
+
+### Une tranche de taille fixe finit par couper au mauvais endroit
+
+Ajouter cette colonne a fait échouer un contrôle de structure qui n'avait rien à
+voir : il lisait le corps d'une fonction de déclaration de tables sur **trois
+mille caractères**, et la colonne de plus a repoussé `'maj'` au-delà de la
+fenêtre. Le contrôle a donc accusé une table qui la porte.
+
+Il aurait pu faire pire dans l'autre sens — passer au vert sur une tranche qui
+ne contient plus rien de ce qu'il cherche. `corps_de_fonction()` lit désormais
+la fonction entière par `token_get_all()`, une accolade pouvant vivre dans une
+chaîne ou un commentaire, où seul l'analyseur de PHP sait laquelle compte.
+Éprouvé par mutation : retirer la colonne `maj` fait bien échouer le contrôle.
 
 ## Une action n'amorce pas ce qu'amorce une page
 

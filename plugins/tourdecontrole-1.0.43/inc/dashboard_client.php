@@ -199,17 +199,33 @@ function dashboard_auth_http($site) {
  * connaîtrait cette valeur franchirait le frontal pour se faire refuser par
  * `dashagent_verifier_signature()`.
  *
- * Conséquence à ne pas taire : la valeur part vers **tous** les sites gérés.
- * Un site compromis l'apprend, et pourrait s'en servir pour franchir le frontal
- * d'un autre — où la signature l'arrêtera. Un site dont le frontal doit rester
- * la seule barrière prendra plutôt un `url_agent` que le frontal ne couvre pas.
+ * **La valeur du site l'emporte sur celle de la tour**, et c'est ce qui rend le
+ * réglage tenable. Une valeur unique part vers *tous* les sites gérés : un site
+ * compromis l'apprend, et pourrait s'en servir pour franchir le frontal d'un
+ * autre — où la signature l'arrêtera, mais le frontal aura été franchi. Une
+ * clef propre à un site ne voyage que vers lui, et son éventuelle fuite
+ * n'ouvre rien ailleurs.
  *
+ * Celle de la tour reste le défaut, parce qu'elle vaut pour le cas courant :
+ * une seule règle à écrire pour dix zones. Vide côté site, le site en hérite ;
+ * renseignée, elle est seule à partir.
+ *
+ * Le **nom** de l'en-tête, lui, reste commun : c'est la valeur qui distingue,
+ * et un nom par site obligerait à autant de règles différentes sans rien
+ * protéger de plus.
+ *
+ * @param array $site Ligne de `spip_dashboard_sites`, ou tableau vide
  * @return string La ligne d'en-tête, ou chaîne vide si le réglage est éteint
  */
-function dashboard_frontal_entete() {
+function dashboard_frontal_entete($site = []) {
+	$propre = trim((string) (is_array($site) ? ($site['frontal_cle'] ?? '') : ''));
+	$valeur = ($propre !== '')
+		? dashboard_dechiffrer($propre)
+		: (string) dashboard_config('frontal_cle', '');
+
 	return dashboard_frontal_entete_ligne(
 		(string) dashboard_config('frontal_entete', _DASHBOARD_FRONTAL_ENTETE),
-		(string) dashboard_config('frontal_cle', '')
+		(string) $valeur
 	);
 }
 
@@ -486,7 +502,7 @@ function dashboard_appeler($site, $op, $args = [], $options = []) {
 	$champs = dashboard_signer($op, $json, $ts, $nonce, $secret);
 
 	$timeout = (int) ($options['timeout'] ?? dashboard_config('timeout', 30));
-	$http    = dashboard_http_post($url, $champs, $timeout, '', dashboard_auth_http($site));
+	$http    = dashboard_http_post($url, $champs, $timeout, '', dashboard_auth_http($site), $site);
 
 	if (!$http['ok']) {
 		return dashboard_reponse_erreur('transport', $http['erreur'], $debut, $http['code']);
@@ -564,7 +580,8 @@ function dashboard_telecharger_sauvegarde($site, $identifiant, $destination) {
 		$champs,
 		(int) dashboard_config('timeout_long', 300),
 		$destination,
-		dashboard_auth_http($site)
+		dashboard_auth_http($site),
+		$site
 	);
 
 	if (!$http['ok']) {
@@ -607,11 +624,18 @@ function dashboard_telecharger_sauvegarde($site, $identifiant, $destination) {
  * @param string $fichier Si fourni, le corps est écrit dans ce fichier
  * @return array{ok: bool, code: int, corps: string, erreur: string}
  */
-function dashboard_http_post($url, $champs, $timeout = 30, $fichier = '', $auth = '') {
+function dashboard_http_post($url, $champs, $timeout = 30, $fichier = '', $auth = '', $site = []) {
 	$timeout = max(5, min(900, (int) $timeout));
 
+	// Le site voyage jusqu'ici pour que l'en-tête de reconnaissance soit lu au
+	// seul endroit par où tout passe. Un appelant qui l'oublierait retomberait
+	// sur la valeur de la tour : dégradé, jamais muet — c'est le bon sens de la
+	// panne, l'inverse laisserait un appel partir sans rien et se faire
+	// intercepter sans qu'on sache pourquoi.
+	$frontal = dashboard_frontal_entete($site);
+
 	if (function_exists('curl_init')) {
-		return dashboard_http_post_curl($url, $champs, $timeout, $fichier, $auth);
+		return dashboard_http_post_curl($url, $champs, $timeout, $fichier, $auth, $frontal);
 	}
 
 	include_spip('inc/distant');
@@ -634,7 +658,6 @@ function dashboard_http_post($url, $champs, $timeout = 30, $fichier = '', $auth 
 	// L'en-tête de reconnaissance se lit ici, et non chez l'appelant : tout ce
 	// qui part vers un agent passe par cette fonction, et un nouveau chemin
 	// l'oublierait s'il fallait y penser à chaque fois.
-	$frontal = dashboard_frontal_entete();
 	if ($frontal !== '') {
 		$entetes[] = $frontal;
 	}
@@ -663,7 +686,7 @@ function dashboard_http_post($url, $champs, $timeout = 30, $fichier = '', $auth 
  * @param string $fichier
  * @return array
  */
-function dashboard_http_post_curl($url, $champs, $timeout, $fichier = '', $auth = '') {
+function dashboard_http_post_curl($url, $champs, $timeout, $fichier = '', $auth = '', $frontal = '') {
 	$ch = curl_init($url);
 	if (!$ch) {
 		return ['ok' => false, 'code' => 0, 'corps' => '', 'erreur' => 'Initialisation cURL impossible'];
@@ -684,7 +707,6 @@ function dashboard_http_post_curl($url, $champs, $timeout, $fichier = '', $auth 
 		CURLOPT_HTTPHEADER     => ['Accept: application/json', 'Expect:'],
 	];
 
-	$frontal = dashboard_frontal_entete();
 	if ($frontal !== '') {
 		$options[CURLOPT_HTTPHEADER][] = $frontal;
 	}
