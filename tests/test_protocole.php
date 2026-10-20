@@ -2977,6 +2977,76 @@ verifier('un 403 nu non plus',
 verifier('une réponse illisible reste un silence',
 	dashboard_silence('reponse_illisible') === true);
 
+echo "\n== Se faire reconnaître d'un frontal, sans s'authentifier auprès de lui ==\n";
+
+/* Un frontal — Cloudflare, WAF d'hébergeur — intercepte les appels avant PHP.
+   La parade courante, une règle visée sur l'adresse IP de la tour, tient mal :
+   l'IP sortante d'un mutualisé n'est pas celle de son nom de domaine, et elle
+   change sans préavis. Un en-tête que la tour est seule à envoyer se reconnaît
+   sans rien supposer du réseau.
+
+   Ce n'est **pas** une authentification, et le code ne doit pas le laisser
+   croire : c'est le statut des identifiants htpasswd déjà portés ici. Ils
+   ouvrent la porte, la signature authentifie l'appel. */
+
+verifier('un réglage renseigné compose la ligne',
+	dashboard_frontal_entete_ligne('X-Dashboard-Cle', 's3cr3t') === 'X-Dashboard-Cle: s3cr3t');
+
+/* Vide veut dire éteint : rien ne part, et surtout pas un en-tête sans valeur
+   qui ferait croire à une règle en place. */
+verifier('une valeur vide éteint le réglage',
+	dashboard_frontal_entete_ligne('X-Dashboard-Cle', '') === '');
+verifier('des espaces seuls aussi',
+	dashboard_frontal_entete_ligne('X-Dashboard-Cle', "   ") === '');
+verifier('un nom vide éteint le réglage',
+	dashboard_frontal_entete_ligne('', 's3cr3t') === '');
+
+/* Le refus qui compte. Une valeur portant un retour à la ligne **injecte des
+   en-têtes** dans toutes les requêtes sortantes de la tour. La valeur vient
+   d'un webmestre, mais un collage malheureux suffit, et le prix de l'erreur est
+   que la tour parle à tout le parc avec des en-têtes qu'elle n'a pas voulus. */
+verifier('un retour chariot est refusé',
+	dashboard_frontal_entete_ligne('X-Dashboard-Cle', "abc\r\nX-Forwarded-For: 127.0.0.1") === '');
+verifier('un saut de ligne seul aussi',
+	dashboard_frontal_entete_ligne('X-Dashboard-Cle', "abc\nX-Autre: 1") === '');
+verifier('un octet nul aussi',
+	dashboard_frontal_entete_ligne('X-Dashboard-Cle', "abc\x00def") === '');
+
+/* Le nom suit le jeton de la RFC 7230 : un deux-points ou une espace y
+   fabriquerait un second en-tête tout autant. */
+verifier('un nom à deux-points est refusé',
+	dashboard_frontal_entete_ligne('X-Cle: autre', 's3cr3t') === '');
+verifier('un nom à espace est refusé',
+	dashboard_frontal_entete_ligne('X Cle', 's3cr3t') === '');
+verifier('un nom à accent est refusé',
+	dashboard_frontal_entete_ligne('X-Clé', 's3cr3t') === '');
+
+/* Et ce que la RFC autorise passe : refuser trop large obligerait le webmestre
+   à deviner notre propre règle plutôt que celle de son frontal. */
+verifier('les signes du jeton RFC sont acceptés',
+	dashboard_frontal_entete_ligne('X-Dash_Cle.1', 'v') === 'X-Dash_Cle.1: v');
+
+/* Les bords sont rognés des deux côtés : un nom recopié depuis une console en
+   traîne souvent. */
+verifier('les bords sont rognés',
+	dashboard_frontal_entete_ligne('  X-Dashboard-Cle  ', '  s3cr3t  ') === 'X-Dashboard-Cle: s3cr3t');
+
+/* Le lecteur de configuration passe par la même fonction. Un seul lecteur :
+   le formulaire refuse exactement ce que l'envoi refuserait, sans quoi une
+   valeur acceptée ne partirait jamais, et rien ne le dirait. */
+$GLOBALS['dashboard_config_test'] = [];
+verifier('éteint par défaut', dashboard_frontal_entete() === '');
+
+$GLOBALS['dashboard_config_test'] = ['frontal_cle' => 'ouvre-toi'];
+verifier('le nom par défaut sert quand on ne le règle pas',
+	dashboard_frontal_entete() === _DASHBOARD_FRONTAL_ENTETE . ': ouvre-toi',
+	dashboard_frontal_entete());
+
+$GLOBALS['dashboard_config_test'] = ['frontal_entete' => 'X-Parc', 'frontal_cle' => 'ouvre-toi'];
+verifier('et le nom réglé l’emporte', dashboard_frontal_entete() === 'X-Parc: ouvre-toi');
+
+$GLOBALS['dashboard_config_test'] = [];
+
 echo "\n----------------------------------------\n";
 echo ($total - $echecs) . " / $total vérifications passées\n";
 

@@ -1363,6 +1363,45 @@ le frontal ne couvre pas — ne dégrade pas la sécurité du parc, et c'est ce 
 le rend acceptable : **le frontal n'authentifie rien de ce protocole**. La
 signature le fait, et elle seule.
 
+### Se faire reconnaître d'un frontal n'est pas s'authentifier auprès de lui
+
+Une règle visée sur l'adresse IP de la tour tient mal, et pour une raison qu'on
+ne voit pas en l'écrivant : **l'adresse sortante d'un hébergement mutualisé
+n'est pas celle de son nom de domaine**, et elle change sans préavis. En
+production, une règle posée sur la mauvaise des deux n'a rien changé — et le
+message d'erreur, identique, ne pouvait pas le dire.
+
+D'où `dashboard_frontal_entete()` : un en-tête que la tour est seule à envoyer,
+que le webmestre reconnaît dans une règle de son frontal. Il ne dépend d'aucune
+adresse, et la même valeur sert pour toutes les zones.
+
+C'est **exactement** le statut des identifiants `htpasswd` : ils **ouvrent la
+porte**, la signature **authentifie l'appel**. Le code doit le dire, parce que
+rien dans la forme ne l'indique — un en-tête secret ressemble à s'y méprendre à
+une authentification, et quelqu'un finirait par s'y fier.
+
+Deux conséquences qu'on ne tait pas : la valeur part vers **tous** les sites
+gérés, donc un site compromis l'apprend et pourrait franchir le frontal d'un
+autre — où la signature l'arrêtera ; et elle voyage protégée par le seul https.
+Un site dont le frontal doit rester la seule barrière prend un `url_agent` non
+proxifié.
+
+**Le refus qui compte est celui du retour à la ligne.** Une valeur qui en porte
+un **injecte des en-têtes** dans toutes les requêtes sortantes de la tour. La
+valeur vient d'un webmestre, mais un collage malheureux suffit, et le prix de
+l'erreur est que la tour parle à tout le parc avec des en-têtes qu'elle n'a pas
+voulus. Le nom suit le jeton de la RFC 7230, pour la même raison : un
+deux-points y fabriquerait un second en-tête tout autant.
+
+Et **un seul lecteur de la règle** : le formulaire de configuration refuse en
+appelant `dashboard_frontal_entete_ligne()`, celle-là même qui compose l'envoi.
+Une seconde expression régulière écrite dans la validation finirait par diverger,
+et laisserait enregistrer une valeur qui ne partirait jamais — sans rien dire.
+
+L'en-tête se lit dans `dashboard_http_post()` et non chez l'appelant : tout ce
+qui part vers un agent passe par elle, et un nouveau chemin l'oublierait s'il
+fallait y penser à chaque fois.
+
 ## Une action n'amorce pas ce qu'amorce une page
 
 `spip.php?action=dashagent` ne charge ni `inc/texte` ni `inc/filtres`. Tant

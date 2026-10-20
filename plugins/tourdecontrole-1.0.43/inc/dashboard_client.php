@@ -16,6 +16,16 @@ if (!defined('_ECRIRE_INC_VERSION')) {
 }
 
 /**
+ * Nom par défaut de l'en-tête que la tour joint à ses appels.
+ *
+ * Préfixé `X-` et nommé en clair : il doit se reconnaître d'un coup d'œil dans
+ * la console d'un frontal, où c'est un humain qui écrira la règle.
+ */
+if (!defined('_DASHBOARD_FRONTAL_ENTETE')) {
+	define('_DASHBOARD_FRONTAL_ENTETE', 'X-Dashboard-Cle');
+}
+
+/**
  * Chiffre une valeur sensible avant stockage.
  *
  * @param string $valeur
@@ -170,6 +180,78 @@ function dashboard_auth_http($site) {
 	}
 
 	return $utilisateur . ':' . dashboard_dechiffrer((string) ($site['auth_pass'] ?? ''));
+}
+
+/**
+ * L'en-tête que la tour joint à chaque appel, pour se faire reconnaître d'un
+ * frontal — et rien d'autre.
+ *
+ * Un site passé derrière Cloudflare, Sucuri ou un WAF d'hébergeur voit ses
+ * appels interceptés avant PHP : l'agent n'est jamais atteint. La parade
+ * courante — une règle visée sur l'adresse IP de la tour — tient mal : l'IP
+ * sortante d'un hébergement mutualisé n'est pas celle de son nom de domaine, et
+ * elle change sans préavis. Un en-tête que la tour est seule à envoyer se
+ * reconnaît sans rien supposer du réseau.
+ *
+ * **Ce n'est pas une authentification, et il ne faut pas le lire comme telle.**
+ * C'est exactement le statut des identifiants `htpasswd` déjà portés ici : ils
+ * **ouvrent la porte**, la signature **authentifie l'appel**. Quelqu'un qui
+ * connaîtrait cette valeur franchirait le frontal pour se faire refuser par
+ * `dashagent_verifier_signature()`.
+ *
+ * Conséquence à ne pas taire : la valeur part vers **tous** les sites gérés.
+ * Un site compromis l'apprend, et pourrait s'en servir pour franchir le frontal
+ * d'un autre — où la signature l'arrêtera. Un site dont le frontal doit rester
+ * la seule barrière prendra plutôt un `url_agent` que le frontal ne couvre pas.
+ *
+ * @return string La ligne d'en-tête, ou chaîne vide si le réglage est éteint
+ */
+function dashboard_frontal_entete() {
+	return dashboard_frontal_entete_ligne(
+		(string) dashboard_config('frontal_entete', _DASHBOARD_FRONTAL_ENTETE),
+		(string) dashboard_config('frontal_cle', '')
+	);
+}
+
+/**
+ * Compose et valide une ligne d'en-tête.
+ *
+ * Deux refus, et le second n'est pas une précaution de style : **une valeur qui
+ * contient un retour à la ligne injecte des en-têtes** dans toutes les requêtes
+ * sortantes de la tour. La valeur vient du formulaire de configuration, donc
+ * d'un webmestre — mais un collage malheureux suffit, et le prix de l'erreur
+ * est que la tour parle à tout le parc avec des en-têtes qu'elle n'a pas
+ * voulus.
+ *
+ * Le nom suit le jeton de la RFC 7230 : lettres, chiffres et une poignée de
+ * signes, rien d'autre.
+ *
+ * Pure : ni base, ni réseau, ni configuration lue au vol.
+ *
+ * @param string $nom
+ * @param string $valeur Vide : le réglage est éteint, et rien n'est envoyé
+ * @return string
+ */
+function dashboard_frontal_entete_ligne($nom, $valeur) {
+	$nom    = trim((string) $nom);
+	$valeur = trim((string) $valeur);
+
+	if ($valeur === '' || $nom === '') {
+		return '';
+	}
+
+	if (!preg_match('/^[!#$%&\x27*+.^_`|~0-9A-Za-z-]+$/', $nom)) {
+		return '';
+	}
+
+	// Les caractères de contrôle, et pas seulement CR et LF : un octet nul
+	// tronque la chaîne pour certaines couches, un octet de contrôle isolé
+	// n'a de toute façon rien à faire dans une valeur d'en-tête.
+	if (preg_match('/[\x00-\x1f\x7f]/', $valeur)) {
+		return '';
+	}
+
+	return $nom . ': ' . $valeur;
 }
 
 /**
@@ -545,8 +627,19 @@ function dashboard_http_post($url, $champs, $timeout = 30, $fichier = '', $auth 
 	// L'en-tête plutôt que `https://user:pass@site/` : une adresse porteuse
 	// d'identifiants finit dans les journaux du serveur et dans les messages
 	// d'erreur, l'en-tête non.
+	$entetes = [];
 	if ($auth !== '') {
-		$options['entetes'] = 'Authorization: Basic ' . base64_encode($auth);
+		$entetes[] = 'Authorization: Basic ' . base64_encode($auth);
+	}
+	// L'en-tête de reconnaissance se lit ici, et non chez l'appelant : tout ce
+	// qui part vers un agent passe par cette fonction, et un nouveau chemin
+	// l'oublierait s'il fallait y penser à chaque fois.
+	$frontal = dashboard_frontal_entete();
+	if ($frontal !== '') {
+		$entetes[] = $frontal;
+	}
+	if ($entetes) {
+		$options['entetes'] = implode("\r\n", $entetes);
 	}
 	$res = recuperer_url($url, $options);
 
@@ -590,6 +683,11 @@ function dashboard_http_post_curl($url, $champs, $timeout, $fichier = '', $auth 
 		CURLOPT_USERAGENT      => 'SPIP Dashboard/1.0 (+' . url_de_base() . ')',
 		CURLOPT_HTTPHEADER     => ['Accept: application/json', 'Expect:'],
 	];
+
+	$frontal = dashboard_frontal_entete();
+	if ($frontal !== '') {
+		$options[CURLOPT_HTTPHEADER][] = $frontal;
+	}
 
 	// Basic et rien d'autre : `CURLAUTH_ANY` ferait d'abord un appel à blanc
 	// pour découvrir la méthode, et surtout accepterait qu'un serveur réclame

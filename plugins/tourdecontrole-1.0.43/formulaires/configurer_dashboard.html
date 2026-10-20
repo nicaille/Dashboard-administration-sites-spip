@@ -28,6 +28,16 @@
 					<label for="autoriser_http"><:dashboard:label_autoriser_http:></label>
 					<p class="explication"><:dashboard:explication_autoriser_http:></p>
 				</li>
+				<li class="editer editer_frontal_entete">
+					<label for="frontal_entete"><:dashboard:label_frontal_entete:></label>
+					<input type="text" class="text" name="frontal_entete" id="frontal_entete" value="[(#ENV{frontal_entete}|attribut_html)]" />
+				</li>
+				<li class="editer editer_frontal_cle[ (#ENV**{erreurs}|table_valeur{frontal_cle}|oui)erreur]">
+					<label for="frontal_cle"><:dashboard:label_frontal_cle:></label>
+					[<span class="erreur_message">(#ENV**{erreurs}|table_valeur{frontal_cle})</span>]
+					<input type="text" class="text" name="frontal_cle" id="frontal_cle" value="[(#ENV{frontal_cle}|attribut_html)]" />
+					<p class="explication"><:dashboard:explication_frontal_cle:></p>
+				</li>
 			</ul>
 		</fieldset>
 
