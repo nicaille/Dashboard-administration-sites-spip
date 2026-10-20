@@ -3083,6 +3083,56 @@ verifier('une clef propre vaut sans clef de tour',
 
 $GLOBALS['dashboard_config_test'] = [];
 
+echo "\n== L'adresse que la tour donne d'elle-même ==\n";
+
+/* Repéré dans la console d'un Cloudflare, qui voyait arriver :
+
+       SPIP Dashboard/1.0 (+http://localhost/)
+
+   `url_de_base()` dérive l'adresse de `$_SERVER['HTTP_HOST']`, qui n'existe pas
+   hors du web : `outils/cron.php` pose « localhost » pour amorcer SPIP, et tout
+   ce que les tâches de fond fabriquent ensuite en porte la marque.
+
+   L'en-tête n'était que la trace visible. Deux choses autrement coûteuses
+   sortaient par la même porte, et toutes deux depuis le cron : le lien vers le
+   parc dans les alertes, qui renvoyait le webmestre sur sa propre machine, et
+   le sujet VAPID des notifications, que les services de distribution sont en
+   droit de refuser. */
+
+verifier('la meta du site l’emporte sur la requête',
+	dashboard_adresse_tour_choisir('https://tour.example/', 'http://localhost/') === 'https://tour.example/');
+
+verifier('sans meta, on retombe sur la requête',
+	dashboard_adresse_tour_choisir('', 'https://dashboard.test/') === 'https://dashboard.test/');
+
+/* La barre finale est normalisée des deux côtés : sans elle, `url_absolue()`
+   collerait le chemin au nom de domaine. */
+verifier('la barre finale est posée',
+	dashboard_adresse_tour_choisir('https://tour.example', '') === 'https://tour.example/');
+verifier('et jamais doublée',
+	dashboard_adresse_tour_choisir('https://tour.example///', '') === 'https://tour.example/');
+
+/* Une adresse sans schéma n'en est pas une : la joindre à un chemin
+   fabriquerait un lien relatif, qui ramène le lecteur sur la page d'où il vient
+   plutôt que sur le parc. On passe alors au repli. */
+verifier('une meta sans schéma est écartée',
+	dashboard_adresse_tour_choisir('tour.example', 'https://dashboard.test/') === 'https://dashboard.test/');
+
+/* Et quand rien ne vaut, on ne rend rien plutôt qu'une adresse inventée : un
+   `User-Agent` sans adresse vaut mieux qu'un `User-Agent` qui ment. */
+verifier('sans rien de valable, rien',
+	dashboard_adresse_tour_choisir('', '') === '');
+verifier('ni l’une ni l’autre n’étant valables, rien',
+	dashboard_adresse_tour_choisir('localhost', 'ftp://ailleurs/') === '');
+
+/* L'en-tête se compose à partir de là, et le bac à sable fournit une adresse
+   de requête : c'est donc elle qu'on retrouve ici. */
+verifier('l’en-tête porte une adresse joignable',
+	dashboard_user_agent() === 'SPIP Dashboard/1.0 (+https://dashboard.test/)',
+	dashboard_user_agent());
+verifier('et plus jamais localhost',
+	strpos(dashboard_user_agent(), 'localhost') === false);
+
 echo "\n----------------------------------------\n";
 echo ($total - $echecs) . " / $total vérifications passées\n";
 

@@ -1413,6 +1413,45 @@ l'omettrait retomberait sur la valeur de la tour — dégradé, jamais muet. C'e
 le bon sens de la panne : l'inverse laisserait un appel partir sans rien et se
 faire intercepter, pour un diagnostic introuvable.
 
+### `url_de_base()` ment dans une tâche de fond
+
+Trouvé par le webmestre, dans la console d'un Cloudflare qui voyait arriver :
+
+    SPIP Dashboard/1.0 (+http://localhost/)
+
+`url_de_base()` dérive l'adresse de `$_SERVER['HTTP_HOST']`, qui n'existe pas
+hors du web. `outils/cron.php` pose donc `localhost` pour amorcer SPIP — et
+**tout ce que les tâches de fond fabriquent ensuite en porte la marque**, sans
+que rien ne le signale.
+
+L'en-tête n'était que la trace visible. Deux choses autrement coûteuses
+sortaient par la même porte, et toutes deux depuis le cron :
+
+- **le lien vers le parc dans les alertes**, qui renvoyait le webmestre sur sa
+  propre machine. Une alerte qu'on ne peut pas suivre ne vaut guère mieux
+  qu'une alerte qu'on n'envoie pas ;
+- **le sujet VAPID** des notifications, fabriqué au premier envoi donc depuis le
+  cron, et qu'un service de distribution est en droit de refuser.
+
+La meta `adresse_site` est la bonne source : c'est l'adresse que le site se
+connaît, elle ne dépend d'aucune requête, et elle vaut donc autant en ligne de
+commande qu'ailleurs. `dashboard_adresse_tour()` la lit, avec `url_de_base()`
+en repli, et refuse une adresse sans schéma — la joindre à un chemin
+fabriquerait un lien relatif, qui ramène le lecteur sur la page d'où il vient.
+Quand rien ne vaut, elle ne rend rien : un `User-Agent` sans adresse vaut mieux
+qu'un `User-Agent` qui ment.
+
+`outils/cron.php` rend en plus son adresse à `$_SERVER['HTTP_HOST']` une fois la
+base ouverte, pour les génies tiers qui fabriqueraient des URL. **Ceinture
+seulement** : notre code ne s'y fie pas, une fonction du core ayant pu mémoriser
+son résultat avant cette ligne.
+
+Ce que ça ne corrige pas, et qu'il ne faut pas lui prêter : **un `User-Agent`
+honnête ne passe pas le Bot Fight Mode de Cloudflare**, qui vise par
+construction tout ce qui n'est pas un navigateur. Il rend la tour identifiable
+dans un journal et joignable par l'administrateur d'en face, ce qui est déjà
+tout ce qu'on lui demande.
+
 ### Une tranche de taille fixe finit par couper au mauvais endroit
 
 Ajouter cette colonne a fait échouer un contrôle de structure qui n'avait rien à

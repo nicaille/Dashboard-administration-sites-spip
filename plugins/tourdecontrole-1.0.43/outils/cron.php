@@ -89,6 +89,29 @@ if (!defined('_DIRECT_CRON_FORCE')) {
 
 cron_amorcer($racine);
 
+// `HTTP_HOST` a été posé à « localhost » plus haut pour amorcer SPIP : hors du
+// web il n'existe pas, et SPIP le lit sans jamais dire qu'il l'invente. Tout ce
+// que les tâches de fond fabriquent ensuite en porte la marque — un lien d'alerte
+// qui renvoie le webmestre sur sa propre machine, un en-tête `User-Agent` qui
+// annonce `http://localhost/` à l'autre bout. Maintenant que la base est
+// ouverte, le site sait son adresse : on la lui rend.
+//
+// Ceinture seulement : notre propre code passe par `dashboard_adresse_tour()`,
+// qui lit la meta sans dépendre de ceci. Une fonction du core qui aurait déjà
+// mémorisé son résultat avant cette ligne ne le refera pas, et c'est pourquoi on
+// ne s'y fie pas.
+$adresse_tour = trim((string) ($GLOBALS['meta']['adresse_site'] ?? ''));
+if ($adresse_tour !== '') {
+	$hote = (string) parse_url($adresse_tour, PHP_URL_HOST);
+	if ($hote !== '') {
+		$port = parse_url($adresse_tour, PHP_URL_PORT);
+		$_SERVER['HTTP_HOST'] = $hote . ($port ? ':' . (int) $port : '');
+		if (strtolower((string) parse_url($adresse_tour, PHP_URL_SCHEME)) === 'https') {
+			$_SERVER['HTTPS'] = 'on';
+		}
+	}
+}
+
 // La décision de ce que le journal affirme vit dans un `inc/`, pour pouvoir
 // s'éprouver : ce script-ci s'exécute à l'inclusion, donc rien de ce qu'il
 // enferme n'est vérifiable.

@@ -183,6 +183,79 @@ function dashboard_auth_http($site) {
 }
 
 /**
+ * L'adresse publique de la tour, telle qu'elle doit figurer dehors.
+ *
+ * `url_de_base()` la dérive de `$_SERVER['HTTP_HOST']`, qui n'existe pas hors
+ * du web. `outils/cron.php` pose donc `localhost` pour amorcer SPIP — et tout
+ * ce que les tâches de fond fabriquent ensuite en porte la marque. Constaté
+ * dans la console d'un Cloudflare, qui voyait arriver :
+ *
+ *     SPIP Dashboard/1.0 (+http://localhost/)
+ *
+ * L'en-tête n'était que la trace visible. Deux choses autrement coûteuses
+ * sortaient par la même porte, et toutes deux depuis le cron : **le lien vers
+ * le parc dans les alertes**, qui renvoyait le webmestre sur sa propre machine,
+ * et le **sujet VAPID** des notifications, que les services de distribution
+ * sont en droit de refuser.
+ *
+ * La meta `adresse_site` est la bonne source : c'est l'adresse que le site se
+ * connaît, elle ne dépend d'aucune requête, et elle vaut donc autant en ligne
+ * de commande qu'ailleurs. `url_de_base()` reste le repli, pour une base qui
+ * n'aurait pas cette meta.
+ *
+ * @return string Adresse absolue, terminée par une barre oblique
+ */
+function dashboard_adresse_tour() {
+	return dashboard_adresse_tour_choisir(
+		(string) ($GLOBALS['meta']['adresse_site'] ?? ''),
+		function_exists('url_de_base') ? (string) url_de_base() : ''
+	);
+}
+
+/**
+ * Laquelle des deux adresses retenir, et sous quelle forme.
+ *
+ * Pure : les deux sources sont passées, la décision se vérifie seule.
+ *
+ * @param string $meta Adresse que le site se connaît
+ * @param string $repli Adresse dérivée de la requête
+ * @return string
+ */
+function dashboard_adresse_tour_choisir($meta, $repli) {
+	foreach ([$meta, $repli] as $candidate) {
+		$candidate = trim((string) $candidate);
+		if ($candidate === '') {
+			continue;
+		}
+		// Une adresse sans schéma n'en est pas une : la joindre à un chemin
+		// fabriquerait un lien relatif, qui ramène le lecteur sur la page d'où
+		// il vient plutôt que sur le parc.
+		if (!preg_match('#^https?://#i', $candidate)) {
+			continue;
+		}
+
+		return rtrim($candidate, '/') . '/';
+	}
+
+	return '';
+}
+
+/**
+ * Ce que la tour dit d'elle-même à un serveur qu'elle appelle.
+ *
+ * Un nom et une adresse joignable : c'est ce qu'on attend d'un client
+ * automatique, et c'est ce qui permet à l'administrateur d'en face de savoir à
+ * qui écrire. `http://localhost/` ne désigne personne.
+ *
+ * @return string
+ */
+function dashboard_user_agent() {
+	$adresse = dashboard_adresse_tour();
+
+	return 'SPIP Dashboard/1.0' . ($adresse === '' ? '' : ' (+' . $adresse . ')');
+}
+
+/**
  * L'en-tête que la tour joint à chaque appel, pour se faire reconnaître d'un
  * frontal — et rien d'autre.
  *
@@ -703,7 +776,7 @@ function dashboard_http_post_curl($url, $champs, $timeout, $fichier = '', $auth 
 		CURLOPT_FOLLOWLOCATION => false,
 		CURLOPT_SSL_VERIFYPEER => true,
 		CURLOPT_SSL_VERIFYHOST => 2,
-		CURLOPT_USERAGENT      => 'SPIP Dashboard/1.0 (+' . url_de_base() . ')',
+		CURLOPT_USERAGENT      => dashboard_user_agent(),
 		CURLOPT_HTTPHEADER     => ['Accept: application/json', 'Expect:'],
 	];
 
