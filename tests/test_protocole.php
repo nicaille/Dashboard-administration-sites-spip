@@ -2905,6 +2905,78 @@ $muette = dashagent_exception_message(new \LogicException(''));
 verifier('une exception muette est nommée par sa classe',
 	strpos($muette, 'LogicException') === 0, $muette);
 
+echo "\n== Qui a répondu, quand ce n'est pas l'agent ==\n";
+
+/* Un site passé derrière Cloudflare a rendu ceci à la synchronisation :
+
+     Réponse non JSON (HTTP 403) : Just a moment...*{box-sizing:border-box;
+     margin:0;padding:0}html{line-height:1.15;-webkit-text-size-adjust:100%…
+
+   Deux cents caractères de CSS, et pas un mot de ce qui s'était passé. La
+   cause : `strip_tags()` retire les balises et **garde ce qu'elles
+   contenaient** — le contenu d'un `<style>` survit donc intact, et une page de
+   défi commence justement par sa feuille de style. */
+
+$defi = '<!DOCTYPE html><html><head><title>Just a moment...</title>'
+	. '<style>*{box-sizing:border-box;margin:0;padding:0}html{line-height:1.15}</style></head>'
+	. '<body><div class="main-wrapper"><h1>Un instant…</h1>'
+	. '<script src="/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1"></script></body></html>';
+
+verifier('le contenu d’un <style> ne passe plus dans l’extrait',
+	strpos(dashboard_extrait_html($defi), 'box-sizing') === false,
+	dashboard_extrait_html($defi));
+verifier('et le texte de la page, lui, reste lisible',
+	strpos(dashboard_extrait_html($defi), 'Un instant') !== false,
+	dashboard_extrait_html($defi));
+
+/* Une réponse tronquée laisse une ouverture sans sa fermeture : la règle qui
+   cherche une paire ne peut pas la voir. */
+$tronque = '<html><head><style>*{margin:0}html{line-height:1.15';
+verifier('un <style> jamais refermé ne passe pas davantage',
+	strpos(dashboard_extrait_html($tronque), 'line-height') === false,
+	dashboard_extrait_html($tronque));
+
+/* Les entités ne sont pas décodées : ce texte vient d'un site géré, et remettre
+   un `&lt;` en `<` après avoir retiré les balises reviendrait à en refabriquer. */
+verifier('les entités ne sont pas rendues à leur forme active',
+	strpos(dashboard_extrait_html('<p>&lt;svg onload=x&gt;</p>'), '<svg') === false,
+	dashboard_extrait_html('<p>&lt;svg onload=x&gt;</p>'));
+
+/* La coupe se fait sur un caractère, pas sur un octet. */
+$long = str_repeat('é', 300);
+verifier('la coupe ne scinde pas un caractère',
+	mb_check_encoding(dashboard_extrait_html('<p>' . $long . '</p>'), 'UTF-8'));
+
+echo "\n== Nommer le frontal plutôt que citer sa page ==\n";
+
+/* Les marqueurs sont cherchés dans la réponse **entière** : ce qui identifie un
+   défi arrive bien après les deux cents premiers caractères. Chercher dans
+   l'extrait ne reconnaîtrait jamais rien. */
+verifier('un défi Cloudflare est nommé',
+	strpos(dashboard_frontal_nomme(403, $defi), 'défi de navigateur') !== false,
+	dashboard_frontal_nomme(403, $defi));
+
+verifier('un blocage par règle de sécurité aussi',
+	strpos(dashboard_frontal_nomme(403, '<h1>Attention Required! | Cloudflare</h1> error code: 1020'), 'règle de sécurité') !== false);
+
+/* Un 502, 503 ou 504 en HTML reste ce qu'il a toujours été : un frontal dont la
+   patience est plus courte que la nôtre, et qui n'innocente pas seulement
+   l'agent — il dit que l'opération a pu aboutir derrière. */
+verifier('un 503 reste un frontal impatient',
+	strpos(dashboard_frontal_nomme(503, '<html>Service Unavailable</html>'), 'a pu aboutir') !== false);
+
+/* Et ce qu'on ne reconnaît pas ne se nomme pas : mieux vaut l'extrait brut
+   qu'un diagnostic inventé. */
+verifier('une page inconnue n’est pas baptisée',
+	dashboard_frontal_nomme(403, '<html><body>Interdit</body></html>') === '');
+verifier('un 403 nu non plus',
+	dashboard_frontal_nomme(403, '') === '');
+
+/* Quelle que soit la page, la règle du silence ne bouge pas : rien n'a atteint
+   l'agent, donc on ne conclut pas sur l'issue de l'opération. */
+verifier('une réponse illisible reste un silence',
+	dashboard_silence('reponse_illisible') === true);
+
 echo "\n----------------------------------------\n";
 echo ($total - $echecs) . " / $total vérifications passées\n";
 
