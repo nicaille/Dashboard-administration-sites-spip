@@ -34,6 +34,9 @@ function dashboard_schema_sites() {
 			// comme le secret partagé, et ne ressort jamais du formulaire.
 			'auth_user'         => "varchar(128) DEFAULT '' NOT NULL",
 			'auth_pass'         => "text DEFAULT '' NOT NULL",
+			// Chiffrée comme `auth_pass`, et pour la même raison : elle ouvre
+			// une porte. Vide, le site se contente de la valeur de la tour.
+			'frontal_cle'       => "text DEFAULT '' NOT NULL",
 			'groupe'            => "varchar(64) DEFAULT '' NOT NULL",
 			'notes'             => "text DEFAULT '' NOT NULL",
 

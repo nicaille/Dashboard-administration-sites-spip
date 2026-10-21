@@ -16,6 +16,16 @@ if (!defined('_ECRIRE_INC_VERSION')) {
 }
 
 /**
+ * Nom par défaut de l'en-tête que la tour joint à ses appels.
+ *
+ * Préfixé `X-` et nommé en clair : il doit se reconnaître d'un coup d'œil dans
+ * la console d'un frontal, où c'est un humain qui écrira la règle.
+ */
+if (!defined('_DASHBOARD_FRONTAL_ENTETE')) {
+	define('_DASHBOARD_FRONTAL_ENTETE', 'X-Dashboard-Cle');
+}
+
+/**
  * Chiffre une valeur sensible avant stockage.
  *
  * @param string $valeur
@@ -170,6 +180,167 @@ function dashboard_auth_http($site) {
 	}
 
 	return $utilisateur . ':' . dashboard_dechiffrer((string) ($site['auth_pass'] ?? ''));
+}
+
+/**
+ * L'adresse publique de la tour, telle qu'elle doit figurer dehors.
+ *
+ * `url_de_base()` la dérive de `$_SERVER['HTTP_HOST']`, qui n'existe pas hors
+ * du web. `outils/cron.php` pose donc `localhost` pour amorcer SPIP — et tout
+ * ce que les tâches de fond fabriquent ensuite en porte la marque. Constaté
+ * dans la console d'un Cloudflare, qui voyait arriver :
+ *
+ *     SPIP Dashboard/1.0 (+http://localhost/)
+ *
+ * L'en-tête n'était que la trace visible. Deux choses autrement coûteuses
+ * sortaient par la même porte, et toutes deux depuis le cron : **le lien vers
+ * le parc dans les alertes**, qui renvoyait le webmestre sur sa propre machine,
+ * et le **sujet VAPID** des notifications, que les services de distribution
+ * sont en droit de refuser.
+ *
+ * La meta `adresse_site` est la bonne source : c'est l'adresse que le site se
+ * connaît, elle ne dépend d'aucune requête, et elle vaut donc autant en ligne
+ * de commande qu'ailleurs. `url_de_base()` reste le repli, pour une base qui
+ * n'aurait pas cette meta.
+ *
+ * @return string Adresse absolue, terminée par une barre oblique
+ */
+function dashboard_adresse_tour() {
+	return dashboard_adresse_tour_choisir(
+		(string) ($GLOBALS['meta']['adresse_site'] ?? ''),
+		function_exists('url_de_base') ? (string) url_de_base() : ''
+	);
+}
+
+/**
+ * Laquelle des deux adresses retenir, et sous quelle forme.
+ *
+ * Pure : les deux sources sont passées, la décision se vérifie seule.
+ *
+ * @param string $meta Adresse que le site se connaît
+ * @param string $repli Adresse dérivée de la requête
+ * @return string
+ */
+function dashboard_adresse_tour_choisir($meta, $repli) {
+	foreach ([$meta, $repli] as $candidate) {
+		$candidate = trim((string) $candidate);
+		if ($candidate === '') {
+			continue;
+		}
+		// Une adresse sans schéma n'en est pas une : la joindre à un chemin
+		// fabriquerait un lien relatif, qui ramène le lecteur sur la page d'où
+		// il vient plutôt que sur le parc.
+		if (!preg_match('#^https?://#i', $candidate)) {
+			continue;
+		}
+
+		return rtrim($candidate, '/') . '/';
+	}
+
+	return '';
+}
+
+/**
+ * Ce que la tour dit d'elle-même à un serveur qu'elle appelle.
+ *
+ * Un nom et une adresse joignable : c'est ce qu'on attend d'un client
+ * automatique, et c'est ce qui permet à l'administrateur d'en face de savoir à
+ * qui écrire. `http://localhost/` ne désigne personne.
+ *
+ * @return string
+ */
+function dashboard_user_agent() {
+	$adresse = dashboard_adresse_tour();
+
+	return 'SPIP Dashboard/1.0' . ($adresse === '' ? '' : ' (+' . $adresse . ')');
+}
+
+/**
+ * L'en-tête que la tour joint à chaque appel, pour se faire reconnaître d'un
+ * frontal — et rien d'autre.
+ *
+ * Un site passé derrière Cloudflare, Sucuri ou un WAF d'hébergeur voit ses
+ * appels interceptés avant PHP : l'agent n'est jamais atteint. La parade
+ * courante — une règle visée sur l'adresse IP de la tour — tient mal : l'IP
+ * sortante d'un hébergement mutualisé n'est pas celle de son nom de domaine, et
+ * elle change sans préavis. Un en-tête que la tour est seule à envoyer se
+ * reconnaît sans rien supposer du réseau.
+ *
+ * **Ce n'est pas une authentification, et il ne faut pas le lire comme telle.**
+ * C'est exactement le statut des identifiants `htpasswd` déjà portés ici : ils
+ * **ouvrent la porte**, la signature **authentifie l'appel**. Quelqu'un qui
+ * connaîtrait cette valeur franchirait le frontal pour se faire refuser par
+ * `dashagent_verifier_signature()`.
+ *
+ * **La valeur du site l'emporte sur celle de la tour**, et c'est ce qui rend le
+ * réglage tenable. Une valeur unique part vers *tous* les sites gérés : un site
+ * compromis l'apprend, et pourrait s'en servir pour franchir le frontal d'un
+ * autre — où la signature l'arrêtera, mais le frontal aura été franchi. Une
+ * clef propre à un site ne voyage que vers lui, et son éventuelle fuite
+ * n'ouvre rien ailleurs.
+ *
+ * Celle de la tour reste le défaut, parce qu'elle vaut pour le cas courant :
+ * une seule règle à écrire pour dix zones. Vide côté site, le site en hérite ;
+ * renseignée, elle est seule à partir.
+ *
+ * Le **nom** de l'en-tête, lui, reste commun : c'est la valeur qui distingue,
+ * et un nom par site obligerait à autant de règles différentes sans rien
+ * protéger de plus.
+ *
+ * @param array $site Ligne de `spip_dashboard_sites`, ou tableau vide
+ * @return string La ligne d'en-tête, ou chaîne vide si le réglage est éteint
+ */
+function dashboard_frontal_entete($site = []) {
+	$propre = trim((string) (is_array($site) ? ($site['frontal_cle'] ?? '') : ''));
+	$valeur = ($propre !== '')
+		? dashboard_dechiffrer($propre)
+		: (string) dashboard_config('frontal_cle', '');
+
+	return dashboard_frontal_entete_ligne(
+		(string) dashboard_config('frontal_entete', _DASHBOARD_FRONTAL_ENTETE),
+		(string) $valeur
+	);
+}
+
+/**
+ * Compose et valide une ligne d'en-tête.
+ *
+ * Deux refus, et le second n'est pas une précaution de style : **une valeur qui
+ * contient un retour à la ligne injecte des en-têtes** dans toutes les requêtes
+ * sortantes de la tour. La valeur vient du formulaire de configuration, donc
+ * d'un webmestre — mais un collage malheureux suffit, et le prix de l'erreur
+ * est que la tour parle à tout le parc avec des en-têtes qu'elle n'a pas
+ * voulus.
+ *
+ * Le nom suit le jeton de la RFC 7230 : lettres, chiffres et une poignée de
+ * signes, rien d'autre.
+ *
+ * Pure : ni base, ni réseau, ni configuration lue au vol.
+ *
+ * @param string $nom
+ * @param string $valeur Vide : le réglage est éteint, et rien n'est envoyé
+ * @return string
+ */
+function dashboard_frontal_entete_ligne($nom, $valeur) {
+	$nom    = trim((string) $nom);
+	$valeur = trim((string) $valeur);
+
+	if ($valeur === '' || $nom === '') {
+		return '';
+	}
+
+	if (!preg_match('/^[!#$%&\x27*+.^_`|~0-9A-Za-z-]+$/', $nom)) {
+		return '';
+	}
+
+	// Les caractères de contrôle, et pas seulement CR et LF : un octet nul
+	// tronque la chaîne pour certaines couches, un octet de contrôle isolé
+	// n'a de toute façon rien à faire dans une valeur d'en-tête.
+	if (preg_match('/[\x00-\x1f\x7f]/', $valeur)) {
+		return '';
+	}
+
+	return $nom . ': ' . $valeur;
 }
 
 /**
@@ -404,7 +575,7 @@ function dashboard_appeler($site, $op, $args = [], $options = []) {
 	$champs = dashboard_signer($op, $json, $ts, $nonce, $secret);
 
 	$timeout = (int) ($options['timeout'] ?? dashboard_config('timeout', 30));
-	$http    = dashboard_http_post($url, $champs, $timeout, '', dashboard_auth_http($site));
+	$http    = dashboard_http_post($url, $champs, $timeout, '', dashboard_auth_http($site), $site);
 
 	if (!$http['ok']) {
 		return dashboard_reponse_erreur('transport', $http['erreur'], $debut, $http['code']);
@@ -482,7 +653,8 @@ function dashboard_telecharger_sauvegarde($site, $identifiant, $destination) {
 		$champs,
 		(int) dashboard_config('timeout_long', 300),
 		$destination,
-		dashboard_auth_http($site)
+		dashboard_auth_http($site),
+		$site
 	);
 
 	if (!$http['ok']) {
@@ -525,11 +697,18 @@ function dashboard_telecharger_sauvegarde($site, $identifiant, $destination) {
  * @param string $fichier Si fourni, le corps est écrit dans ce fichier
  * @return array{ok: bool, code: int, corps: string, erreur: string}
  */
-function dashboard_http_post($url, $champs, $timeout = 30, $fichier = '', $auth = '') {
+function dashboard_http_post($url, $champs, $timeout = 30, $fichier = '', $auth = '', $site = []) {
 	$timeout = max(5, min(900, (int) $timeout));
 
+	// Le site voyage jusqu'ici pour que l'en-tête de reconnaissance soit lu au
+	// seul endroit par où tout passe. Un appelant qui l'oublierait retomberait
+	// sur la valeur de la tour : dégradé, jamais muet — c'est le bon sens de la
+	// panne, l'inverse laisserait un appel partir sans rien et se faire
+	// intercepter sans qu'on sache pourquoi.
+	$frontal = dashboard_frontal_entete($site);
+
 	if (function_exists('curl_init')) {
-		return dashboard_http_post_curl($url, $champs, $timeout, $fichier, $auth);
+		return dashboard_http_post_curl($url, $champs, $timeout, $fichier, $auth, $frontal);
 	}
 
 	include_spip('inc/distant');
@@ -545,8 +724,18 @@ function dashboard_http_post($url, $champs, $timeout = 30, $fichier = '', $auth 
 	// L'en-tête plutôt que `https://user:pass@site/` : une adresse porteuse
 	// d'identifiants finit dans les journaux du serveur et dans les messages
 	// d'erreur, l'en-tête non.
+	$entetes = [];
 	if ($auth !== '') {
-		$options['entetes'] = 'Authorization: Basic ' . base64_encode($auth);
+		$entetes[] = 'Authorization: Basic ' . base64_encode($auth);
+	}
+	// L'en-tête de reconnaissance se lit ici, et non chez l'appelant : tout ce
+	// qui part vers un agent passe par cette fonction, et un nouveau chemin
+	// l'oublierait s'il fallait y penser à chaque fois.
+	if ($frontal !== '') {
+		$entetes[] = $frontal;
+	}
+	if ($entetes) {
+		$options['entetes'] = implode("\r\n", $entetes);
 	}
 	$res = recuperer_url($url, $options);
 
@@ -570,7 +759,7 @@ function dashboard_http_post($url, $champs, $timeout = 30, $fichier = '', $auth 
  * @param string $fichier
  * @return array
  */
-function dashboard_http_post_curl($url, $champs, $timeout, $fichier = '', $auth = '') {
+function dashboard_http_post_curl($url, $champs, $timeout, $fichier = '', $auth = '', $frontal = '') {
 	$ch = curl_init($url);
 	if (!$ch) {
 		return ['ok' => false, 'code' => 0, 'corps' => '', 'erreur' => 'Initialisation cURL impossible'];
@@ -587,9 +776,13 @@ function dashboard_http_post_curl($url, $champs, $timeout, $fichier = '', $auth 
 		CURLOPT_FOLLOWLOCATION => false,
 		CURLOPT_SSL_VERIFYPEER => true,
 		CURLOPT_SSL_VERIFYHOST => 2,
-		CURLOPT_USERAGENT      => 'SPIP Dashboard/1.0 (+' . url_de_base() . ')',
+		CURLOPT_USERAGENT      => dashboard_user_agent(),
 		CURLOPT_HTTPHEADER     => ['Accept: application/json', 'Expect:'],
 	];
+
+	if ($frontal !== '') {
+		$options[CURLOPT_HTTPHEADER][] = $frontal;
+	}
 
 	// Basic et rien d'autre : `CURLAUTH_ANY` ferait d'abord un appel à blanc
 	// pour découvrir la méthode, et surtout accepterait qu'un serveur réclame

@@ -1363,6 +1363,125 @@ le frontal ne couvre pas — ne dégrade pas la sécurité du parc, et c'est ce 
 le rend acceptable : **le frontal n'authentifie rien de ce protocole**. La
 signature le fait, et elle seule.
 
+### Se faire reconnaître d'un frontal n'est pas s'authentifier auprès de lui
+
+Une règle visée sur l'adresse IP de la tour tient mal, et pour une raison qu'on
+ne voit pas en l'écrivant : **l'adresse sortante d'un hébergement mutualisé
+n'est pas celle de son nom de domaine**, et elle change sans préavis. En
+production, une règle posée sur la mauvaise des deux n'a rien changé — et le
+message d'erreur, identique, ne pouvait pas le dire.
+
+D'où `dashboard_frontal_entete()` : un en-tête que la tour est seule à envoyer,
+que le webmestre reconnaît dans une règle de son frontal. Il ne dépend d'aucune
+adresse, et la même valeur sert pour toutes les zones.
+
+**Ce qu'un en-tête ne peut pas contourner, et il a fallu le mesurer pour le
+savoir** : chez Cloudflare, le mot « règle » recouvre deux objets qui ne
+s'exécutent pas au même moment. Une **règle WAF personnalisée** (*Custom rule*),
+même d'action *Skip*, passe **après** le Bot Fight Mode : visée sur un en-tête
+comme sur une adresse, elle ne le contourne pas. Une **règle d'accès IP** (*IP
+Access Rule*, `mode: whitelist`, rangée ailleurs dans l'interface et posable par
+l'API) passe **avant** lui, et elle seule le contourne — c'est elle qui a réglé
+le cas en production, le webmestre l'ayant trouvée après que j'aie écrit ici
+qu'aucune règle n'y parvenait.
+
+L'en-tête garde donc son emploi — les défis gérés, les règles WAF du webmestre,
+un frontal qu'on administre soi-même — et **pas celui-là**. Ce qui s'en déduit
+vaut au-delà de Cloudflare : *« une règle le laisse passer »* n'est pas une
+propriété du frontal, c'est une propriété de **l'endroit où la règle s'exécute
+dans sa chaîne**, et deux objets portant le même nom dans la même interface n'y
+sont pas au même rang.
+
+C'est **exactement** le statut des identifiants `htpasswd` : ils **ouvrent la
+porte**, la signature **authentifie l'appel**. Le code doit le dire, parce que
+rien dans la forme ne l'indique — un en-tête secret ressemble à s'y méprendre à
+une authentification, et quelqu'un finirait par s'y fier.
+
+**La clef d'un site l'emporte sur celle de la tour**, et c'est ce qui rend le
+réglage tenable. Une valeur unique part vers *tous* les sites gérés : un site
+compromis l'apprend, et pourrait s'en servir pour franchir le frontal d'un autre
+— où la signature l'arrêtera, mais le frontal aura été franchi. Une clef propre
+ne voyage que vers son site. Celle de la tour reste le défaut parce qu'elle vaut
+pour le cas courant, une seule règle à écrire pour dix zones.
+
+Le **nom** de l'en-tête reste commun : c'est la valeur qui distingue, et un nom
+par site obligerait à autant de règles différentes sans rien protéger de plus.
+
+Elle voyage protégée par le seul https, et se stocke chiffrée comme le mot de
+passe `htpasswd` voisin. Un site dont le frontal doit rester la seule barrière
+prend de toute façon un `url_agent` non proxifié.
+
+**Le refus qui compte est celui du retour à la ligne.** Une valeur qui en porte
+un **injecte des en-têtes** dans toutes les requêtes sortantes de la tour. La
+valeur vient d'un webmestre, mais un collage malheureux suffit, et le prix de
+l'erreur est que la tour parle à tout le parc avec des en-têtes qu'elle n'a pas
+voulus. Le nom suit le jeton de la RFC 7230, pour la même raison : un
+deux-points y fabriquerait un second en-tête tout autant.
+
+Et **un seul lecteur de la règle** : le formulaire de configuration refuse en
+appelant `dashboard_frontal_entete_ligne()`, celle-là même qui compose l'envoi.
+Une seconde expression régulière écrite dans la validation finirait par diverger,
+et laisserait enregistrer une valeur qui ne partirait jamais — sans rien dire.
+
+L'en-tête se lit dans `dashboard_http_post()` et non chez l'appelant : tout ce
+qui part vers un agent passe par elle, et un nouveau chemin l'oublierait s'il
+fallait y penser à chaque fois. Le site y voyage en argument, et un appelant qui
+l'omettrait retomberait sur la valeur de la tour — dégradé, jamais muet. C'est
+le bon sens de la panne : l'inverse laisserait un appel partir sans rien et se
+faire intercepter, pour un diagnostic introuvable.
+
+### `url_de_base()` ment dans une tâche de fond
+
+Trouvé par le webmestre, dans la console d'un Cloudflare qui voyait arriver :
+
+    SPIP Dashboard/1.0 (+http://localhost/)
+
+`url_de_base()` dérive l'adresse de `$_SERVER['HTTP_HOST']`, qui n'existe pas
+hors du web. `outils/cron.php` pose donc `localhost` pour amorcer SPIP — et
+**tout ce que les tâches de fond fabriquent ensuite en porte la marque**, sans
+que rien ne le signale.
+
+L'en-tête n'était que la trace visible. Deux choses autrement coûteuses
+sortaient par la même porte, et toutes deux depuis le cron :
+
+- **le lien vers le parc dans les alertes**, qui renvoyait le webmestre sur sa
+  propre machine. Une alerte qu'on ne peut pas suivre ne vaut guère mieux
+  qu'une alerte qu'on n'envoie pas ;
+- **le sujet VAPID** des notifications, fabriqué au premier envoi donc depuis le
+  cron, et qu'un service de distribution est en droit de refuser.
+
+La meta `adresse_site` est la bonne source : c'est l'adresse que le site se
+connaît, elle ne dépend d'aucune requête, et elle vaut donc autant en ligne de
+commande qu'ailleurs. `dashboard_adresse_tour()` la lit, avec `url_de_base()`
+en repli, et refuse une adresse sans schéma — la joindre à un chemin
+fabriquerait un lien relatif, qui ramène le lecteur sur la page d'où il vient.
+Quand rien ne vaut, elle ne rend rien : un `User-Agent` sans adresse vaut mieux
+qu'un `User-Agent` qui ment.
+
+`outils/cron.php` rend en plus son adresse à `$_SERVER['HTTP_HOST']` une fois la
+base ouverte, pour les génies tiers qui fabriqueraient des URL. **Ceinture
+seulement** : notre code ne s'y fie pas, une fonction du core ayant pu mémoriser
+son résultat avant cette ligne.
+
+Ce que ça ne corrige pas, et qu'il ne faut pas lui prêter : **un `User-Agent`
+honnête ne passe pas le Bot Fight Mode de Cloudflare**, qui vise par
+construction tout ce qui n'est pas un navigateur. Il rend la tour identifiable
+dans un journal et joignable par l'administrateur d'en face, ce qui est déjà
+tout ce qu'on lui demande.
+
+### Une tranche de taille fixe finit par couper au mauvais endroit
+
+Ajouter cette colonne a fait échouer un contrôle de structure qui n'avait rien à
+voir : il lisait le corps d'une fonction de déclaration de tables sur **trois
+mille caractères**, et la colonne de plus a repoussé `'maj'` au-delà de la
+fenêtre. Le contrôle a donc accusé une table qui la porte.
+
+Il aurait pu faire pire dans l'autre sens — passer au vert sur une tranche qui
+ne contient plus rien de ce qu'il cherche. `corps_de_fonction()` lit désormais
+la fonction entière par `token_get_all()`, une accolade pouvant vivre dans une
+chaîne ou un commentaire, où seul l'analyseur de PHP sait laquelle compte.
+Éprouvé par mutation : retirer la colonne `maj` fait bien échouer le contrôle.
+
 ## Une action n'amorce pas ce qu'amorce une page
 
 `spip.php?action=dashagent` ne charge ni `inc/texte` ni `inc/filtres`. Tant

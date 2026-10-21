@@ -30,6 +30,8 @@ function formulaires_configurer_dashboard_charger_dist() {
 		// Pas `dashboard_config()` : une case décochée vaut la chaîne vide,
 		// qu'il traite comme une absence et remplace par le défaut.
 		'sync_auto'             => dashboard_sync_auto() ? 'on' : '',
+		'frontal_entete'        => dashboard_config('frontal_entete', _DASHBOARD_FRONTAL_ENTETE),
+		'frontal_cle'           => dashboard_config('frontal_cle', ''),
 		'sync_frequence'        => dashboard_config('sync_frequence', 6),
 		'sync_lot'              => dashboard_config('sync_lot', 10),
 		'sync_budget'           => dashboard_sync_budget(),
@@ -66,6 +68,15 @@ function formulaires_configurer_dashboard_verifier_dist() {
 	}
 	if ((int) _request('timeout_long') < 30 || (int) _request('timeout_long') > 900) {
 		$erreurs['timeout_long'] = _T('dashboard:erreur_timeout_long');
+	}
+
+	// Le refus passe par la fonction qui compose l'en-tête, et non par une
+	// seconde expression régulière écrite ici : deux lecteurs d'une même règle
+	// finissent toujours par diverger, et celui-ci laisserait passer ce que
+	// l'autre refuse — l'en-tête ne partirait alors jamais, sans rien dire.
+	$cle = trim((string) _request('frontal_cle'));
+	if ($cle !== '' && dashboard_frontal_entete_ligne((string) _request('frontal_entete'), $cle) === '') {
+		$erreurs['frontal_cle'] = _T('dashboard:erreur_frontal_cle');
 	}
 	// Le http n'est toléré que si la case de développement local est cochée, et
 	// il ne suffit pas : l'agent refuse de son côté toute archive en clair tant
@@ -152,6 +163,8 @@ function formulaires_configurer_dashboard_traiter_dist() {
 	// Même borne basse que le lecteur : le formulaire et le génie ne doivent
 	// pas pouvoir se contredire sur ce qu'est un budget acceptable.
 	$config['sync_budget']           = max(5, (int) _request('sync_budget'));
+	$config['frontal_entete']        = trim((string) _request('frontal_entete'));
+	$config['frontal_cle']           = trim((string) _request('frontal_cle'));
 	$config['url_versions_spip']     = trim((string) _request('url_versions_spip'));
 	$config['url_archives_spip']     = trim((string) _request('url_archives_spip'));
 	$config['url_spip_loader']       = trim((string) _request('url_spip_loader'));

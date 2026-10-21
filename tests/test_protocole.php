@@ -2977,6 +2977,162 @@ verifier('un 403 nu non plus',
 verifier('une réponse illisible reste un silence',
 	dashboard_silence('reponse_illisible') === true);
 
+echo "\n== Se faire reconnaître d'un frontal, sans s'authentifier auprès de lui ==\n";
+
+/* Un frontal — Cloudflare, WAF d'hébergeur — intercepte les appels avant PHP.
+   La parade courante, une règle visée sur l'adresse IP de la tour, tient mal :
+   l'IP sortante d'un mutualisé n'est pas celle de son nom de domaine, et elle
+   change sans préavis. Un en-tête que la tour est seule à envoyer se reconnaît
+   sans rien supposer du réseau.
+
+   Ce n'est **pas** une authentification, et le code ne doit pas le laisser
+   croire : c'est le statut des identifiants htpasswd déjà portés ici. Ils
+   ouvrent la porte, la signature authentifie l'appel. */
+
+verifier('un réglage renseigné compose la ligne',
+	dashboard_frontal_entete_ligne('X-Dashboard-Cle', 's3cr3t') === 'X-Dashboard-Cle: s3cr3t');
+
+/* Vide veut dire éteint : rien ne part, et surtout pas un en-tête sans valeur
+   qui ferait croire à une règle en place. */
+verifier('une valeur vide éteint le réglage',
+	dashboard_frontal_entete_ligne('X-Dashboard-Cle', '') === '');
+verifier('des espaces seuls aussi',
+	dashboard_frontal_entete_ligne('X-Dashboard-Cle', "   ") === '');
+verifier('un nom vide éteint le réglage',
+	dashboard_frontal_entete_ligne('', 's3cr3t') === '');
+
+/* Le refus qui compte. Une valeur portant un retour à la ligne **injecte des
+   en-têtes** dans toutes les requêtes sortantes de la tour. La valeur vient
+   d'un webmestre, mais un collage malheureux suffit, et le prix de l'erreur est
+   que la tour parle à tout le parc avec des en-têtes qu'elle n'a pas voulus. */
+verifier('un retour chariot est refusé',
+	dashboard_frontal_entete_ligne('X-Dashboard-Cle', "abc\r\nX-Forwarded-For: 127.0.0.1") === '');
+verifier('un saut de ligne seul aussi',
+	dashboard_frontal_entete_ligne('X-Dashboard-Cle', "abc\nX-Autre: 1") === '');
+verifier('un octet nul aussi',
+	dashboard_frontal_entete_ligne('X-Dashboard-Cle', "abc\x00def") === '');
+
+/* Le nom suit le jeton de la RFC 7230 : un deux-points ou une espace y
+   fabriquerait un second en-tête tout autant. */
+verifier('un nom à deux-points est refusé',
+	dashboard_frontal_entete_ligne('X-Cle: autre', 's3cr3t') === '');
+verifier('un nom à espace est refusé',
+	dashboard_frontal_entete_ligne('X Cle', 's3cr3t') === '');
+verifier('un nom à accent est refusé',
+	dashboard_frontal_entete_ligne('X-Clé', 's3cr3t') === '');
+
+/* Et ce que la RFC autorise passe : refuser trop large obligerait le webmestre
+   à deviner notre propre règle plutôt que celle de son frontal. */
+verifier('les signes du jeton RFC sont acceptés',
+	dashboard_frontal_entete_ligne('X-Dash_Cle.1', 'v') === 'X-Dash_Cle.1: v');
+
+/* Les bords sont rognés des deux côtés : un nom recopié depuis une console en
+   traîne souvent. */
+verifier('les bords sont rognés',
+	dashboard_frontal_entete_ligne('  X-Dashboard-Cle  ', '  s3cr3t  ') === 'X-Dashboard-Cle: s3cr3t');
+
+/* Le lecteur de configuration passe par la même fonction. Un seul lecteur :
+   le formulaire refuse exactement ce que l'envoi refuserait, sans quoi une
+   valeur acceptée ne partirait jamais, et rien ne le dirait. */
+$GLOBALS['dashboard_config_test'] = [];
+verifier('éteint par défaut', dashboard_frontal_entete() === '');
+
+$GLOBALS['dashboard_config_test'] = ['frontal_cle' => 'ouvre-toi'];
+verifier('le nom par défaut sert quand on ne le règle pas',
+	dashboard_frontal_entete() === _DASHBOARD_FRONTAL_ENTETE . ': ouvre-toi',
+	dashboard_frontal_entete());
+
+$GLOBALS['dashboard_config_test'] = ['frontal_entete' => 'X-Parc', 'frontal_cle' => 'ouvre-toi'];
+verifier('et le nom réglé l’emporte', dashboard_frontal_entete() === 'X-Parc: ouvre-toi');
+
+/* La clef d'un site l'emporte sur celle de la tour, et c'est ce qui rend le
+   réglage tenable : une valeur unique part vers *tous* les sites gérés, donc un
+   site compromis l'apprend et pourrait franchir le frontal d'un autre — où la
+   signature l'arrêtera, mais le frontal aura été franchi. Une clef propre ne
+   voyage que vers son site. */
+$GLOBALS['dashboard_config_test'] = ['frontal_cle' => 'celle-de-la-tour'];
+
+$site_sans = ['frontal_cle' => ''];
+verifier('un site sans clef propre hérite de celle de la tour',
+	dashboard_frontal_entete($site_sans) === _DASHBOARD_FRONTAL_ENTETE . ': celle-de-la-tour');
+
+$site_avec = ['frontal_cle' => dashboard_chiffrer('la-sienne')];
+verifier('une clef propre l’emporte',
+	dashboard_frontal_entete($site_avec) === _DASHBOARD_FRONTAL_ENTETE . ': la-sienne',
+	dashboard_frontal_entete($site_avec));
+
+/* Elle est chiffrée en base, comme le mot de passe htpasswd : la lire sans la
+   déchiffrer enverrait au frontal une valeur qui ne correspond à aucune règle,
+   et l'appel serait intercepté sans que rien ne dise pourquoi. */
+verifier('la clef du site voyage en clair, pas chiffrée',
+	strpos(dashboard_frontal_entete($site_avec), (string) $site_avec['frontal_cle']) === false);
+
+/* Un appelant qui ne passe pas le site retombe sur la valeur de la tour.
+   Dégradé, jamais muet : l'inverse laisserait un appel partir sans en-tête et
+   se faire intercepter, pour un diagnostic introuvable. */
+verifier('sans site, la tour fait foi',
+	dashboard_frontal_entete() === _DASHBOARD_FRONTAL_ENTETE . ': celle-de-la-tour');
+verifier('un site mal formé ne fait pas tomber la lecture',
+	dashboard_frontal_entete('pas un tableau') === _DASHBOARD_FRONTAL_ENTETE . ': celle-de-la-tour');
+
+/* Et une clef propre suffit, même si la tour n'en a aucune : un parc peut
+   n'avoir qu'un seul site derrière un frontal. */
+$GLOBALS['dashboard_config_test'] = [];
+verifier('une clef propre vaut sans clef de tour',
+	dashboard_frontal_entete($site_avec) === _DASHBOARD_FRONTAL_ENTETE . ': la-sienne');
+
+$GLOBALS['dashboard_config_test'] = [];
+
+echo "\n== L'adresse que la tour donne d'elle-même ==\n";
+
+/* Repéré dans la console d'un Cloudflare, qui voyait arriver :
+
+       SPIP Dashboard/1.0 (+http://localhost/)
+
+   `url_de_base()` dérive l'adresse de `$_SERVER['HTTP_HOST']`, qui n'existe pas
+   hors du web : `outils/cron.php` pose « localhost » pour amorcer SPIP, et tout
+   ce que les tâches de fond fabriquent ensuite en porte la marque.
+
+   L'en-tête n'était que la trace visible. Deux choses autrement coûteuses
+   sortaient par la même porte, et toutes deux depuis le cron : le lien vers le
+   parc dans les alertes, qui renvoyait le webmestre sur sa propre machine, et
+   le sujet VAPID des notifications, que les services de distribution sont en
+   droit de refuser. */
+
+verifier('la meta du site l’emporte sur la requête',
+	dashboard_adresse_tour_choisir('https://tour.example/', 'http://localhost/') === 'https://tour.example/');
+
+verifier('sans meta, on retombe sur la requête',
+	dashboard_adresse_tour_choisir('', 'https://dashboard.test/') === 'https://dashboard.test/');
+
+/* La barre finale est normalisée des deux côtés : sans elle, `url_absolue()`
+   collerait le chemin au nom de domaine. */
+verifier('la barre finale est posée',
+	dashboard_adresse_tour_choisir('https://tour.example', '') === 'https://tour.example/');
+verifier('et jamais doublée',
+	dashboard_adresse_tour_choisir('https://tour.example///', '') === 'https://tour.example/');
+
+/* Une adresse sans schéma n'en est pas une : la joindre à un chemin
+   fabriquerait un lien relatif, qui ramène le lecteur sur la page d'où il vient
+   plutôt que sur le parc. On passe alors au repli. */
+verifier('une meta sans schéma est écartée',
+	dashboard_adresse_tour_choisir('tour.example', 'https://dashboard.test/') === 'https://dashboard.test/');
+
+/* Et quand rien ne vaut, on ne rend rien plutôt qu'une adresse inventée : un
+   `User-Agent` sans adresse vaut mieux qu'un `User-Agent` qui ment. */
+verifier('sans rien de valable, rien',
+	dashboard_adresse_tour_choisir('', '') === '');
+verifier('ni l’une ni l’autre n’étant valables, rien',
+	dashboard_adresse_tour_choisir('localhost', 'ftp://ailleurs/') === '');
+
+/* L'en-tête se compose à partir de là, et le bac à sable fournit une adresse
+   de requête : c'est donc elle qu'on retrouve ici. */
+verifier('l’en-tête porte une adresse joignable',
+	dashboard_user_agent() === 'SPIP Dashboard/1.0 (+https://dashboard.test/)',
+	dashboard_user_agent());
+verifier('et plus jamais localhost',
+	strpos(dashboard_user_agent(), 'localhost') === false);
+
 echo "\n----------------------------------------\n";
 echo ($total - $echecs) . " / $total vérifications passées\n";
 

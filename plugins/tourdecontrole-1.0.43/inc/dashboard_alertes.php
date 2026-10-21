@@ -393,7 +393,11 @@ function dashboard_alerte_diffuser($etat) {
 
 	$bilan = ['courriels' => 0, 'push' => 0, 'retires' => 0];
 
-	$url_parc = url_absolue(generer_url_ecrire('dashboard'), url_de_base());
+	// `dashboard_adresse_tour()` et non `url_de_base()` : ce code tourne depuis
+	// le cron, où l'adresse dérivée de la requête vaut « localhost ». Le lien
+	// renvoyait alors le webmestre sur sa propre machine — une alerte qu'on ne
+	// peut pas suivre ne vaut guère mieux qu'une alerte qu'on n'envoie pas.
+	$url_parc = url_absolue(generer_url_ecrire('dashboard'), dashboard_adresse_tour());
 	$message  = dashboard_alerte_texte($etat, $url_parc);
 
 	// --- Courriel ---------------------------------------------------------
@@ -513,9 +517,12 @@ function dashboard_push_vapid() {
 	$sujet = (string) dashboard_config('alerte_sujet', '');
 	if ($sujet === '') {
 		$destinataires = dashboard_alerte_destinataires();
+		// Même raison : la paire VAPID se fabrique au premier envoi, donc
+		// depuis le cron. Un sujet en `http://localhost/` ne désigne personne,
+		// et un service de distribution est en droit de refuser l'envoi.
 		$sujet = $destinataires
 			? 'mailto:' . $destinataires[0]
-			: url_de_base();
+			: dashboard_adresse_tour();
 	} elseif (strpos($sujet, ':') === false) {
 		$sujet = 'mailto:' . $sujet;
 	}

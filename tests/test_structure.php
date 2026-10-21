@@ -470,11 +470,16 @@ foreach ($plugins as $plugin) {
 				$bloc  = $fin === false ? $suite : substr($suite, 0, $fin);
 
 				// Déclarée par une fonction : c'est son corps qu'il faut lire.
+				//
+				// Entier, et non les trois mille premiers caractères comme le
+				// faisait la version d'avant : une colonne ajoutée au début a
+				// suffi à repousser `'maj'` au-delà de la fenêtre, et le
+				// contrôle a échoué sur une table qui la porte pourtant. Une
+				// tranche de taille fixe finit toujours par couper au mauvais
+				// endroit — et, selon le sens de la coupe, par accuser à tort
+				// ou par passer au vert sans avoir rien lu.
 				if (preg_match('/=\s*([a-z_][a-z0-9_]*)\(\s*\)\s*;/i', $bloc, $appel)) {
-					$debut = strpos($source, 'function ' . $appel[1] . '(');
-					if ($debut !== false) {
-						$bloc .= substr($source, $debut, 3000);
-					}
+					$bloc .= corps_de_fonction($source, $appel[1]);
 				}
 
 				if (strpos($bloc, "'maj'") !== false) {
@@ -724,6 +729,51 @@ function php_sans_commentaires($code) {
 	}
 
 	return implode(' ', $garde);
+}
+
+/**
+ * Le corps d'une fonction PHP, accolades comprises.
+ *
+ * `token_get_all()` plutôt qu'une expression régulière : une accolade peut
+ * vivre dans une chaîne ou dans un commentaire, et seul l'analyseur de PHP sait
+ * laquelle compte. Rend la chaîne vide si la fonction est introuvable — à
+ * l'appelant de décider ce que ça vaut.
+ *
+ * @param string $source
+ * @param string $nom
+ * @return string
+ */
+function corps_de_fonction($source, $nom) {
+	$jetons = token_get_all($source);
+	$vu     = false;
+	$niveau = 0;
+	$corps  = '';
+
+	foreach ($jetons as $jeton) {
+		if (!$vu) {
+			if (is_array($jeton) && $jeton[0] === T_STRING && $jeton[1] === $nom) {
+				$vu = true;
+			}
+			continue;
+		}
+
+		$texte = is_array($jeton) ? $jeton[1] : $jeton;
+
+		if ($texte === '{') {
+			$niveau++;
+		}
+		if ($niveau > 0) {
+			$corps .= $texte;
+		}
+		if ($texte === '}') {
+			$niveau--;
+			if ($niveau === 0) {
+				return $corps;
+			}
+		}
+	}
+
+	return $corps;
 }
 
 function premiere_occurrence($motif, $sujet) {
