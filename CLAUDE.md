@@ -1375,6 +1375,23 @@ D'où `dashboard_frontal_entete()` : un en-tête que la tour est seule à envoye
 que le webmestre reconnaît dans une règle de son frontal. Il ne dépend d'aucune
 adresse, et la même valeur sert pour toutes les zones.
 
+**Ce qu'un en-tête ne peut pas contourner, et il a fallu le mesurer pour le
+savoir** : chez Cloudflare, le mot « règle » recouvre deux objets qui ne
+s'exécutent pas au même moment. Une **règle WAF personnalisée** (*Custom rule*),
+même d'action *Skip*, passe **après** le Bot Fight Mode : visée sur un en-tête
+comme sur une adresse, elle ne le contourne pas. Une **règle d'accès IP** (*IP
+Access Rule*, `mode: whitelist`, rangée ailleurs dans l'interface et posable par
+l'API) passe **avant** lui, et elle seule le contourne — c'est elle qui a réglé
+le cas en production, le webmestre l'ayant trouvée après que j'aie écrit ici
+qu'aucune règle n'y parvenait.
+
+L'en-tête garde donc son emploi — les défis gérés, les règles WAF du webmestre,
+un frontal qu'on administre soi-même — et **pas celui-là**. Ce qui s'en déduit
+vaut au-delà de Cloudflare : *« une règle le laisse passer »* n'est pas une
+propriété du frontal, c'est une propriété de **l'endroit où la règle s'exécute
+dans sa chaîne**, et deux objets portant le même nom dans la même interface n'y
+sont pas au même rang.
+
 C'est **exactement** le statut des identifiants `htpasswd` : ils **ouvrent la
 porte**, la signature **authentifie l'appel**. Le code doit le dire, parce que
 rien dans la forme ne l'indique — un en-tête secret ressemble à s'y méprendre à
