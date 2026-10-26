@@ -203,6 +203,12 @@ function dashboard_auth_http($site) {
  * de commande qu'ailleurs. `url_de_base()` reste le repli, pour une base qui
  * n'aurait pas cette meta.
  *
+ * Mais lire la bonne source ne suffisait pas : l'une comme l'autre peut rendre
+ * `localhost`, et c'est bien ce qui est parti en production — un courriel
+ * d'alerte dont le lien renvoyait le webmestre sur sa propre machine. Garder la
+ * source sans regarder la valeur laisse passer exactement ce qu'on voulait
+ * empêcher ; d'où le refus des noms qui désignent la machine elle-même.
+ *
  * @return string Adresse absolue, terminée par une barre oblique
  */
 function dashboard_adresse_tour() {
@@ -233,11 +239,55 @@ function dashboard_adresse_tour_choisir($meta, $repli) {
 		if (!preg_match('#^https?://#i', $candidate)) {
 			continue;
 		}
+		// Et une adresse qui désigne la machine elle-même ne désigne personne.
+		if (dashboard_adresse_locale($candidate)) {
+			continue;
+		}
 
 		return rtrim($candidate, '/') . '/';
 	}
 
 	return '';
+}
+
+/**
+ * L'adresse désigne-t-elle la machine qui l'écrit ?
+ *
+ * Pure, et volontairement courte : elle ne juge que l'hôte, et ne prétend pas
+ * reconnaître un réseau privé. Un nom d'intranet (`parc.interne`) est une
+ * adresse parfaitement valable pour un webmestre qui travaille derrière un
+ * réseau privé virtuel ; `localhost`, lui, ne vaut que pour celui qui a tapé la
+ * commande, et c'est précisément ce que le cron fabrique.
+ *
+ * Les quatre formes rencontrées ou prévisibles : le nom, ses sous-domaines
+ * (`tour.localhost`, qu'aucun résolveur ne fait sortir de la machine), la
+ * boucle locale IPv4 **entière** — `127.0.0.1` n'est pas la seule, tout le
+ * /8 revient chez soi — et la boucle IPv6, entre crochets dans une URL.
+ *
+ * @param string $adresse Adresse absolue
+ * @return bool
+ */
+function dashboard_adresse_locale($adresse) {
+	$hote = (string) parse_url(trim((string) $adresse), PHP_URL_HOST);
+	if ($hote === '') {
+		// Un schéma sans hôte — `http:///parc` : rien à joindre.
+		return true;
+	}
+
+	$hote = strtolower(rtrim($hote, '.'));
+	$hote = trim($hote, '[]');
+
+	if ($hote === 'localhost' || substr($hote, -10) === '.localhost') {
+		return true;
+	}
+	if ($hote === '::1' || $hote === '0:0:0:0:0:0:0:1') {
+		return true;
+	}
+	if ($hote === '0.0.0.0') {
+		return true;
+	}
+
+	return (bool) preg_match('#^127\.#', $hote);
 }
 
 /**

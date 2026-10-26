@@ -3125,6 +3125,46 @@ verifier('sans rien de valable, rien',
 verifier('ni l’une ni l’autre n’étant valables, rien',
 	dashboard_adresse_tour_choisir('localhost', 'ftp://ailleurs/') === '');
 
+/* Lire la bonne source ne suffit pas : la meta aussi peut valoir « localhost »,
+   et c'est ce qui est parti en production — un courriel d'alerte dont le lien
+   renvoyait le webmestre sur sa propre machine. Le contrôle d'avant passait au
+   vert sans éprouver ce cas : il ne donnait « localhost » qu'au repli, là où la
+   meta valable l'emportait de toute façon. */
+verifier('une meta locale est écartée au profit du repli',
+	dashboard_adresse_tour_choisir('http://localhost/', 'https://tour.example/') === 'https://tour.example/');
+verifier('les deux étant locales, rien',
+	dashboard_adresse_tour_choisir('http://localhost/', 'http://127.0.0.1:8080/') === '');
+
+/* Les quatre formes que prend la machine elle-même. La boucle IPv4 n'est pas
+   la seule adresse qui revient chez soi : tout le /8 le fait. */
+verifier('localhost, quelle que soit la casse',
+	dashboard_adresse_locale('http://LOCALHOST/ecrire/'));
+verifier('un sous-domaine de localhost ne sort d’aucune machine',
+	dashboard_adresse_locale('https://tour.localhost/'));
+verifier('le point final ne déguise rien',
+	dashboard_adresse_locale('http://localhost./'));
+verifier('la boucle locale entière, pas seulement 127.0.0.1',
+	dashboard_adresse_locale('http://127.0.0.1/') && dashboard_adresse_locale('http://127.9.9.9:8080/'));
+verifier('la boucle IPv6, entre crochets',
+	dashboard_adresse_locale('http://[::1]:8080/'));
+verifier('et l’adresse d’écoute universelle',
+	dashboard_adresse_locale('http://0.0.0.0/'));
+verifier('un schéma sans hôte ne désigne rien',
+	dashboard_adresse_locale('http:///ecrire/'));
+
+/* Le contrôle ne juge que l'hôte, et s'arrête là. Un nom d'intranet est une
+   adresse parfaitement valable pour un webmestre derrière un réseau privé
+   virtuel : le refuser nous ferait jeter l'adresse que ce webmestre a lui-même
+   écrite. Et un nom qui *contient* localhost n'est pas localhost — la faute que
+   ferait une recherche de sous-chaîne. */
+verifier('un nom qui contient localhost reste une adresse',
+	!dashboard_adresse_locale('https://localhost.exemple.org/'));
+verifier('un nom d’intranet est une adresse',
+	!dashboard_adresse_locale('https://parc.interne/')
+	&& dashboard_adresse_tour_choisir('https://parc.interne', '') === 'https://parc.interne/');
+verifier('une adresse publique n’est pas locale',
+	!dashboard_adresse_locale('https://dashboard.buildtogether.fr/'));
+
 /* L'en-tête se compose à partir de là, et le bac à sable fournit une adresse
    de requête : c'est donc elle qu'on retrouve ici. */
 verifier('l’en-tête porte une adresse joignable',

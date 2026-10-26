@@ -1463,6 +1463,35 @@ base ouverte, pour les génies tiers qui fabriqueraient des URL. **Ceinture
 seulement** : notre code ne s'y fie pas, une fonction du core ayant pu mémoriser
 son résultat avant cette ligne.
 
+**Et garder la source ne garde pas la valeur.** Le courriel d'alerte est reparti
+avec `http://localhost/ecrire/?exec=dashboard` après ce correctif : la meta d'une
+tour peut valoir `localhost` comme le repli, et une meta vide fait retomber sur
+le repli, donc sur le cron, donc sur `localhost`. Le commentaire de
+`dashboard_user_agent()` disait pourtant déjà que « `http://localhost/` ne
+désigne personne » — **ce qu'un commentaire affirme, une fonction doit le
+refuser**, sinon c'est une intention, pas une règle. D'où
+`dashboard_adresse_locale()`, consultée sur chaque candidate.
+
+Ce qu'elle juge, et rien de plus : l'**hôte**. `localhost` et ses sous-domaines,
+la boucle locale IPv4 **entière** — `127.0.0.0/8` revient chez soi, pas seulement
+`127.0.0.1` —, la boucle IPv6 entre crochets, `0.0.0.0`, et un schéma sans hôte.
+Elle ne prétend pas reconnaître un réseau privé : `parc.interne` est une adresse
+parfaitement valable pour un webmestre derrière un VPN, et la refuser jetterait
+l'adresse qu'il a lui-même écrite. Un nom qui *contient* localhost
+(`localhost.exemple.org`) n'est pas localhost — la faute que ferait une recherche
+de sous-chaîne, et le contrôle l'éprouve.
+
+Quand plus rien ne vaut, **l'alerte part sans lien** et le journal dit pourquoi.
+Une adresse relative dans un courriel n'est pas un lien dégradé, c'est un lien
+mort ; et un lien disparu sans trace au journal passerait pour un oubli de
+rédaction.
+
+Pourquoi le contrôle unitaire n'avait rien vu, car il existait : il ne donnait
+`localhost` qu'au **repli**, dans un cas où une meta valable l'emportait de toute
+façon. Il affirmait la précédence, jamais le refus. **Un contrôle qui ne met la
+mauvaise valeur que là où elle est ignorée n'éprouve rien** — et c'est la même
+faute que le mot d'état recopié des deux côtés.
+
 Ce que ça ne corrige pas, et qu'il ne faut pas lui prêter : **un `User-Agent`
 honnête ne passe pas le Bot Fight Mode de Cloudflare**, qui vise par
 construction tout ce qui n'est pas un navigateur. Il rend la tour identifiable

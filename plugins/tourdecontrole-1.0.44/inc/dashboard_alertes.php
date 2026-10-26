@@ -209,7 +209,7 @@ function dashboard_alerte_texte($etat, $url_parc = '') {
 	if (dashboard_alerte_vide($etat)) {
 		return [
 			'sujet' => _T('dashboard:alerte_sujet_ras'),
-			'texte' => _T('dashboard:alerte_ras') . "\n\n" . $url_parc,
+			'texte' => _T('dashboard:alerte_ras') . ($url_parc !== '' ? "\n\n" . $url_parc : ''),
 			'court' => _T('dashboard:alerte_ras'),
 		];
 	}
@@ -390,6 +390,9 @@ function dashboard_alerte_memoriser($empreinte) {
  */
 function dashboard_alerte_diffuser($etat) {
 	include_spip('inc/filtres');
+	// La fonction vient de `inc/dashboard_client` : l'y chercher ici plutôt que
+	// de compter sur l'appelant, qui a pu ne demander que la diffusion.
+	include_spip('inc/dashboard_client');
 
 	$bilan = ['courriels' => 0, 'push' => 0, 'retires' => 0];
 
@@ -397,7 +400,20 @@ function dashboard_alerte_diffuser($etat) {
 	// le cron, où l'adresse dérivée de la requête vaut « localhost ». Le lien
 	// renvoyait alors le webmestre sur sa propre machine — une alerte qu'on ne
 	// peut pas suivre ne vaut guère mieux qu'une alerte qu'on n'envoie pas.
-	$url_parc = url_absolue(generer_url_ecrire('dashboard'), dashboard_adresse_tour());
+	//
+	// Et quand aucune adresse ne vaut, l'alerte part **sans lien** : la joindre
+	// à un chemin rendrait une adresse relative, qui n'est rien dans un courriel
+	// et une notification que le navigateur ne saurait pas ouvrir. Le journal le
+	// dit, sans quoi un lien disparu passerait pour un oubli de rédaction.
+	$base = dashboard_adresse_tour();
+	if ($base === '') {
+		spip_log(
+			"dashboard_alertes : adresse de la tour inconnue, alerte envoyée sans lien"
+			. " — renseigner l'adresse du site dans Configuration > Identité du site",
+			'dashboard'
+		);
+	}
+	$url_parc = ($base === '') ? '' : url_absolue(generer_url_ecrire('dashboard'), $base);
 	$message  = dashboard_alerte_texte($etat, $url_parc);
 
 	// --- Courriel ---------------------------------------------------------
