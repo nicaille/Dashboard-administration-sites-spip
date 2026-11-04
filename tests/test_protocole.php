@@ -3083,6 +3083,40 @@ verifier('une clef propre vaut sans clef de tour',
 
 $GLOBALS['dashboard_config_test'] = [];
 
+echo "\n== L'alerte « Erreur dans les plugins » après une mise à jour ==\n";
+
+/* Signalé en production : après une mise à jour de plugins par le parc, les
+   sites gérés affichent « Erreur dans les plugins : …/plugins/auto/waf/v1.2.23/waf_pipelines.php »,
+   et le message ne part qu'en visitant leur page de gestion des plugins.
+
+   Lu dans le core, pas supposé : la meta `message_crash_plugins` n'est écrite
+   que par `include_once_check()` (`ecrire/inc/utils.php`), quand un cache de
+   chargement généré désigne un fichier disparu — le dossier versionné que la
+   mise à jour vient de remplacer. Et elle n'est effacée que par
+   `ecrire_plugin_actifs()`, sous la condition
+   `isset($GLOBALS['meta']['message_crash_plugins'])`, c'est-à-dire
+   l'instantané lu à **l'amorçage de la requête**. L'agent ayant démarré avant
+   le remplacement des fichiers, il ne voit pas une alerte écrite après — d'où
+   la relecture des metas, et ce constat d'après coup. */
+verifier('un vestige après un recalcul réussi s’efface',
+	dashagent_crash_plugins_perime(true, true) === true);
+verifier('rien à effacer quand l’alerte est absente',
+	dashagent_crash_plugins_perime(true, false) === false);
+
+/* La condition qui compte. Si le recalcul a échoué, les caches de chargement
+   peuvent encore désigner des fichiers absents : l'alerte est alors exacte, et
+   l'effacer masquerait un site réellement en peine. */
+verifier('un recalcul échoué garde l’alerte',
+	dashagent_crash_plugins_perime(false, true) === false);
+verifier('et sans recalcul ni alerte, rien non plus',
+	dashagent_crash_plugins_perime(false, false) === false);
+
+/* Le ménage doit rendre compte de ce qu'il a fait : un vestige effacé en
+   silence serait indiscernable d'un vestige resté. */
+verifier('le ménage nomme cette étape dans son compte rendu',
+	strpos((string) file_get_contents(chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_maj.php'),
+		"\$rapport['alerte_crash_effacee']") !== false);
+
 echo "\n== L'adresse que la tour donne d'elle-même ==\n";
 
 /* Repéré dans la console d'un Cloudflare, qui voyait arriver :

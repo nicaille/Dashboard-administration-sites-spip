@@ -1607,6 +1607,67 @@ affiche une version fausse. Chaque étape se range donc dans le compte rendu sou
 son nom (`dashagent_apres_maj_etape()`), échec compris, et la suivante se joue
 quand même. Ce qui n'a pas été fait se lit au lieu de se deviner.
 
+### Une alerte du core se lit dans l'instantané de la requête
+
+Signalé en production, après une mise à jour de plugins par le parc : les sites
+gérés affichaient **« Erreur dans les plugins : …/plugins/auto/waf/v1.2.23/waf_pipelines.php »**,
+et le message ne partait qu'en visitant leur page *Gestion des plugins*. Rien
+n'était cassé pour autant — c'est une alerte périmée, pas une panne.
+
+Trois faits, tous lus dans le core plutôt que supposés :
+
+- la meta `message_crash_plugins` n'est écrite que par `include_once_check()`
+  (`ecrire/inc/utils.php`), que les **caches de chargement générés** appellent
+  ligne par ligne (`plugin.php`, `plugins_precompile_*`). Un dossier versionné
+  que la mise à jour vient de remplacer fait donc écrire l'alerte à la première
+  visite qui charge encore l'ancien cache ;
+- elle n'est effacée qu'au recalcul de la liste des plugins, et **sans regarder
+  si les fichiers sont revenus** : le dossier ayant changé de nom, ce
+  fichier-là ne reviendra jamais ;
+- cet effacement est gardé par `isset($GLOBALS['meta']['message_crash_plugins'])`,
+  soit **l'instantané lu à l'amorçage de la requête**.
+
+Tout est là : l'agent démarre *avant* le remplacement des fichiers, l'alerte est
+écrite *après*, et son recalcul ne la voit donc pas. Il régénère pourtant les
+caches correctement — le site est sain, et son webmestre lit une erreur.
+
+D'où, dans `dashagent_apres_maj()`, un `lire_metas()` **avant** le recalcul, qui
+suffit à ce que le core fasse son ménage lui-même, et un constat d'après coup
+pour la visite tombée *pendant* le recalcul (`dashagent_crash_plugins_perime()`,
+pure : on n'efface qu'après un recalcul abouti, sans quoi l'alerte serait
+peut-être exacte).
+
+Mesuré sur un SPIP 4.4 réel, meta écrite en SQL direct comme le ferait une autre
+requête : recalcul seul, l'alerte reste ; `lire_metas()` puis recalcul, elle
+part. C'est la seule façon de savoir laquelle des deux hypothèses était la
+bonne, et elle a coûté une archive de core à télécharger.
+
+**La règle, et elle dépasse ce cas : une fonction du core qui lit
+`$GLOBALS['meta']` lit un instantané, pas la base.** Tout ce qui écrit une meta
+dans une autre requête que la nôtre lui est invisible. Appelée depuis une action
+qui vient de changer le disque, une telle fonction raisonne sur un état
+périmé — et son garde-fou peut alors ne jamais se déclencher, sans qu'aucune
+erreur ne soit levée.
+
+Deux fautes dans le contrôle écrit pour s'en protéger, trouvées par mutation et
+non en relisant :
+
+- il cherchait `lire_metas(` **n'importe où dans le fichier**, qui en contient
+  un autre après le recalcul et un troisième dans le chemin SVP. Le retirer de
+  l'endroit qui compte le laissait au vert : un contrôle qui ne distingue pas
+  « avant » de « après » ne vérifie pas la règle qu'il énonce. Il porte
+  désormais sur l'ordre des deux appels **dans le corps de la fonction** ;
+- `corps_de_fonction()` démarrait sur la première occurrence du **nom**, et
+  `dashagent_apres_maj()` est appelée deux fois dans son fichier avant d'y être
+  déclarée : la recherche rendait le corps de la fonction appelante. Un corps
+  parfaitement plausible, simplement pas celui demandé. Elle exige maintenant un
+  `function` devant le nom.
+
+Et un piège de l'outillage, pour mémoire : `php_sans_commentaires()` passe par
+`token_get_all()`, qui prend un fragment sans balise ouvrante pour du **HTML en
+ligne** — le tamis rendait donc une chaîne vide sur un corps de fonction, et le
+contrôle échouait sur du code juste.
+
 ### Un message d'erreur sans son endroit ne sert à rien
 
 `getMessage()` suffit pour une erreur qu'on a levée soi-même, et pas du tout

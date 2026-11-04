@@ -739,6 +739,13 @@ function php_sans_commentaires($code) {
  * laquelle compte. Rend la chaîne vide si la fonction est introuvable — à
  * l'appelant de décider ce que ça vaut.
  *
+ * C'est la **déclaration** qu'on cherche, donc un nom précédé de `function`, et
+ * non la première occurrence du nom. Faute trouvée en s'en servant sur
+ * `dashagent_apres_maj()`, appelée deux fois dans son fichier **avant** d'y être
+ * déclarée : la recherche partait du premier appel et rendait le corps de la
+ * fonction appelante. Rien ne le signalait — le résultat est un corps de
+ * fonction parfaitement plausible, simplement pas celui qu'on a demandé.
+ *
  * @param string $source
  * @param string $nom
  * @return string
@@ -746,14 +753,24 @@ function php_sans_commentaires($code) {
 function corps_de_fonction($source, $nom) {
 	$jetons = token_get_all($source);
 	$vu     = false;
+	$declare = false;
 	$niveau = 0;
 	$corps  = '';
 
 	foreach ($jetons as $jeton) {
 		if (!$vu) {
-			if (is_array($jeton) && $jeton[0] === T_STRING && $jeton[1] === $nom) {
-				$vu = true;
+			if (is_array($jeton) && $jeton[0] === T_WHITESPACE) {
+				continue;
 			}
+			if (is_array($jeton) && $jeton[0] === T_FUNCTION) {
+				$declare = true;
+				continue;
+			}
+			if ($declare && is_array($jeton) && $jeton[0] === T_STRING && $jeton[1] === $nom) {
+				$vu = true;
+				continue;
+			}
+			$declare = false;
 			continue;
 		}
 
@@ -1584,6 +1601,38 @@ foreach ($sources_agent as $fichier) {
 			// trouvait rien, sur un fichier qui fait pourtant l'appel.
 			(bool) preg_match('/(?<![\w$])dashagent_filtres_textes\s*\(/', $appels)
 		);
+
+		/* Et une vue fraîche des metas **avant** le recalcul.
+		   `ecrire_plugin_actifs()` efface l'alerte « Erreur dans les plugins »
+		   sous la condition `isset($GLOBALS['meta']['message_crash_plugins'])`,
+		   soit l'instantané lu à l'amorçage de la requête. L'agent démarre avant
+		   le remplacement des fichiers : l'alerte est écrite après, par la
+		   première visite qui charge encore l'ancien cache de chargement, et le
+		   recalcul ne la verrait jamais. Le message restait alors à l'écran des
+		   sites gérés jusqu'à ce qu'un webmestre ouvre leur page de gestion des
+		   plugins.
+
+		   Le contrôle porte sur **l'ordre dans la fonction**, et pas sur la
+		   présence de l'appel dans le fichier : le premier jet cherchait
+		   `lire_metas(` n'importe où, si bien que le retirer d'avant le recalcul
+		   le laissait passer au vert — il en reste un après, et un autre dans le
+		   chemin SVP. Un contrôle qui ne sait pas distinguer « avant » de
+		   « après » ne vérifie pas la règle qu'il énonce. */
+		if ($gourmande === 'ecrire_plugin_actifs') {
+			// `<?php` en tête : sans balise ouvrante, `token_get_all()` prend le
+			// corps entier pour du HTML en ligne, que le tamis écarte — il
+			// rendait donc une chaîne vide, et le contrôle échouait sur du code
+			// juste.
+			$corps = php_sans_commentaires('<' . '?php ' . corps_de_fonction($code, 'dashagent_apres_maj'));
+			$avant = preg_match('/(?<![\w$])lire_metas\s*\(/', $corps, $m_lire, PREG_OFFSET_CAPTURE)
+				? $m_lire[0][1] : -1;
+			$recalcul = preg_match('/(?<![\w$])ecrire_plugin_actifs\s*\(/', $corps, $m_recalc, PREG_OFFSET_CAPTURE)
+				? $m_recalc[0][1] : -1;
+			verifier(
+				"$court relit les metas avant $gourmande()",
+				$avant >= 0 && $recalcul >= 0 && $avant < $recalcul
+			);
+		}
 	}
 }
 
