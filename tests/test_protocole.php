@@ -3165,6 +3165,43 @@ verifier('un nom d’intranet est une adresse',
 verifier('une adresse publique n’est pas locale',
 	!dashboard_adresse_locale('https://dashboard.buildtogether.fr/'));
 
+/* Et la base juste ne servait à rien, parce qu'elle n'était jamais appliquée.
+   `generer_url_ecrire()` rend une adresse **déjà absolue** hors de l'espace
+   privé, bâtie sur `url_de_base()` donc sur la requête ; et `url_absolue()` ne
+   remplace pas une origine, elle en ajoute une à ce qui n'en a pas. La sonde
+   l'a montré sur la tour en production :
+
+       generer_url_ecrire(dashboard) : https://tour.example/outils/ecrire/?exec=dashboard
+       base retenue                  : https://tour.example/
+       url_parc                      : https://tour.example/outils/ecrire/?exec=dashboard
+
+   On ne répare donc plus une adresse fabriquée, on la **compose** — et c'est
+   justement ce qui rend le résultat vérifiable sans SPIP : la fonction ne reçoit
+   aucune adresse à réparer. Ce que ces contrôles ne peuvent pas prouver, parce
+   que le bac à sable n'a ni `generer_url_ecrire()` ni `url_absolue()`, c'est le
+   comportement du core : il a été mesuré par la sonde, pas supposé ici. */
+verifier('le lien se compose sur la base',
+	dashboard_lien_parc('https://tour.example/') === 'https://tour.example/ecrire/?exec=dashboard');
+verifier('la barre finale de la base n’est pas doublée',
+	dashboard_lien_parc('https://tour.example') === 'https://tour.example/ecrire/?exec=dashboard');
+verifier('sans base, pas de lien',
+	dashboard_lien_parc('') === '' && dashboard_lien_parc('   ') === '');
+
+/* `_DIR_RESTREINT_ABS` est le nom du répertoire privé vu de la racine. Une
+   installation qui l'a renommé doit être suivie — c'est pour cela qu'on lit la
+   constante au lieu d'écrire « ecrire » dans la fonction. */
+verifier('un répertoire privé renommé est suivi',
+	dashboard_lien_parc('https://tour.example/', 'prive/') === 'https://tour.example/prive/?exec=dashboard');
+verifier('ses barres, de tête comme de queue, sont normalisées',
+	dashboard_lien_parc('https://tour.example/', '/prive/') === 'https://tour.example/prive/?exec=dashboard');
+
+/* Le piège de l'espace privé : `_DIR_RESTREINT` y vaut la chaîne vide, et la
+   prendre pour le répertoire privé donnerait un lien vers la racine du site —
+   une page publique, là où l'alerte promet la vue d'ensemble. D'où le repli
+   écrit en dur, et ce contrôle qui le tient. */
+verifier('un répertoire privé vide retombe sur ecrire',
+	dashboard_lien_parc('https://tour.example/', '') === 'https://tour.example/ecrire/?exec=dashboard');
+
 /* L'en-tête se compose à partir de là, et le bac à sable fournit une adresse
    de requête : c'est donc elle qu'on retrouve ici. */
 verifier('l’en-tête porte une adresse joignable',

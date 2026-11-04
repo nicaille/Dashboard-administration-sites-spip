@@ -251,6 +251,56 @@ function dashboard_adresse_tour_choisir($meta, $repli) {
 }
 
 /**
+ * Le lien vers la vue d'ensemble du parc, composé sur une base donnée.
+ *
+ * **Pourquoi cette fonction existe, et pourquoi elle ne passe pas par
+ * `generer_url_ecrire()`.** Deux correctifs ont calculé la bonne base sans que
+ * le courriel d'alerte cesse de porter `http://localhost/`, et la sonde
+ * `outils/diagnostic-alerte.php` a montré où ils se perdaient :
+ *
+ *     generer_url_ecrire(dashboard) : https://tour.example/outils/ecrire/?exec=dashboard
+ *     base retenue                  : https://tour.example/
+ *     url_parc                      : https://tour.example/outils/ecrire/?exec=dashboard
+ *
+ * `generer_url_ecrire()` rend une adresse **déjà absolue** hors de l'espace
+ * privé, bâtie sur `url_de_base()` — donc sur la requête, donc sur `localhost`
+ * dans le cron. Et `url_absolue()` ne **remplace** pas une origine : elle en
+ * ajoute une à ce qui n'en a pas, et rend tel quel ce qui est déjà absolu
+ * (`tester_url_absolue()`, premier test de la fonction). La base passée en
+ * second argument était donc ignorée, silencieusement, et les deux correctifs
+ * réparaient une adresse dont l'origine était déjà coulée.
+ *
+ * On ne répare donc plus : on **compose**. `_DIR_RESTREINT_ABS` est le nom du
+ * répertoire privé vu de la racine du site — `ecrire/`, et autre chose sur une
+ * installation qui l'a renommé —, ce qui ne dépend d'aucune requête. C'est la
+ * seule façon d'obtenir une adresse dont la provenance se démontre.
+ *
+ * Et ça corrige au passage un travers qu'on n'avait pas vu : le lien hérité de
+ * `url_de_base()` portait le répertoire d'où le script tournait
+ * (`/outils/ecrire/…`), qui ne mène nulle part.
+ *
+ * @param string $base Adresse absolue de la tour, terminée par une barre
+ * @param string $prive Répertoire privé vu de la racine, `_DIR_RESTREINT_ABS`
+ * @return string Chaîne vide quand la base ne vaut rien
+ */
+function dashboard_lien_parc($base, $prive = '') {
+	$base = trim((string) $base);
+	if ($base === '') {
+		return '';
+	}
+
+	// Sur une page de l'espace privé, `_DIR_RESTREINT` vaut la chaîne vide :
+	// c'est `_DIR_RESTREINT_ABS` qu'il faut, et un repli écrit en dur plutôt
+	// qu'un lien vers la racine si la constante manquait.
+	$prive = trim((string) $prive, " \t\n\r\0\x0B/");
+	if ($prive === '') {
+		$prive = 'ecrire';
+	}
+
+	return rtrim($base, '/') . '/' . $prive . '/?exec=dashboard';
+}
+
+/**
  * L'adresse désigne-t-elle la machine qui l'écrit ?
  *
  * Pure, et volontairement courte : elle ne juge que l'hôte, et ne prétend pas

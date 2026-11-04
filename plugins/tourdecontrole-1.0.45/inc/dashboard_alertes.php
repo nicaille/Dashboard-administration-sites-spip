@@ -413,7 +413,11 @@ function dashboard_alerte_diffuser($etat) {
 			'dashboard'
 		);
 	}
-	$url_parc = ($base === '') ? '' : url_absolue(generer_url_ecrire('dashboard'), $base);
+	// Composé, jamais réparé : `generer_url_ecrire()` rendrait une adresse déjà
+	// absolue, bâtie sur la requête, et `url_absolue()` ne remplace pas une
+	// origine — elle rend tel quel ce qui en a déjà une. C'est là que les deux
+	// correctifs précédents se perdaient.
+	$url_parc = dashboard_lien_parc($base, defined('_DIR_RESTREINT_ABS') ? _DIR_RESTREINT_ABS : '');
 	$message  = dashboard_alerte_texte($etat, $url_parc);
 
 	// --- Courriel ---------------------------------------------------------

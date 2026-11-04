@@ -1492,6 +1492,70 @@ façon. Il affirmait la précédence, jamais le refus. **Un contrôle qui ne met
 mauvaise valeur que là où elle est ignorée n'éprouve rien** — et c'est la même
 faute que le mot d'état recopié des deux côtés.
 
+### Réparer une adresse déjà fabriquée ne marche pas
+
+Et le courriel est revenu une troisième fois avec `http://localhost/`, la 1.0.44
+bel et bien installée et la meta `adresse_site` parfaitement juste. Les deux
+correctifs calculaient la bonne base ; **aucun des deux ne l'appliquait**.
+
+`outils/diagnostic-alerte.php` l'a montré en trois lignes, là où trois relectures
+n'avaient rien vu :
+
+    generer_url_ecrire(dashboard) : https://tour.example/outils/ecrire/?exec=dashboard
+    base retenue                  : https://tour.example/
+    url_parc                      : https://tour.example/outils/ecrire/?exec=dashboard
+
+Deux faits qui se combinent, chacun anodin :
+
+- **`generer_url_ecrire()` rend une adresse déjà absolue** hors de l'espace
+  privé, bâtie sur `url_de_base()` — donc sur la requête, donc sur `localhost`
+  dans le cron ;
+- **`url_absolue()` ne remplace pas une origine.** Elle en ajoute une à ce qui
+  n'en a pas, et rend tel quel ce qui est déjà absolu — `tester_url_absolue()`
+  est son premier test. Le second argument était donc ignoré, sans un mot.
+
+D'où `dashboard_lien_parc()`, qui **compose** au lieu de réparer : la base, plus
+`_DIR_RESTREINT_ABS`, plus l'exec. Aucune adresse fabriquée ailleurs n'y entre,
+et c'est ce qui rend le résultat vérifiable — la fonction ne reçoit rien qui
+puisse porter une origine.
+
+La règle, et elle vaut partout : **une adresse se compose à partir de ses
+morceaux, elle ne se corrige pas après coup.** Corriger suppose de savoir ce
+qu'on reçoit ; ici on recevait une adresse dont l'origine était déjà coulée, et
+la fonction de correction la rendait intacte en annonçant un succès.
+
+Deux conséquences qu'il faut avoir en tête :
+
+- `_DIR_RESTREINT_ABS` et non `_DIR_RESTREINT` : la seconde vaut la **chaîne
+  vide** dans l'espace privé, et le lien mènerait à la racine publique du site ;
+- le lien portait aussi le répertoire d'où le script tournait
+  (`/outils/ecrire/…`), travers qu'on n'avait pas vu et qui tombe avec le reste :
+  `url_de_base()` dépend du script, pas du site.
+
+Et ce que le contrôle unitaire ne peut pas prouver ici, parce que le bac à sable
+n'a ni `generer_url_ecrire()` ni `url_absolue()` : **le comportement du core**. Il
+a été mesuré par la sonde sur l'installation réelle. Écrire un faux de ces deux
+fonctions aurait produit un contrôle qui n'éprouve que ce qu'on croit d'elles —
+la faute déjà commise deux fois dans ce dépôt.
+
+### Trois correctifs devinés valent moins qu'une sonde
+
+Le vrai enseignement n'est pas dans le code. Deux fois de suite j'ai relu le
+chemin, trouvé une faute **réelle** — la source, puis la valeur —, corrigé,
+publié, et annoncé que c'était réglé. Les deux fautes existaient ; aucune n'était
+celle qui produisait le symptôme.
+
+Ce qui a tranché en une exécution : une sonde qui imprime, pour chaque maillon,
+**ce que l'installation a réellement sous la main** — version chargée par SPIP
+et non version du dossier, valeur de chaque source, résultat de chaque fonction
+intermédiaire, et le texte exact que nous composons. Les deux relectures
+coûtaient chacune un cycle de publication et la confiance du webmestre.
+
+La règle : **à la deuxième correction du même symptôme, on arrête de relire et
+on va mesurer.** Et la sonde se garde — `outils/diagnostic-alerte.php` dit
+désormais aussi si `url_absolue()` réécrit l'adresse qu'on lui donne, pour que
+le piège se voie au lieu de se déduire.
+
 Ce que ça ne corrige pas, et qu'il ne faut pas lui prêter : **un `User-Agent`
 honnête ne passe pas le Bot Fight Mode de Cloudflare**, qui vise par
 construction tout ce qui n'est pas un navigateur. Il rend la tour identifiable
