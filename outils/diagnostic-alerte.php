@@ -216,6 +216,7 @@ alerte_ligne('dossier chargé', $fiche['dir'] ?? (defined('_DIR_PLUGIN_TOURDECON
 // qui tourne est antérieur, quoi qu'annonce le dossier.
 alerte_ligne('dashboard_adresse_tour() existe (≥ 1.0.43)', function_exists('dashboard_adresse_tour'));
 alerte_ligne('dashboard_adresse_locale() existe (≥ 1.0.44)', function_exists('dashboard_adresse_locale'));
+alerte_ligne('dashboard_lien_parc() existe (≥ 1.0.45)', function_exists('dashboard_lien_parc'));
 
 /* --- 2. Les deux sources d'adresse --------------------------------------- */
 
@@ -246,10 +247,28 @@ alerte_dire('');
 
 $base = function_exists('dashboard_adresse_tour') ? dashboard_adresse_tour() : (string) url_de_base();
 
-alerte_ligne('generer_url_ecrire(dashboard)', generer_url_ecrire('dashboard'));
+// Le piège que cette sonde a mis au jour, et qu'il faut donc qu'elle montre :
+// `generer_url_ecrire()` rend une adresse **déjà absolue** hors de l'espace
+// privé, bâtie sur `url_de_base()`. Or `url_absolue()` ne remplace pas une
+// origine — elle rend tel quel ce qui en a déjà une. La base, juste, était donc
+// ignorée en silence, et deux correctifs ont réparé une adresse déjà coulée.
+$brute = generer_url_ecrire('dashboard');
+alerte_ligne('generer_url_ecrire(dashboard)', $brute);
+alerte_ligne('… déjà absolue ?', (bool) preg_match('#^https?://#i', (string) $brute));
+alerte_ligne('url_absolue(elle, base) la réécrit ?', url_absolue((string) $brute, $base === '' ? 'https://exemple.invalid/' : $base) !== $brute);
 alerte_ligne('base retenue', $base);
-$url_parc = ($base === '') ? '' : url_absolue(generer_url_ecrire('dashboard'), $base);
-alerte_ligne('url_parc', $url_parc);
+alerte_ligne('_DIR_RESTREINT_ABS', defined('_DIR_RESTREINT_ABS') ? _DIR_RESTREINT_ABS : null);
+alerte_ligne('_DIR_RESTREINT', defined('_DIR_RESTREINT') ? _DIR_RESTREINT : null);
+
+if (function_exists('dashboard_lien_parc')) {
+	// Depuis la 1.0.45 : composé sur la base et le répertoire privé, donc
+	// indépendant de la requête.
+	$url_parc = dashboard_lien_parc($base, defined('_DIR_RESTREINT_ABS') ? _DIR_RESTREINT_ABS : '');
+	alerte_ligne('dashboard_lien_parc() (≥ 1.0.45)', $url_parc);
+} else {
+	$url_parc = ($base === '') ? '' : url_absolue((string) $brute, $base);
+	alerte_ligne('url_parc (< 1.0.45, réparé)', $url_parc);
+}
 
 /* --- 4. L'enveloppe du courriel ------------------------------------------ */
 
