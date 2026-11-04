@@ -256,6 +256,20 @@ $brute = generer_url_ecrire('dashboard');
 alerte_ligne('generer_url_ecrire(dashboard)', $brute);
 alerte_ligne('… déjà absolue ?', (bool) preg_match('#^https?://#i', (string) $brute));
 alerte_ligne('url_absolue(elle, base) la réécrit ?', url_absolue((string) $brute, $base === '' ? 'https://exemple.invalid/' : $base) !== $brute);
+
+// La démonstration qui ne dépend pas du contexte. Par le navigateur depuis la
+// racine, `generer_url_ecrire()` rend déjà la bonne origine : le défaut est
+// invisible, alors que le mécanisme est intact. On lui donne donc à réécrire
+// l'adresse **que le cron fabrique**, et on regarde ce qui sort.
+//
+// Si la ligne suivante rend encore « localhost », tout est dit : la base est
+// juste, elle est passée, et elle n'est pas appliquée.
+$comme_au_cron = 'http://localhost/ecrire/?exec=dashboard';
+alerte_dire('');
+alerte_dire('  Ce que le cron fabrique, passé à url_absolue() avec la bonne base :');
+alerte_ligne('    url_absolue(celle du cron, base)', url_absolue($comme_au_cron, $base === '' ? 'https://exemple.invalid/' : $base));
+alerte_ligne('    l’origine a-t-elle été remplacée ?', strpos((string) url_absolue($comme_au_cron, $base === '' ? 'https://exemple.invalid/' : $base), 'localhost') === false);
+alerte_dire('');
 alerte_ligne('base retenue', $base);
 alerte_ligne('_DIR_RESTREINT_ABS', defined('_DIR_RESTREINT_ABS') ? _DIR_RESTREINT_ABS : null);
 alerte_ligne('_DIR_RESTREINT', defined('_DIR_RESTREINT') ? _DIR_RESTREINT : null);
