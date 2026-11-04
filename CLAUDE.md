@@ -1668,6 +1668,39 @@ Et un piège de l'outillage, pour mémoire : `php_sans_commentaires()` passe par
 ligne** — le tamis rendait donc une chaîne vide sur un corps de fonction, et le
 contrôle échouait sur du code juste.
 
+### Une alerte que le webmestre ne voit qu'en ouvrant le site n'est pas vue
+
+Corollaire, et c'est le webmestre qui l'a demandé : cette alerte s'affiche dans
+l'espace privé du site géré, à qui sait y configurer les plugins. Sur un parc de
+douze sites, elle se découvre donc **un site à la fois**, et seulement quand on
+passe par là. L'agent la joint maintenant à son inventaire
+(`dashagent_infos_plugins_crash()`), la tour la range dans une colonne et le
+parc en pose un badge.
+
+Ce qui remonte, et pas plus : le décompte, et les chemins **ramenés à la racine
+du site**. Ils nomment le plugin et la version en cause, qui est tout ce qui se
+corrige ; le chemin absolu de l'hébergement n'apprendrait rien de plus et
+bavarderait sur l'arborescence d'en face — la même règle que
+`dashagent_exception_message()`.
+
+Trois précautions, toutes déjà écrites ailleurs dans ce dépôt et qui valent ici
+mot pour mot :
+
+- **l'inventaire lit, il ne répare pas.** Rien n'est effacé en le collectant :
+  le ménage appartient au recalcul d'après mise à jour, et une lecture qui
+  corrige en passant devient impossible à raisonner ;
+- **une meta illisible ne fait pas tomber l'inventaire.** Elle vient d'un site
+  qui a pu être tripoté, et un inventaire perdu coûte plus cher qu'un chiffre
+  manquant ;
+- **un agent d'avant la 1.0.28 ne joint rien**, et son silence vaut « on ne sait
+  pas ». Le parc n'affiche alors aucun badge — ce qui est exactement ce qu'on
+  peut dire d'un site qui ne nous renseigne pas.
+
+Et la liste est bornée à vingt chemins, chacun tronqué : elle voyage dans une
+colonne, puis dans une page. Un retour à la ligne dans un chemin y fabriquerait
+une fausse entrée, d'où la neutralisation des caractères de contrôle — *ce qui
+vient d'un site géré est inerte, y compris hors du HTML*.
+
 ### Un message d'erreur sans son endroit ne sert à rien
 
 `getMessage()` suffit pour une erreur qu'on a levée soi-même, et pas du tout

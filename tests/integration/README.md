@@ -72,6 +72,43 @@ sur deux à la trappe : l'export se faisait d'un seul tenant, et le contrôle
 au démarrage, **et** une seconde de battement dans le parcours : la ceinture
 et les bretelles, le serveur pouvant avoir été lancé à la main.
 
+## Le faux core se dérive de l'archive, il ne se fixe pas
+
+Pour éprouver la mise à jour du core, le harnais fabrique une **archive factice**
+à partir de celle qu'on lui donne : il y réécrit la branche (`4.4.99`, plus
+élevée que n'importe quelle 4.4 réelle) et la version de schéma, puis y ajoute un
+palier de migration qui laisse une colonne témoin en base. Le site installé reste
+un SPIP valide, donc il fonctionne encore après le remplacement.
+
+Deux de ces numéros étaient écrits en dur, et **une archive plus récente les a
+tous les deux démentis** :
+
+- la **version de schéma** (`2026090100`) s'est retrouvée *sous* celle de
+  l'archive : SPIP 4.4.29 déclare `$spip_version_base = 2026_09_24_00`, soit
+  2026092400. Le faux core annonçait donc un schéma plus ancien que la base, et
+  l'étape de migration refusait - « La base est en version 2026092400, plus
+  récente que les fichiers (2026090100) » -, pour un échec sans rapport avec ce
+  qu'on voulait éprouver. Elle se calcule désormais sur l'archive installée,
+  plus un ;
+- la **version de départ** attendue dans le journal (`4.4.23`) ne correspondait
+  plus : le contrôle annonçait un échec sur une transition pourtant juste,
+  `SPIP 4.4.29 → 4.4.99`. Elle est relevée par `executer.sh` **avant** la mise à
+  jour et passée au scénario.
+
+Deux pièges dans cette dérivation, tous deux rencontrés :
+
+- SPIP écrit cette valeur avec des **séparateurs de chiffres**
+  (`2026_09_24_00`) : une lecture naïve rendrait `2026` ;
+- et la version de départ ne se lit **pas** dans la ligne de journal que le
+  contrôle vérifie. Extraire le numéro de la ligne puis vérifier qu'il y figure
+  ne prouve rien - une transition « 9.9.9 → 4.4.99 » passerait au vert. C'est le
+  premier jet de ce correctif, et c'est la faute que ce dépôt documente partout
+  ailleurs : un contrôle qui tire son attente de son sujet n'éprouve que
+  lui-même.
+
+`BASE_CIBLE` reste surchargeable par l'environnement, pour forcer un numéro
+précis.
+
 ## Ce qui est vérifié
 
 | Étape | Contrôle |

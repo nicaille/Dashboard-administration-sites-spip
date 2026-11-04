@@ -97,6 +97,10 @@ function dashboard_synchroniser($id_dashboard_site, $options = []) {
 		// Le site répond, mais son espace privé peut être bloqué derrière la
 		// page de mise à niveau tant que son schéma n'a pas été migré.
 		'base_maj'       => !empty($infos['spip']['base_maj_requise']) ? 'oui' : 'non',
+		// `$infos` est déjà passé par `dashboard_inerte()` plus haut : ce qui
+		// vient d'un site géré ne traverse pas cette fonction deux fois, et
+		// n'entre pas non plus à côté d'elle.
+		'plugins_crash'  => dashboard_crash_texte($infos['plugins_crash'] ?? null),
 		'infos'          => json_encode($infos, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR),
 		'date_sync'      => $maintenant,
 		'date_sync_ok'   => $maintenant,

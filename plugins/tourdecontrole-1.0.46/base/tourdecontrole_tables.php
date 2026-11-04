@@ -64,6 +64,10 @@ function dashboard_schema_sites() {
 			// Le schéma de base attend sa migration : le site répond, mais son
 			// espace privé est bloqué derrière la page de mise à niveau.
 			'base_maj'          => "varchar(3) DEFAULT 'non' NOT NULL",
+			// L'alerte « Erreur dans les plugins » que le site porte en meta, un
+			// chemin par ligne. Elle ne s'affiche sinon que dans l'espace privé
+			// du site géré, et se découvrait donc un site à la fois.
+			'plugins_crash'     => "text DEFAULT '' NOT NULL",
 			'infos'             => "mediumtext DEFAULT '' NOT NULL",
 
 			'date_sync'         => "datetime DEFAULT '0000-00-00 00:00:00' NOT NULL",

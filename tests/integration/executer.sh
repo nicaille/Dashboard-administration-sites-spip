@@ -16,7 +16,16 @@ export BDD="$SITE/config/bases/spip.sqlite"
 CORE_CIBLE="4.4.99"
 # Version de schéma annoncée par cette archive : elle déclenche une vraie
 # migration de base après le remplacement des fichiers.
-BASE_CIBLE="2026090100"
+#
+# Elle se **dérive de l'archive** au lieu d'être écrite ici, et ce n'est pas du
+# raffinement : un numéro figé finit sous celui qu'annonce l'archive qu'on lui
+# donne. Mesuré sur une 4.4.29, qui déclare 2026092400 là où ce fichier portait
+# 2026090100 : le faux core annonçait alors un schéma **plus ancien** que celui
+# de la base, et l'étape de migration refusait — « La base est en version
+# 2026092400, plus récente que les fichiers » —, pour un échec qui n'a rien à
+# voir avec ce qu'on voulait éprouver. Elle est calculée plus bas, une fois le
+# site installé.
+BASE_CIBLE="${BASE_CIBLE:-}"
 
 if [ -z "$ZIP" ] || [ ! -f "$ZIP" ]; then
 	echo "usage : $0 /chemin/vers/SPIP-vX.Y.Z.zip [port]" >&2
@@ -292,6 +301,32 @@ mkdir -p "$SITE/core-archives"
 # aboutir que s'il a bien relevé le nom exact dans l'index du dépôt, au lieu
 # de le fabriquer. Un système de fichiers sensible à la casse fait le reste.
 cp "$ZIP" "$SITE/core-archives/SPIP-v$CORE_CIBLE.zip"
+
+# Le schéma annoncé doit dépasser celui de l'archive installée, sans quoi la
+# migration refuse de jouer. SPIP écrit cette valeur avec des séparateurs de
+# chiffres — `$spip_version_base = 2026_09_24_00;` —, qu'il faut retirer avant
+# de compter : une lecture naïve rendrait « 2026 ».
+if [ -z "$BASE_CIBLE" ]; then
+	BASE_CIBLE="$(php -r '
+		$src = (string) @file_get_contents($argv[1]);
+		if (!preg_match("/\\\$spip_version_base\s*=\s*([0-9_]+)/", $src, $m)) {
+			fwrite(STDERR, "version de schema introuvable dans " . $argv[1] . "\n");
+			exit(1);
+		}
+		echo (int) str_replace("_", "", $m[1]) + 1;
+	' "$SITE/ecrire/inc_version.php")" || { echo "version de schéma du core illisible" >&2; exit 1; }
+fi
+# La branche de l'archive installée, relevée avant que la mise à jour ne
+# remplace ce fichier : le scénario en a besoin pour vérifier la transition que
+# le journal annonce, et la lire dans ce journal ne prouverait rien.
+CORE_DEPART="$(php -r '
+	$src = (string) @file_get_contents($argv[1]);
+	echo preg_match("/\\\$spip_version_branche\s*=\s*[\x27\"]([^\x27\"]+)/", $src, $m) ? $m[1] : "";
+' "$SITE/ecrire/inc_version.php")"
+[ -n "$CORE_DEPART" ] || { echo "branche du core installé illisible" >&2; exit 1; }
+
+echo "== Faux core : branche $CORE_CIBLE, schéma $BASE_CIBLE, départ $CORE_DEPART"
+
 php "$RACINE/tests/integration/preparer-core.php" "$SITE/core-archives/SPIP-v$CORE_CIBLE.zip" "$CORE_CIBLE" "$BASE_CIBLE" \
 	|| { echo "archive de core non préparée" >&2; exit 1; }
 
@@ -371,7 +406,7 @@ PHPEOF
 fi
 
 echo "== Parcours fonctionnel"
-BASE_URL="$BASE" SITE_DIR="$SITE" TRAVAIL_DIR="$TRAVAIL" CORE_CIBLE="$CORE_CIBLE" BASE_CIBLE="$BASE_CIBLE" AGENT_CIBLE="$version_agent_suivante" node "$TRAVAIL/scenario.mjs"
+BASE_URL="$BASE" SITE_DIR="$SITE" TRAVAIL_DIR="$TRAVAIL" CORE_CIBLE="$CORE_CIBLE" BASE_CIBLE="$BASE_CIBLE" CORE_DEPART="$CORE_DEPART" AGENT_CIBLE="$version_agent_suivante" node "$TRAVAIL/scenario.mjs"
 CODE=$?
 
 echo
