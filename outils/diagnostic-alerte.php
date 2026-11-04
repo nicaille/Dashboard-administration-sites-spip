@@ -27,8 +27,9 @@
  *
  * Usage, au choix :
  *
- *     php diagnostic-alerte.php              # déposé n'importe où sous la racine
- *     https://<tour>/diagnostic-alerte.php   # connecté en webmestre
+ *     php diagnostic-alerte.php                   # déposé sous la racine de la tour
+ *     php diagnostic-alerte.php /chemin/tour      # la racine nommée à la main
+ *     https://<tour>/diagnostic-alerte.php        # connecté en webmestre
  *
  * **La ligne de commande est celle qui compte** : l'alerte part du cron, et
  * c'est là que `url_de_base()` ment. Le lancer par le navigateur montre l'autre
@@ -45,16 +46,38 @@ $alerte_web = PHP_SAPI !== 'cli';
 /**
  * La racine SPIP, en remontant depuis le fichier.
  *
+ * Rend aussi la liste de ce qui a été essayé : un « racine introuvable » sans
+ * les chemins visités n'apprend rien à celui qui le lit, et c'est arrivé — la
+ * sonde déposée dans un répertoire d'où la racine n'est pas accessible s'est
+ * arrêtée en nommant le seul endroit où elle n'était pas.
+ *
  * @param string $depart
- * @return string Chaîne vide si rien n'est trouvé
+ * @return array{racine: string, essais: array<string, string>}
  */
 function alerte_racine($depart) {
 	$courant = rtrim((string) $depart, '/');
+	$essais  = [];
 
-	for ($i = 0; $i < 6 && $courant !== ''; $i++) {
-		if (is_readable($courant . '/ecrire/inc_version.php')) {
-			return $courant . '/';
+	for ($i = 0; $i < 8 && $courant !== ''; $i++) {
+		$cible = $courant . '/ecrire/inc_version.php';
+
+		if (is_readable($cible)) {
+			return ['racine' => $courant . '/', 'essais' => $essais];
 		}
+
+		// Dire *pourquoi* chaque candidat a été écarté : un `ecrire/` présent
+		// mais sans `inc_version.php` ne désigne pas la même panne qu'un
+		// répertoire qui n'a jamais contenu de SPIP.
+		if (!is_dir($courant)) {
+			$essais[$courant] = 'répertoire absent';
+		} elseif (!is_dir($courant . '/ecrire')) {
+			$essais[$courant] = 'pas de ecrire/';
+		} elseif (!file_exists($cible)) {
+			$essais[$courant] = 'ecrire/ sans inc_version.php';
+		} else {
+			$essais[$courant] = 'ecrire/inc_version.php illisible (droits ?)';
+		}
+
 		$parent = dirname($courant);
 		if ($parent === $courant) {
 			break;
@@ -62,7 +85,7 @@ function alerte_racine($depart) {
 		$courant = $parent;
 	}
 
-	return '';
+	return ['racine' => '', 'essais' => $essais];
 }
 
 /**
@@ -99,9 +122,35 @@ function alerte_ligne($quoi, $valeur) {
 	alerte_dire(sprintf('%-46s %s', $quoi . ' :', (string) $valeur));
 }
 
-$racine = alerte_racine(__DIR__);
+// Un chemin donné à la main l'emporte : la sonde n'a pas à être déposée dans
+// l'arborescence du site pour le mesurer, et sur un hébergement où le site vit
+// ailleurs que sous le répertoire du compte c'est le seul moyen.
+//
+// **En ligne de commande seulement.** Par le navigateur, ce paramètre ferait
+// inclure un fichier choisi dans la requête — même réservé aux webmestres, ce
+// n'est pas un pouvoir qu'une sonde doit offrir.
+$impose = (!$alerte_web && isset($argv[1])) ? rtrim((string) $argv[1], '/') : '';
+$impose = preg_replace('#^--racine=#', '', $impose);
+
+$trouve = $impose !== '' ? alerte_racine($impose) : alerte_racine(__DIR__);
+$racine = $trouve['racine'];
+
 if ($racine === '') {
-	alerte_dire('Racine SPIP introuvable au-dessus de ' . __DIR__);
+	alerte_dire('Racine SPIP introuvable' . ($impose !== '' ? ' sous ' . $impose : ' au-dessus de ' . __DIR__) . '.');
+	alerte_dire('');
+	alerte_dire('Essayé, du plus proche au plus lointain :');
+	foreach ($trouve['essais'] as $chemin => $pourquoi) {
+		alerte_dire(sprintf('  %-52s %s', $chemin, $pourquoi));
+	}
+	alerte_dire('');
+	alerte_dire('La racine cherchée est celle de la TOUR DE CONTRÔLE : le répertoire qui');
+	alerte_dire('contient ecrire/ et spip.php. Deux façons d’avancer :');
+	alerte_dire('');
+	alerte_dire('  1. la nommer directement, sans déplacer la sonde :');
+	alerte_dire('         php ' . __FILE__ . ' /chemin/vers/la/tour');
+	alerte_dire('');
+	alerte_dire('  2. la retrouver, si le chemin n’est pas sous la main :');
+	alerte_dire('         find ~ -maxdepth 5 -path \'*/ecrire/inc_version.php\' 2>/dev/null');
 	exit(1);
 }
 
