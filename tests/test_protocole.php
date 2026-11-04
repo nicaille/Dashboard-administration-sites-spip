@@ -3083,6 +3083,94 @@ verifier('une clef propre vaut sans clef de tour',
 
 $GLOBALS['dashboard_config_test'] = [];
 
+echo "\n== L'alerte « Erreur dans les plugins » après une mise à jour ==\n";
+
+/* Signalé en production : après une mise à jour de plugins par le parc, les
+   sites gérés affichent « Erreur dans les plugins : …/plugins/auto/waf/v1.2.23/waf_pipelines.php »,
+   et le message ne part qu'en visitant leur page de gestion des plugins.
+
+   Lu dans le core, pas supposé : la meta `message_crash_plugins` n'est écrite
+   que par `include_once_check()` (`ecrire/inc/utils.php`), quand un cache de
+   chargement généré désigne un fichier disparu — le dossier versionné que la
+   mise à jour vient de remplacer. Et elle n'est effacée que par
+   `ecrire_plugin_actifs()`, sous la condition
+   `isset($GLOBALS['meta']['message_crash_plugins'])`, c'est-à-dire
+   l'instantané lu à **l'amorçage de la requête**. L'agent ayant démarré avant
+   le remplacement des fichiers, il ne voit pas une alerte écrite après — d'où
+   la relecture des metas, et ce constat d'après coup. */
+verifier('un vestige après un recalcul réussi s’efface',
+	dashagent_crash_plugins_perime(true, true) === true);
+verifier('rien à effacer quand l’alerte est absente',
+	dashagent_crash_plugins_perime(true, false) === false);
+
+/* La condition qui compte. Si le recalcul a échoué, les caches de chargement
+   peuvent encore désigner des fichiers absents : l'alerte est alors exacte, et
+   l'effacer masquerait un site réellement en peine. */
+verifier('un recalcul échoué garde l’alerte',
+	dashagent_crash_plugins_perime(false, true) === false);
+verifier('et sans recalcul ni alerte, rien non plus',
+	dashagent_crash_plugins_perime(false, false) === false);
+
+/* Le ménage doit rendre compte de ce qu'il a fait : un vestige effacé en
+   silence serait indiscernable d'un vestige resté. */
+verifier('le ménage nomme cette étape dans son compte rendu',
+	strpos((string) file_get_contents(chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_maj.php'),
+		"\$rapport['alerte_crash_effacee']") !== false);
+
+echo "\n== L'alerte des plugins remonte dans l'inventaire ==\n";
+
+/* Côté agent : une lecture de meta, et rien d'autre. Les chemins sont ramenés à
+   la racine du site — ils nomment le plugin et la version en cause, qui est
+   tout ce qui se corrige, là où le chemin absolu de l'hébergement n'apprend
+   rien et bavarde sur l'arborescence d'en face. */
+$GLOBALS['meta']['message_crash_plugins'] = serialize([
+	'plugins/auto/waf/v1.2.23/waf_pipelines.php' => true,
+	'plugins/auto/saisies/v4.0.0/saisies_fonctions.php' => true,
+]);
+$crash = dashagent_infos_plugins_crash();
+verifier('l’agent compte les fichiers signalés', ($crash['nb'] ?? 0) === 2, $crash['nb'] ?? 0);
+verifier('et les nomme', ($crash['fichiers'][0] ?? '') === 'plugins/auto/waf/v1.2.23/waf_pipelines.php',
+	$crash['fichiers'][0] ?? '');
+
+$GLOBALS['meta']['message_crash_plugins'] = serialize([]);
+verifier('aucune alerte, aucun fichier', dashagent_infos_plugins_crash() === ['nb' => 0, 'fichiers' => []]);
+
+/* Une meta illisible ne doit pas faire tomber l'inventaire entier : elle vient
+   d'un site qui a pu être tripoté, et un inventaire perdu coûte plus cher qu'un
+   chiffre manquant. */
+$GLOBALS['meta']['message_crash_plugins'] = 'ceci n’est pas sérialisé';
+verifier('une meta illisible ne rend rien, sans lever',
+	dashagent_infos_plugins_crash() === ['nb' => 0, 'fichiers' => []]);
+unset($GLOBALS['meta']['message_crash_plugins']);
+verifier('une meta absente non plus',
+	dashagent_infos_plugins_crash() === ['nb' => 0, 'fichiers' => []]);
+
+/* Côté tour. Un agent d'avant la 1.0.28 ne joint rien : l'absence vaut « on ne
+   sait pas », et se range comme « rien à signaler » faute de pouvoir dire
+   autre chose — mais sans jamais inventer de contenu. */
+verifier('un inventaire sans la clef ne range rien',
+	dashboard_crash_texte(null) === '' && dashboard_crash_texte([]) === '');
+verifier('les chemins se rangent un par ligne',
+	dashboard_crash_texte(['nb' => 2, 'fichiers' => ['a/x.php', 'b/y.php']]) === "a/x.php\nb/y.php");
+verifier('et se relisent en tableau',
+	dashboard_crash_fichiers("a/x.php\nb/y.php") === ['a/x.php', 'b/y.php']);
+verifier('le décompte suit',
+	dashboard_crash_nb("a/x.php\nb/y.php") === 2 && dashboard_crash_nb('') === 0);
+
+/* Un retour à la ligne dans un chemin fabriquerait une fausse entrée dans la
+   liste : ce qui vient d'un site géré est inerte, y compris hors du HTML — la
+   règle déjà écrite pour les titres de sites dans les alertes. */
+verifier('un retour à la ligne ne fabrique pas d’entrée',
+	dashboard_crash_nb(dashboard_crash_texte(['fichiers' => ["a/x.php\nb/faux.php"]])) === 1);
+
+/* Et une liste qui s'emballe est bornée : elle voyage dans une colonne, puis
+   dans une page. */
+verifier('la liste est bornée à vingt',
+	dashboard_crash_nb(dashboard_crash_texte(['fichiers' => array_map(
+		static function ($i) { return 'p/' . $i . '.php'; },
+		range(1, 50)
+	)])) === 20);
+
 echo "\n== L'adresse que la tour donne d'elle-même ==\n";
 
 /* Repéré dans la console d'un Cloudflare, qui voyait arriver :

@@ -981,6 +981,8 @@ await urlsDActions(page, 'fiche du site', '/ecrire/?exec=dashboard_site&id_dashb
 
 console.log('\n### Mise à jour du core SPIP');
 const coreCible = process.env.CORE_CIBLE || '4.4.99';
+// Relevée par `executer.sh` sur l'archive installée, avant toute mise à jour.
+const coreDepart = process.env.CORE_DEPART || '';
 
 // Le dépôt d'archives de core est local et en http : le tableau de bord ne
 // l'accepte qu'avec l'autorisation explicite déjà cochée, et l'agent qu'avec
@@ -1098,8 +1100,19 @@ dit('aucun encadré d’avancement ne subsiste',
 const lignesCore = JSON.parse(sql(
 	"SELECT message FROM spip_dashboard_journal WHERE operation = 'core_maj' ORDER BY id_dashboard_journal"
 )).map((l) => String(l.message));
-dit(`le journal porte la transition 4.4.23 → ${coreCible}`,
-	lignesCore.some((m) => new RegExp(`4\\.4\\.23\\s*→\\s*${coreCible.replace(/\./g, '\\.')}`).test(m)),
+// La version de départ ne s'écrit pas ici : c'est celle de l'archive donnée au
+// harnais, et un numéro figé ne tient que jusqu'à la publication suivante de
+// SPIP. Mesuré : écrit « 4.4.23 », ce contrôle échouait sur une archive 4.4.29
+// en annonçant une transition pourtant juste.
+//
+// Elle vient de l'environnement, relevée par `executer.sh` **avant** la mise à
+// jour — et surtout pas de la ligne de journal qu'on vérifie : extraire le
+// numéro de la ligne puis vérifier qu'il y figure ne prouve rien, et une
+// transition « 9.9.9 → 4.4.99 » passerait au vert.
+dit(`le journal porte la transition ${coreDepart || '<départ inconnu>'} → ${coreCible}`,
+	coreDepart !== '' && lignesCore.some((m) => new RegExp(
+		`${coreDepart.replace(/\./g, '\\.')}\\s*→\\s*${coreCible.replace(/\./g, '\\.')}`
+	).test(m)),
 	lignesCore.join(' | '));
 dit('le journal porte la conclusion du chantier',
 	lignesCore.some((m) => /terminé/.test(m)), lignesCore.join(' | '));

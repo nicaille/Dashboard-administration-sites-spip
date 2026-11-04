@@ -849,6 +849,20 @@ function dashagent_apres_maj($dossiers = []) {
 	// filtres de texte, que l'amorçage d'une action ne charge pas.
 	$rapport['filtres_textes'] = dashagent_filtres_textes();
 
+	// Relire les metas **avant** le recalcul, et ce n'est pas une précaution de
+	// confort. `ecrire_plugin_actifs()` efface l'alerte « Erreur dans les
+	// plugins » sous condition :
+	//
+	//     if (isset($GLOBALS['meta']['message_crash_plugins'])) { effacer_meta(…); }
+	//
+	// soit l'instantané lu à l'**amorçage de la requête**. Or l'agent a démarré
+	// avant que les fichiers ne soient remplacés : l'alerte est écrite après,
+	// par la première visite qui charge encore l'ancien cache de chargement, et
+	// notre recalcul ne la verrait donc pas. Lui rendre une vue fraîche suffit
+	// à ce que le core fasse son ménage lui-même.
+	include_spip('inc/meta');
+	lire_metas();
+
 	// « ajoute » avec une liste vide revalide depuis le disque les plugins déjà
 	// actifs, et rien d'autre : c'est le recalcul sûr après remplacement de
 	// fichiers. Surtout pas « raz », qui prend la liste telle qu'on la fournit
@@ -863,6 +877,19 @@ function dashagent_apres_maj($dossiers = []) {
 		}
 	);
 
+	// Et aller constater après coup, parce que la fenêtre ne se ferme pas d'un
+	// seul coup : une visite tombée **pendant** le recalcul écrit l'alerte sur
+	// un cache qui était encore l'ancien, et la relecture d'avant ne pouvait pas
+	// la connaître. Les fichiers de chargement sont maintenant justes ; ce qui
+	// reste en base est un vestige, et l'effacer est exactement ce que le core
+	// fait à chaque recalcul.
+	$rapport['alerte_crash_effacee'] = false;
+	lire_metas();
+	if (dashagent_crash_plugins_perime($rapport['plugins_recalcules'], isset($GLOBALS['meta']['message_crash_plugins']))) {
+		effacer_meta('message_crash_plugins');
+		$rapport['alerte_crash_effacee'] = true;
+	}
+
 	// Le plugin mis à jour peut avoir un schéma de base à faire évoluer.
 	include_spip('plugins/installer');
 	$rapport['installations_rejouees'] = dashagent_apres_maj_etape(
@@ -875,6 +902,35 @@ function dashagent_apres_maj($dossiers = []) {
 	);
 
 	return $rapport;
+}
+
+/**
+ * L'alerte « Erreur dans les plugins » est-elle un vestige qu'on peut effacer ?
+ *
+ * Pure, et c'est tout l'intérêt : la décision se vérifie sans base ni fichiers.
+ *
+ * La meta `message_crash_plugins` n'est écrite que par `include_once_check()`
+ * (`ecrire/inc/utils.php`), quand un cache de chargement généré désigne un
+ * fichier qui a disparu — le cas exact du dossier versionné qu'une mise à jour
+ * vient de remplacer. Le core ne l'effface qu'au recalcul de la liste des
+ * plugins, et **sans regarder si les fichiers sont revenus** : une mise à jour
+ * change le nom du dossier, donc ce fichier-là ne reviendra jamais, et attendre
+ * son retour garderait l'alerte à l'écran pour toujours.
+ *
+ * D'où les deux conditions, et pas une de plus :
+ *
+ * - **le recalcul a abouti.** S'il a échoué, les caches de chargement peuvent
+ *   encore désigner des fichiers absents : l'alerte est alors exacte, et
+ *   l'effacer masquerait un site réellement en peine ;
+ * - **l'alerte est là.** Effacer une meta absente est un écrit pour rien dans
+ *   la table des metas, qui se recopie dans le cache de SPIP à chaque hit.
+ *
+ * @param bool $recalcul Le recalcul de la liste des plugins a-t-il abouti
+ * @param bool $alerte La meta est-elle présente
+ * @return bool
+ */
+function dashagent_crash_plugins_perime($recalcul, $alerte) {
+	return (bool) $recalcul && (bool) $alerte;
 }
 
 /**

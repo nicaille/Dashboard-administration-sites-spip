@@ -47,6 +47,10 @@ function dashagent_infos_collecter($args = []) {
 	$infos['depots'] = $avec_plugins ? dashagent_infos_depots() : null;
 	$infos['caches']  = $avec_caches ? dashagent_infos_caches() : null;
 	$infos['capacites'] = dashagent_infos_capacites();
+	// Une lecture de meta, donc gratuite, et toujours jointe : c'est une alerte
+	// que le webmestre ne voit qu'en ouvrant l'espace privé du site, un site à
+	// la fois. La tour la rassemble.
+	$infos['plugins_crash'] = dashagent_infos_plugins_crash();
 
 	/* La tendance du WAF voyage avec l'inventaire, et non par un appel à part :
 	   la tour de contrôle la range à chaque synchronisation, et son graphique du
@@ -65,6 +69,65 @@ function dashagent_infos_collecter($args = []) {
 	}
 
 	return $infos;
+}
+
+/**
+ * L'alerte « Erreur dans les plugins » que le site porte en meta.
+ *
+ * SPIP écrit `message_crash_plugins` quand un cache de chargement généré
+ * désigne un fichier disparu (`include_once_check()`), et ne l'affiche que dans
+ * l'espace privé du site, à qui sait configurer les plugins. Le webmestre d'un
+ * parc ne la découvre donc qu'en ouvrant ses sites un par un.
+ *
+ * Ce qu'on en remonte, et pas plus :
+ *
+ * - **le décompte**, qui suffit à poser un badge sur la vue d'ensemble ;
+ * - **les chemins**, ramenés à la racine du site : ils nomment le plugin et la
+ *   version en cause, qui est tout ce qui se corrige. Le chemin absolu de
+ *   l'hébergement n'apprendrait rien à la tour et bavarderait sur l'arborescence
+ *   d'en face — la même règle que `dashagent_exception_message()` ;
+ * - **au plus vingt**, et chacun tronqué : une liste qui s'emballe n'est pas plus
+ *   lisible, et elle voyage ensuite dans une colonne puis dans une page.
+ *
+ * Rien n'est effacé ici. Ce n'est pas le rôle d'un inventaire, qui se doit
+ * d'être une lecture : le ménage appartient au recalcul d'après mise à jour.
+ *
+ * @return array{nb: int, fichiers: array<int, string>}
+ */
+function dashagent_infos_plugins_crash() {
+	$brut = $GLOBALS['meta']['message_crash_plugins'] ?? '';
+	$liste = is_string($brut) && $brut !== '' ? @unserialize($brut) : [];
+	if (!is_array($liste)) {
+		$liste = [];
+	}
+
+	$racines = [];
+	foreach (['_ROOT_RACINE', '_ROOT_CWD', '_DIR_RACINE'] as $constante) {
+		if (defined($constante) && is_string(constant($constante)) && constant($constante) !== '') {
+			$racines[] = constant($constante);
+		}
+	}
+
+	$fichiers = [];
+	foreach (array_keys($liste) as $chemin) {
+		$chemin = (string) $chemin;
+		foreach ($racines as $racine) {
+			if (strncmp($chemin, $racine, strlen($racine)) === 0) {
+				$chemin = substr($chemin, strlen($racine));
+				break;
+			}
+		}
+		$chemin = ltrim(str_replace('\\', '/', $chemin), '/');
+		if ($chemin === '') {
+			continue;
+		}
+		$fichiers[] = substr($chemin, 0, 200);
+		if (count($fichiers) >= 20) {
+			break;
+		}
+	}
+
+	return ['nb' => count($liste), 'fichiers' => $fichiers];
 }
 
 /**

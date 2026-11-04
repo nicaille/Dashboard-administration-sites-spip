@@ -183,6 +183,19 @@
 </div>
 ]
 
+[(#PLUGINS_CRASH|oui)
+<div class="dashboard-fiche dashboard-fiche-alerte" id="plugins-crash">
+	<h2><:dashboard:titre_plugins_crash:></h2>
+	<p><:dashboard:plugins_crash_texte:></p>
+	<ul>
+	<BOUCLE_crash(DATA){source tableau,#PLUGINS_CRASH|dashboard_crash_fichiers}>
+		<li><code>#VALEUR|entites_html</code></li>
+	</BOUCLE_crash>
+	</ul>
+	<p class="explication"><:dashboard:plugins_crash_explication:></p>
+</div>
+]
+
 [(#BASE_MAJ|=={oui}|oui)
 <div class="dashboard-fiche dashboard-fiche-alerte">
 	<h2><:dashboard:titre_base_maj:></h2>

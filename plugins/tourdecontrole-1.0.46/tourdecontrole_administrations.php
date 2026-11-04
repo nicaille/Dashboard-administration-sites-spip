@@ -146,6 +146,10 @@ function tourdecontrole_upgrade($nom_meta_base_version, $version_cible) {
 		['tourdecontrole_creer_tables'],
 	];
 
+	$maj['1.0.14'] = [
+		['tourdecontrole_creer_tables'],
+	];
+
 	include_spip('base/upgrade');
 	maj_plugin($nom_meta_base_version, $version_cible, $maj);
 }

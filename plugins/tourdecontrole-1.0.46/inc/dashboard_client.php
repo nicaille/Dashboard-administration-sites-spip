@@ -251,6 +251,81 @@ function dashboard_adresse_tour_choisir($meta, $repli) {
 }
 
 /**
+ * L'alerte « Erreur dans les plugins » d'un site, telle qu'on la range.
+ *
+ * Pure. Prend ce que l'agent a joint à son inventaire — déjà passé par
+ * `dashboard_inerte()` — et rend un chemin par ligne, ou la chaîne vide quand
+ * il n'y a rien à dire.
+ *
+ * Un agent d'avant la 1.0.28 ne joint rien : l'absence vaut **« on ne sait
+ * pas »**, pas « tout va bien ». Les deux se confondraient si l'on gardait
+ * l'ancienne valeur, d'où la chaîne vide — le parc n'affiche alors aucun badge,
+ * ce qui est exactement ce qu'on peut dire d'un site qui ne nous renseigne pas.
+ *
+ * @param mixed $crash Sous-tableau `plugins_crash` de l'inventaire
+ * @return string
+ */
+function dashboard_crash_texte($crash) {
+	$fichiers = is_array($crash) ? ($crash['fichiers'] ?? null) : null;
+	if (!is_array($fichiers)) {
+		return '';
+	}
+
+	$propres = [];
+	foreach ($fichiers as $fichier) {
+		$fichier = trim((string) $fichier);
+		// Un retour à la ligne dans un chemin fabriquerait une fausse entrée
+		// dans la liste : ce qui vient d'un site géré est inerte, y compris
+		// quand ce n'est pas du HTML.
+		$fichier = (string) preg_replace('/[\x00-\x1f\x7f]+/', ' ', $fichier);
+		if ($fichier !== '') {
+			$propres[] = $fichier;
+		}
+	}
+
+	return implode("\n", array_slice(array_unique($propres), 0, 20));
+}
+
+/**
+ * Les chemins d'une alerte, en tableau, pour l'affichage.
+ *
+ * @param string $texte
+ * @return array<int, string>
+ */
+function dashboard_crash_fichiers($texte) {
+	$lignes = preg_split('/\r\n|\r|\n/', (string) $texte) ?: [];
+
+	return array_values(array_filter(array_map('trim', $lignes), static function ($l) {
+		return $l !== '';
+	}));
+}
+
+/**
+ * Combien de fichiers l'alerte d'un site nomme.
+ *
+ * @param string $texte
+ * @return int
+ */
+function dashboard_crash_nb($texte) {
+	return count(dashboard_crash_fichiers($texte));
+}
+
+/**
+ * Combien de sites du parc portent cette alerte.
+ *
+ * @param string $rien
+ * @return int
+ */
+function dashboard_crash_parc($rien = '') {
+	include_spip('base/abstract_sql');
+
+	return (int) sql_countsel('spip_dashboard_sites', [
+		'statut = ' . sql_quote('publie'),
+		'plugins_crash != ' . sql_quote(''),
+	]);
+}
+
+/**
  * Le lien vers la vue d'ensemble du parc, composé sur une base donnée.
  *
  * **Pourquoi cette fonction existe, et pourquoi elle ne passe pas par
