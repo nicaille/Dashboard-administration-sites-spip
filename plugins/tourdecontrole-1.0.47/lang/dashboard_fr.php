@@ -365,6 +365,7 @@ $lang = [
 	'secret_a_copier'     => 'Nouveau secret partagé (affiché une seule fois) : @secret@',
 	'secret_absent'       => 'Aucun secret enregistré : ce site ne peut pas être interrogé.',
 	'secrets_en_clair'    => 'Le chiffrement du core est indisponible : les secrets des sites gérés sont stockés en clair en base. Vérifiez que l’extension PHP sodium est active et que le fichier config/cles.php est accessible.',
+	'schema_incomplet' => 'La base de la tour attend une migration : des colonnes manquent, et les synchronisations ne peuvent pas tout enregistrer. Désactiver puis réactiver le plugin Tour de contrôle joue la migration. Colonnes absentes :',
 	'serveur_attente' => 'Ouvrez cet onglet pour interroger le site.',
 	'site_sans_nom'       => 'Site sans nom @id@',
 	'secret_configure'    => 'Un secret est enregistré pour ce site.',

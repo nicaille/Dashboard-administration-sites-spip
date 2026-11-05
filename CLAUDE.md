@@ -340,6 +340,54 @@ elle est dérivée elle aussi.
 `tests/test_structure.php` refuse désormais tout nom de table écrit en dur dans
 un `*_tables_presentes()`, et exige qu'il lise les déclarations.
 
+## Une colonne absente ne doit pas emporter l'inventaire entier
+
+Régression de la tour 1.0.46, celle qui ajoute une colonne et monte le schéma.
+Sur une tour dont la migration n'avait pas joué, la synchronisation s'est mise à
+échouer **en silence** : `sql_updateq()` rend `false` sur une colonne inconnue,
+SPIP range l'erreur au fond de son journal, et la fonction appelante annonçait
+un succès — sans avoir écrit **un seul champ**.
+
+Ce que le webmestre a vu, et qui ne désigne rien :
+
+- un site en erreur avec le message de la semaine passée, alors que l'agent
+  venait de répondre en 226 ms — et l'a journalisé de son côté ;
+- la version de l'agent fausse sur la fiche, juste dans la liste des plugins,
+  parce que celle-là s'écrit dans une **autre table**, qui n'avait pas le
+  problème ;
+- un plugin annoncé en retard alors que tout était à jour, le décompte étant
+  resté figé ;
+- une date de dernière synchronisation qui ne bougeait plus.
+
+Quatre symptômes incohérents pour une cause unique. Mesuré des deux côtés sur un
+SPIP réel, colonne retirée : avant, pas un champ ne bouge et la tour dit « OK » ;
+après, tout est écrit sauf la colonne absente.
+
+Trois décisions, et la première est la seule qui tienne :
+
+- **on écrit ce que la base sait recevoir**, et on dit haut ce qu'on a laissé de
+  côté. C'est le choix déjà fait pour l'inventaire des caches — *une valeur
+  approximative vaut mieux qu'une synchronisation perdue* —, à la condition qui
+  va avec : que l'approximation se voie. Le journal nomme les colonnes ignorées,
+  et le parc porte un bandeau qui nomme la migration à jouer ;
+- **un `false` de `sql_updateq()` n'est plus un succès.** Annoncer une
+  synchronisation enregistrée quand elle ne l'est pas, c'est afficher l'état
+  d'avant en se croyant à jour ;
+- **la liste des colonnes attendues se dérive des déclarations**
+  (`tourdecontrole_descriptions_tables()`), jamais écrite dans la fonction qui la
+  consulte. C'est mot pour mot la règle déjà payée sur les tables, et la colonne
+  suivante la vérifiera.
+
+La comparaison aplanit la casse : les déclarations s'écrivent en minuscules, mais
+rien n'oblige un serveur à rendre la casse qu'on lui a donnée, et accuser une
+colonne présente ferait pire que se taire.
+
+**Ce que ça apprend sur le harnais**, et c'est le vrai angle mort : le parcours
+d'intégration installe la base **à neuf**, donc toutes les colonnes y sont
+toujours. Aucune montée de schéma n'y est jouée à partir d'un état antérieur.
+Une migration qui ne passe pas, ou qui passe à moitié, ne peut donc pas y être
+vue — et c'est le troisième défaut de production que cet écart laisse filer.
+
 ## La tour a son propre avis, et le confronte
 
 Tout ce que la tour savait des versions **disponibles** venait du catalogue SVP

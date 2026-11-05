@@ -251,6 +251,97 @@ function dashboard_adresse_tour_choisir($meta, $repli) {
 }
 
 /**
+ * Les colonnes qu'une table devrait avoir et qui lui manquent.
+ *
+ * **Pourquoi cette fonction existe.** La 1.0.46 a ajouté une colonne et monté
+ * le schéma. Sur une tour dont la migration n'avait pas joué, la
+ * synchronisation s'est mise à échouer **en silence** : `sql_updateq()` rend
+ * `false` sur une colonne inconnue, SPIP range l'erreur au fond de son journal,
+ * et la fonction appelante annonçait un succès. Rien n'était écrit — ni l'état,
+ * ni la date, ni la version de l'agent, ni le décompte des mises à jour —, si
+ * bien que le parc montrait l'erreur de la semaine passée sur un site qui
+ * venait de répondre en 226 ms. Quatre symptômes incohérents pour une seule
+ * cause, et aucun qui la désigne.
+ *
+ * Mesuré : colonne retirée, l'agent répond et journalise un succès, la tour dit
+ * « OK », et pas un champ de la ligne ne bouge.
+ *
+ * La liste attendue se **dérive des déclarations** du plugin, jamais écrite à la
+ * main : une liste écrite ici ne suivrait pas la prochaine colonne, et c'est
+ * exactement la faute que ce dépôt a déjà payée sur les tables.
+ *
+ * @param string $table
+ * @return array<int, string>
+ */
+function dashboard_colonnes_absentes($table = 'spip_dashboard_sites') {
+	static $vues = [];
+	$table = (string) $table;
+	if (isset($vues[$table])) {
+		return $vues[$table];
+	}
+
+	include_spip('base/tourdecontrole_tables');
+	if (!function_exists('tourdecontrole_descriptions_tables')) {
+		return $vues[$table] = [];
+	}
+
+	$declarations = tourdecontrole_descriptions_tables();
+	$declarees = array_keys((array) ($declarations[$table]['field'] ?? []));
+
+	include_spip('base/abstract_sql');
+	$vivante = sql_showtable($table, true);
+	$vivantes = array_keys((array) ($vivante['field'] ?? []));
+
+	// Une table absente n'est pas une colonne absente : `dashboard_tables_absentes()`
+	// dit déjà ce cas-là, et rendre ici ses sept colonnes brouillerait le
+	// diagnostic au lieu de l'affiner.
+	if (!$vivantes) {
+		return $vues[$table] = [];
+	}
+
+	return $vues[$table] = dashboard_colonnes_manquantes($declarees, $vivantes);
+}
+
+/**
+ * Ce qui manque entre deux listes de colonnes.
+ *
+ * Pure, pour que la comparaison se vérifie sans base. La casse ne compte pas :
+ * les déclarations s'écrivent en minuscules, mais rien n'oblige un serveur à
+ * rendre la même casse qu'on lui a donnée.
+ *
+ * @param array<int, string> $declarees
+ * @param array<int, string> $vivantes
+ * @return array<int, string>
+ */
+function dashboard_colonnes_manquantes($declarees, $vivantes) {
+	if (!is_array($declarees) || !is_array($vivantes)) {
+		return [];
+	}
+
+	$presentes = array_map('strtolower', array_map('strval', $vivantes));
+	$manquantes = [];
+	foreach ($declarees as $colonne) {
+		$colonne = (string) $colonne;
+		if ($colonne !== '' && !in_array(strtolower($colonne), $presentes, true)) {
+			$manquantes[] = $colonne;
+		}
+	}
+
+	return $manquantes;
+}
+
+/**
+ * La base de la tour attend-elle une migration ? Pour le dire sur la page.
+ *
+ * @filtre
+ * @param string $rien
+ * @return string Colonnes manquantes, séparées par des virgules
+ */
+function dashboard_schema_incomplet($rien = '') {
+	return implode(', ', dashboard_colonnes_absentes('spip_dashboard_sites'));
+}
+
+/**
  * L'alerte « Erreur dans les plugins » d'un site, telle qu'on la range.
  *
  * Pure. Prend ce que l'agent a joint à son inventaire — déjà passé par

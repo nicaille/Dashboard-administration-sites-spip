@@ -3117,6 +3117,41 @@ verifier('le ménage nomme cette étape dans son compte rendu',
 	strpos((string) file_get_contents(chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_maj.php'),
 		"\$rapport['alerte_crash_effacee']") !== false);
 
+echo "\n== Une colonne absente ne doit pas emporter l'inventaire entier ==\n";
+
+/* Signalé en production, et c'est une régression de la 1.0.46 : elle ajoute une
+   colonne et monte le schéma. Sur une tour dont la migration n'avait pas joué,
+   `sql_updateq()` rend `false` sur la colonne inconnue, SPIP range l'erreur au
+   fond de son journal, et la synchronisation annonçait un succès — sans avoir
+   écrit **un seul champ**. Le parc affichait donc l'erreur de la semaine passée,
+   une date figée, une version d'agent périmée et un décompte de mises à jour
+   faux, sur un site qui venait de répondre en 226 ms. Quatre symptômes
+   incohérents pour une cause unique, et aucun qui la désigne.
+
+   Mesuré des deux côtés sur un SPIP réel, colonne retirée : avant, pas un champ
+   ne bouge et la tour dit « OK » ; après, tout est écrit sauf la colonne absente,
+   et le journal nomme ce qui a été laissé de côté. */
+verifier('ce qui manque est nommé',
+	dashboard_colonnes_manquantes(['etat', 'plugins_crash'], ['etat']) === ['plugins_crash']);
+verifier('rien ne manque quand tout est là',
+	dashboard_colonnes_manquantes(['etat', 'erreur'], ['etat', 'erreur']) === []);
+
+/* La casse ne compte pas : les déclarations s'écrivent en minuscules, mais rien
+   n'oblige un serveur à rendre la casse qu'on lui a donnée. Comparer sans
+   l'aplanir ferait déclarer absentes des colonnes parfaitement présentes — et le
+   bandeau accuserait une base saine. */
+verifier('la casse ne fabrique pas d’absence',
+	dashboard_colonnes_manquantes(['plugins_crash'], ['PLUGINS_CRASH']) === []);
+
+/* Une colonne de plus dans la base n'est pas un manque : une install qui a
+   gardé une colonne d'une version antérieure n'a rien à se faire dire. */
+verifier('une colonne en trop n’est pas un manque',
+	dashboard_colonnes_manquantes(['etat'], ['etat', 'vieille_colonne']) === []);
+
+verifier('un argument qui n’est pas un tableau ne rend rien',
+	dashboard_colonnes_manquantes('etat', ['etat']) === []
+	&& dashboard_colonnes_manquantes(['etat'], 'etat') === []);
+
 echo "\n== Une erreur affichée sans sa date se lit comme une erreur du jour ==\n";
 
 /* La colonne `erreur` d'un site n'a qu'un écrivain — la synchronisation — et

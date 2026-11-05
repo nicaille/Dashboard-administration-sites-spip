@@ -11,6 +11,19 @@
 
 <BOUCLE_installe(CONDITION){si #VAL|dashboard_tables_presentes}>
 
+[(#REM)
+	Les tables sont là, mais une colonne peut manquer : la base attend alors une
+	migration que l'activation du plugin n'a pas jouée. Sans ce bandeau, la
+	synchronisation écrivait ce qu'elle pouvait et le parc affichait des valeurs
+	figées — état, date, version de l'agent, décompte des mises à jour — sans que
+	rien ne désigne la cause.
+]
+[(#VAL|dashboard_schema_incomplet|oui)
+<p class="reponse_formulaire reponse_formulaire_erreur">
+	<:dashboard:schema_incomplet:> <code>[(#VAL|dashboard_schema_incomplet)]</code>
+</p>
+]
+
 #SET{synthese,#VAL|dashboard_synthese}
 <ul class="dashboard-synthese">
 	<li><strong>[(#GET{synthese}|table_valeur{supervises})]</strong> <:dashboard:synthese_supervises:></li>
