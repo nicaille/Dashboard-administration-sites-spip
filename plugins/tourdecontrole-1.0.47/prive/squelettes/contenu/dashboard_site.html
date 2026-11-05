@@ -79,8 +79,20 @@
 </BOUCLE_bilan>
 
 [(#ETAT|=={erreur}|oui)
+	[(#REM)
+		Le libellé porte l'ancienneté de la tentative, parce que cette colonne
+		n'est remise à vide qu'au succès de la synchronisation suivante : un site
+		réparé à la main sur place garde son dernier message tant que la tour
+		n'est pas allée constater. Sans date, rien ne distinguait une erreur de
+		dix minutes d'une erreur de mardi.
+
+		Le libellé se compose en PHP : une chaîne de langue à arguments écrite
+		dans un SET rend une chaîne vide, et la forme à accolades imbriquées
+		casse l'analyse. Et chaque balise garde ses propres crochets, sinon la
+		dernière devient le sujet du bloc et la première ressort en clair.
+	]
 	<p class="reponse_formulaire reponse_formulaire_erreur">
-		<:dashboard:derniere_erreur:> [(#ERREUR|textebrut)]
+		[(#DATE_SYNC|dashboard_erreur_libelle)] [(#ERREUR|textebrut)]
 	</p>
 ]
 

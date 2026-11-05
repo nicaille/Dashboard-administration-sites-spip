@@ -3117,6 +3117,57 @@ verifier('le ménage nomme cette étape dans son compte rendu',
 	strpos((string) file_get_contents(chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_maj.php'),
 		"\$rapport['alerte_crash_effacee']") !== false);
 
+echo "\n== Une erreur affichée sans sa date se lit comme une erreur du jour ==\n";
+
+/* La colonne `erreur` d'un site n'a qu'un écrivain — la synchronisation — et
+   n'est remise à vide qu'**au succès de la suivante**. Un site réparé à la main
+   sur place garde donc son dernier message tant que la tour n'est pas allée
+   constater, et la fiche le donnait sans date : rien ne disait si l'on lisait
+   une erreur de dix minutes ou de mardi. C'est la confusion qui a coûté une
+   recherche sur un site parfaitement sain.
+
+   `dashboard_anciennete()` prend son instant de référence en argument : sans
+   cela, le contrôle devrait fabriquer des dates relatives à l'heure qu'il est,
+   et n'éprouverait plus que l'arithmétique de ses propres jeux d'essai. */
+$t = strtotime('2026-11-05 12:00:00');
+verifier('une date vide n’a pas d’âge',
+	dashboard_anciennete('', $t) === '' && dashboard_anciennete('0000-00-00 00:00:00', $t) === '');
+verifier('une date illisible non plus',
+	dashboard_anciennete('pas une date', $t) === '');
+
+/* Une erreur datée de demain ne s'explique que par une horloge qui a bougé —
+   celle du site géré ou la nôtre. Inventer « il y a -2 heures » serait pire que
+   se taire, et le libellé retombe alors sur sa forme sans date. */
+verifier('une date future ne rend rien',
+	dashboard_anciennete('2026-11-06 12:00:00', $t) === '');
+
+verifier('moins de deux minutes, c’est « à l’instant »',
+	dashboard_anciennete('2026-11-05 11:59:00', $t) === _T('dashboard:anciennete_instant'));
+verifier('en dessous de deux heures, en minutes',
+	dashboard_anciennete('2026-11-05 11:00:00', $t) === _T('dashboard:anciennete_minutes', ['nb' => 60]));
+verifier('en dessous de deux jours, en heures',
+	dashboard_anciennete('2026-11-04 12:00:00', $t) === _T('dashboard:anciennete_heures', ['nb' => 24]));
+verifier('au-delà, en jours',
+	dashboard_anciennete('2026-11-01 12:00:00', $t) === _T('dashboard:anciennete_jours', ['nb' => 4]));
+
+/* Et le libellé : la forme datée quand on a une date, la forme nue sinon.
+   Jamais de « Dernière erreur, : » — une ponctuation orpheline se remarque plus
+   que l'absence de date.
+
+   Le contrôle porte sur **la clef choisie**, qui est la décision de la
+   fonction, et non sur le texte composé : le bac à sable rend la clef sans
+   interpoler ses arguments, si bien qu'un contrôle sur le texte n'éprouverait
+   que ce faux-là. L'interpolation est le travail de SPIP, et il est éprouvé par
+   le parcours d'intégration qui relit la page. */
+verifier('la forme datée est choisie quand une date existe',
+	dashboard_erreur_libelle(date('Y-m-d H:i:s', time() - 86400 * 3)) === _T('dashboard:derniere_erreur_datee', ['age' => 'peu importe']),
+	dashboard_erreur_libelle(date('Y-m-d H:i:s', time() - 86400 * 3)));
+verifier('et la forme nue sans date',
+	dashboard_erreur_libelle('') === _T('dashboard:derniere_erreur'),
+	dashboard_erreur_libelle(''));
+verifier('les deux formes ne se confondent pas',
+	_T('dashboard:derniere_erreur_datee') !== _T('dashboard:derniere_erreur'));
+
 echo "\n== Un plugin ne doit pas être désactivé par son changement de dossier ==\n";
 
 /* Signalé en production : après la mise à jour de l'agent, celui-ci se
