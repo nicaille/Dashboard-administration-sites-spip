@@ -272,7 +272,27 @@ foreach (['charger_plugins_chemins.php', 'charger_plugins_chemin.php', 'charger_
 		. ' — mentionne l’agent : ' . (stripos($contenu, 'tourdecontrole_agent') !== false ? 'oui' : 'NON'));
 }
 
-/* --- 5. Le verdict ------------------------------------------------------- */
+/* --- 5. Où cette sonde tourne -------------------------------------------- */
+
+agent_dire('');
+agent_dire('OÙ CETTE SONDE TOURNE');
+agent_dire('');
+
+// À comparer avec `url_agent` sur la fiche du site, côté tour. Un hébergement
+// multisite sert plusieurs répertoires depuis **une même base** : un SPIP
+// atteint par un autre nom y lit le même `nom_site` et la même liste de
+// plugins actifs, mais cherche les fichiers dans *son* répertoire. Il rend
+// alors « Fichier dashagent introuvable » en affichant le bon nom de site —
+// exactement ce qu'on voit, alors que tout est juste ici.
+agent_ligne('racine absolue', realpath($racine) ?: $racine);
+agent_ligne('_ROOT_RACINE', defined('_ROOT_RACINE') ? _ROOT_RACINE : null);
+agent_ligne('DOCUMENT_ROOT du serveur', $_SERVER['DOCUMENT_ROOT'] ?? null);
+agent_ligne('hôte par lequel on nous a joints', $_SERVER['HTTP_HOST'] ?? '(ligne de commande)');
+agent_ligne('meta nom_site', $GLOBALS['meta']['nom_site'] ?? null);
+agent_ligne('meta adresse_site', $GLOBALS['meta']['adresse_site'] ?? null);
+agent_ligne('base de données', $GLOBALS['connexions'][0]['db'] ?? (defined('_INSTALL_NAME_DB') ? _INSTALL_NAME_DB : null));
+
+/* --- 6. Le verdict ------------------------------------------------------- */
 
 agent_dire('');
 agent_dire('CE QU’IL FAUT EN FAIRE');
@@ -290,8 +310,19 @@ if (!$fiche) {
 	agent_dire('pas être réécrits, regarder les droits sur ' . $cache . '.');
 } else {
 	agent_dire('SPIP trouve le fichier d’action : vu d’ici, la tour devrait être reçue.');
-	agent_dire('Si elle reçoit encore une 404, c’est que sa requête n’arrive pas au même');
-	agent_dire('SPIP — adresse url_agent erronée, ou frontal qui intercepte.');
+	agent_dire('');
+	agent_dire('Deux choses à vérifier dans cet ordre, côté tour :');
+	agent_dire('');
+	agent_dire('  1. le message affiché est-il **à jour** ? L’erreur d’une opération reste');
+	agent_dire('     en base jusqu’à la synchronisation suivante : relancer une synchro sur');
+	agent_dire('     ce site, et lire ce qu’elle rend, pas ce qui était écrit avant ;');
+	agent_dire('  2. si la 404 revient : `url_agent` sur la fiche du site désigne-t-il bien');
+	agent_dire('     le SPIP ci-dessus ? Comparer l’adresse avec l’hôte et la racine');
+	agent_dire('     imprimés juste au-dessus. Un hébergement multisite sert plusieurs');
+	agent_dire('     répertoires depuis une même base : un autre nom atteint un SPIP qui');
+	agent_dire('     lit le même nom de site et la même liste de plugins actifs, mais');
+	agent_dire('     cherche ses fichiers ailleurs — et rend cette 404 en affichant le bon');
+	agent_dire('     nom de site.');
 }
 
 if ($agent_web) {
