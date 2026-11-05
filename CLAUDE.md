@@ -1701,6 +1701,62 @@ colonne, puis dans une page. Un retour à la ligne dans un chemin y fabriquerait
 une fausse entrée, d'où la neutralisation des caractères de contrôle — *ce qui
 vient d'un site géré est inerte, y compris hors du HTML*.
 
+### Un plugin désactivé par son propre changement de dossier
+
+Signalé en production après la mise à jour de l'agent : **il se retrouvait
+désactivé** sur les sites gérés. Et un agent désactivé, c'est le site qui sort
+du parc — plus rien ne répond, donc plus rien ne peut le remettre d'aplomb à
+distance.
+
+La convention du dossier versionné le disait déjà — *« sans quoi le plugin
+serait désactivé par son propre changement de nom »* — et le chemin zip le
+traitait : il passe le nouveau dossier à `dashagent_apres_maj()`. **Le chemin
+SVP ne déclarait rien.** Or SVP remplace `plugins/auto/<prefixe>/v<ancienne>`
+par la nouvelle et **efface l'ancienne** : la meta désigne alors un dossier
+disparu, et `ecrire_plugin_actifs(…, 'ajoute')` reconstruit sa liste depuis elle
+en écartant tout dossier absent (`is_plugin_dir()`).
+
+Mesuré sur un SPIP réel, meta pointée sur un dossier inexistant :
+
+    sans déclarer le dossier : *** ABSENT — LE PLUGIN EST DÉSACTIVÉ ***
+    en déclarant le dossier  : ACTIF sur auto/zzztest/v1.0.1
+
+**Le dossier se demande au disque, pas à la meta** : celle-ci est précisément ce
+qui est faux au moment où l'on en a besoin. `dashagent_dossier_du_prefixe()`
+cherche donc dans les deux dispositions — `auto/<prefixe>/v*` pour SVP, un
+dossier plat pour notre installateur — et **ne croit pas le nom du dossier** :
+c'est le `paquet.xml` qui dit quel préfixe il porte.
+
+Entre deux candidats, `dashagent_dossier_retenu()` prend **la version la plus
+élevée**, parce que c'est ce que SPIP fera de toute façon
+(`plugin_valide_resume()`) : déclarer l'autre ferait raconter deux histoires
+différentes à la meta et au disque. Par `version_compare()`, et c'est tout
+l'enjeu : « 1.0.9 » dépasse « 1.0.10 » dans l'ordre alphabétique, et nos numéros
+ont deux chiffres depuis longtemps.
+
+Trois choses que les contrôles ont trouvées, et pas la relecture :
+
+- un `(array)` sur l'argument de la fonction pure transformait une chaîne en
+  tableau à clef entière, dont la clef `0` devenait **un nom de dossier
+  fabriqué** — qu'on aurait déclaré à SPIP pour désactiver le plugin qu'on
+  voulait sauver ;
+- le garde-fou de structure, premier jet, était rangé dans une boucle qui ne
+  visite que les fichiers appelant `ecrire_plugin_actifs()` : `dashagent_svp.php`
+  n'en fait pas partie, et **le contrôle ne s'exécutait jamais**. Deuxième fois
+  dans la même journée ;
+- son deuxième jet, lui, accusait la mise à jour du **core**, qui remplace les
+  fichiers de SPIP sans qu'aucun dossier de plugin change de nom et n'a donc rien
+  à déclarer. Un garde-fou trop large accuse du code juste, et on finit par le
+  désarmer : il nomme désormais les deux conclusions qui concernent un plugin,
+  avec un décompte qui tombe si l'une disparaît.
+
+Ce que le parcours d'intégration ne prouve pas, et il faut le savoir : **il ne
+reproduit pas la condition**. L'agent y part d'un dossier plat que notre
+installateur conserve comme retour en arrière, si bien que la meta ne peut pas
+désigner un dossier disparu. Il vérifie désormais que l'agent reste dans la
+liste des actifs et que le dossier nommé existe — ce qu'on veut voir —, mais
+c'est la mesure sur SPIP réel qui a établi la cause et le remède.
+
 ### Un message d'erreur sans son endroit ne sert à rien
 
 `getMessage()` suffit pour une erreur qu'on a levée soi-même, et pas du tout

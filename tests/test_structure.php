@@ -1641,6 +1641,46 @@ foreach ($sources_agent as $fichier) {
    de vérifier quoi que ce soit. */
 verifier('les appels visés existent encore', $appels_gourmands >= 2);
 
+/* Tout chemin de mise à jour doit **déclarer le dossier** au ménage qui suit.
+   SVP remplace `auto/<prefixe>/v<ancienne>` par la nouvelle et efface
+   l'ancienne : la meta désigne alors un dossier disparu, que le recalcul écarte
+   (`is_plugin_dir()`) — le plugin est désactivé par son propre changement de
+   nom. Pour l'agent, c'est le site qui sort du parc, puisque plus rien ne
+   répond. Le chemin zip le déclarait déjà ; le chemin SVP appelait le ménage
+   sans argument, et c'est arrivé en production.
+
+   Le contrôle vise le fichier qui conclut une opération SVP, et non la boucle
+   ci-dessus : `dashagent_svp.php` n'appelle aucune des deux fonctions du core,
+   et un contrôle rangé là-bas ne se serait jamais exécuté. Premier jet de ce
+   garde-fou, et c'est la deuxième fois dans la même journée — un contrôle placé
+   dans une boucle qui ne visite pas son sujet passe au vert sans rien dire. */
+$conclusions = ['dashagent_plugin_maj', 'dashagent_svp_conclure'];
+$chemins_maj = 0;
+
+foreach ($sources_agent as $fichier) {
+	$source = (string) file_get_contents($fichier);
+	foreach ($conclusions as $conclusion) {
+		$corps = corps_de_fonction($source, $conclusion);
+		if ($corps === '') {
+			continue;
+		}
+		$chemins_maj++;
+		$appels = php_sans_commentaires('<' . '?php ' . $corps);
+		verifier(
+			"$conclusion() déclare un dossier au ménage d’après mise à jour",
+			(bool) preg_match('/(?<![\w$])dashagent_apres_maj\s*\(/', $appels)
+			&& !preg_match('/(?<![\w$])dashagent_apres_maj\s*\(\s*\)/', $appels)
+		);
+	}
+}
+
+/* Les deux conclusions sont nommées, et la mise à jour du **core** est
+   volontairement hors liste : elle remplace les fichiers de SPIP, aucun dossier
+   de plugin n'y change de nom, et elle n'a donc rien à déclarer. Le premier jet
+   de ce contrôle l'accusait — un garde-fou trop large accuse du code juste, et
+   on finit par le désarmer. */
+verifier('les deux conclusions de mise à jour de plugin existent encore', $chemins_maj === 2);
+
 echo "\n== Clefs de langue référencées ==\n";
 
 $modules = [];

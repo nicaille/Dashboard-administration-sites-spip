@@ -3117,6 +3117,52 @@ verifier('le ménage nomme cette étape dans son compte rendu',
 	strpos((string) file_get_contents(chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_maj.php'),
 		"\$rapport['alerte_crash_effacee']") !== false);
 
+echo "\n== Un plugin ne doit pas être désactivé par son changement de dossier ==\n";
+
+/* Signalé en production : après la mise à jour de l'agent, celui-ci se
+   retrouvait **désactivé** sur les sites gérés — et un agent désactivé, c'est
+   le site qui sort du parc, puisque plus rien ne répond.
+
+   Le mécanisme, mesuré sur un SPIP réel : SVP remplace
+   `plugins/auto/<prefixe>/v1.0.27` par `v1.0.28` et efface l'ancien. La meta
+   désigne encore l'ancien, et `ecrire_plugin_actifs(…, 'ajoute')` reconstruit sa
+   liste depuis elle en écartant tout dossier absent. Le chemin zip déclarait
+   déjà le nouveau dossier ; le chemin SVP ne déclarait rien.
+
+   Ce que ces contrôles éprouvent est la **règle de choix**, qui est pure. La
+   recherche sur disque et le recalcul du core ont été mesurés sur l'installation
+   réelle : le bac à sable n'a ni l'un ni l'autre, et en écrire des faux
+   n'éprouverait que ce qu'on croit d'eux. */
+verifier('un seul candidat est retenu',
+	dashagent_dossier_retenu(['auto/waf/v1.2.24' => '1.2.24']) === 'auto/waf/v1.2.24');
+verifier('sans candidat, rien à déclarer',
+	dashagent_dossier_retenu([]) === '' && dashagent_dossier_retenu('pas un tableau') === '');
+
+/* SPIP retient la version la plus élevée quand deux dossiers déclarent le même
+   préfixe (`plugin_valide_resume()`). Déclarer l'autre ferait cohabiter deux
+   avis, et c'est le plus élevé qui gagnerait de toute façon. */
+verifier('entre deux dossiers, la version la plus élevée',
+	dashagent_dossier_retenu([
+		'tourdecontrole_agent-1.0.27' => '1.0.27',
+		'auto/tourdecontrole_agent/v1.0.28' => '1.0.28',
+	]) === 'auto/tourdecontrole_agent/v1.0.28');
+
+/* Et le piège qui mord sur ce parc précisément : « 1.0.9 » est supérieur à
+   « 1.0.10 » dans l'ordre alphabétique. Nos numéros ont deux chiffres depuis
+   longtemps, donc une comparaison de chaînes retiendrait le mauvais dossier —
+   et désactiverait le plugin une fois sur deux. */
+verifier('la comparaison est numérique, pas alphabétique',
+	dashagent_dossier_retenu([
+		'auto/p/v1.0.9' => '1.0.9',
+		'auto/p/v1.0.10' => '1.0.10',
+	]) === 'auto/p/v1.0.10');
+
+/* Un dossier sans version lisible ne doit pas l'emporter sur un dossier qui en
+   annonce une : on garde le premier vu faute de mieux, jamais au détriment d'un
+   candidat qui se nomme. */
+verifier('une version illisible ne détrône pas une version connue',
+	dashagent_dossier_retenu(['auto/p/vX' => '', 'auto/p/v2.0.0' => '2.0.0']) === 'auto/p/v2.0.0');
+
 echo "\n== L'alerte des plugins remonte dans l'inventaire ==\n";
 
 /* Côté agent : une lecture de meta, et rien d'autre. Les chemins sont ramenés à

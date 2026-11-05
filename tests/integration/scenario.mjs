@@ -1871,6 +1871,27 @@ if (await boutonAgent.count()) {
 	const apres = JSON.parse(sql(
 		'SELECT etat, agent_version FROM spip_dashboard_sites WHERE id_dashboard_site = 1'))[0];
 	dit('l’agent répond encore après s’être remplacé', apres.etat === 'ok', apres.etat);
+
+	/* Et il est toujours **actif** aux yeux de SPIP, sur un dossier qui existe.
+	   En production, l'agent se retrouvait désactivé après sa propre mise à
+	   jour : SVP efface le dossier de la version précédente, la meta le désigne
+	   encore, et le recalcul écarte tout dossier absent — le plugin est
+	   désactivé par son changement de nom. Un agent désactivé, c'est le site qui
+	   sort du parc.
+	   
+	   Ce contrôle ne reproduit pas la condition de production à lui seul : ici
+	   l'ancien dossier de l'agent survit (il sert de retour en arrière), donc la
+	   meta ne peut pas désigner un dossier disparu. Il dit ce qu'on veut voir, et
+	   le README nomme cet écart. */
+	const actifsApres = (() => {
+		const brut = JSON.parse(sql("SELECT valeur FROM spip_meta WHERE nom = 'plugin'"))[0] || {};
+		const m = /"TOURDECONTROLE_AGENT"[^}]*?"dir";s:\d+:"([^"]*)"/.exec(String(brut.valeur || ''));
+		return m ? m[1] : '';
+	})();
+	dit('l’agent est resté dans la liste des plugins actifs', actifsApres !== '', actifsApres || '(absent)');
+	dit('et le dossier qu’elle désigne existe',
+		actifsApres !== '' && existsSync(`${site}/plugins/${actifsApres}`),
+		`plugins/${actifsApres}`);
 	dit('le parc enregistre la nouvelle version de l’agent',
 		apres.agent_version === agentCible, `${apres.agent_version} (attendu ${agentCible})`);
 
