@@ -139,6 +139,17 @@ précis.
 
 ## Ce que le parcours ne couvre pas
 
+**SVP n'efface jamais de dossier ici.** L'agent de départ est copié dans un
+dossier plat (`plugins/tourdecontrole_agent-<version>`), et la mise à jour range
+la nouvelle version sous `plugins/auto/tourdecontrole_agent/v<version>` sans
+toucher à l'ancien - notre installateur le garde comme retour en arrière. En
+production, SVP possède le dossier précédent et le supprime : la meta désigne
+alors un dossier disparu, et le plugin se retrouve désactivé par son propre
+changement de nom. C'est arrivé à l'agent, donc à des sites sortis du parc, et
+le parcours ne pouvait pas le voir. Il vérifie maintenant que l'agent reste
+actif sur un dossier qui existe, ce qui est la conséquence qu'on veut - pas la
+condition qui la provoque.
+
 **Le repli sur le déploiement d'archive.** Le site de test a SVP — il est livré
 avec SPIP — et le parcours vérifie donc le chemin SVP, celui qu'emprunteront
 presque tous les sites réels. Le repli ne se déclenche que sur un site sans SVP,

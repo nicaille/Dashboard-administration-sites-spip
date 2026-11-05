@@ -3117,6 +3117,138 @@ verifier('le ménage nomme cette étape dans son compte rendu',
 	strpos((string) file_get_contents(chemin_plugin('tourdecontrole_agent') . '/inc/dashagent_maj.php'),
 		"\$rapport['alerte_crash_effacee']") !== false);
 
+echo "\n== Une colonne absente ne doit pas emporter l'inventaire entier ==\n";
+
+/* Signalé en production, et c'est une régression de la 1.0.46 : elle ajoute une
+   colonne et monte le schéma. Sur une tour dont la migration n'avait pas joué,
+   `sql_updateq()` rend `false` sur la colonne inconnue, SPIP range l'erreur au
+   fond de son journal, et la synchronisation annonçait un succès — sans avoir
+   écrit **un seul champ**. Le parc affichait donc l'erreur de la semaine passée,
+   une date figée, une version d'agent périmée et un décompte de mises à jour
+   faux, sur un site qui venait de répondre en 226 ms. Quatre symptômes
+   incohérents pour une cause unique, et aucun qui la désigne.
+
+   Mesuré des deux côtés sur un SPIP réel, colonne retirée : avant, pas un champ
+   ne bouge et la tour dit « OK » ; après, tout est écrit sauf la colonne absente,
+   et le journal nomme ce qui a été laissé de côté. */
+verifier('ce qui manque est nommé',
+	dashboard_colonnes_manquantes(['etat', 'plugins_crash'], ['etat']) === ['plugins_crash']);
+verifier('rien ne manque quand tout est là',
+	dashboard_colonnes_manquantes(['etat', 'erreur'], ['etat', 'erreur']) === []);
+
+/* La casse ne compte pas : les déclarations s'écrivent en minuscules, mais rien
+   n'oblige un serveur à rendre la casse qu'on lui a donnée. Comparer sans
+   l'aplanir ferait déclarer absentes des colonnes parfaitement présentes — et le
+   bandeau accuserait une base saine. */
+verifier('la casse ne fabrique pas d’absence',
+	dashboard_colonnes_manquantes(['plugins_crash'], ['PLUGINS_CRASH']) === []);
+
+/* Une colonne de plus dans la base n'est pas un manque : une install qui a
+   gardé une colonne d'une version antérieure n'a rien à se faire dire. */
+verifier('une colonne en trop n’est pas un manque',
+	dashboard_colonnes_manquantes(['etat'], ['etat', 'vieille_colonne']) === []);
+
+verifier('un argument qui n’est pas un tableau ne rend rien',
+	dashboard_colonnes_manquantes('etat', ['etat']) === []
+	&& dashboard_colonnes_manquantes(['etat'], 'etat') === []);
+
+echo "\n== Une erreur affichée sans sa date se lit comme une erreur du jour ==\n";
+
+/* La colonne `erreur` d'un site n'a qu'un écrivain — la synchronisation — et
+   n'est remise à vide qu'**au succès de la suivante**. Un site réparé à la main
+   sur place garde donc son dernier message tant que la tour n'est pas allée
+   constater, et la fiche le donnait sans date : rien ne disait si l'on lisait
+   une erreur de dix minutes ou de mardi. C'est la confusion qui a coûté une
+   recherche sur un site parfaitement sain.
+
+   `dashboard_anciennete()` prend son instant de référence en argument : sans
+   cela, le contrôle devrait fabriquer des dates relatives à l'heure qu'il est,
+   et n'éprouverait plus que l'arithmétique de ses propres jeux d'essai. */
+$t = strtotime('2026-11-05 12:00:00');
+verifier('une date vide n’a pas d’âge',
+	dashboard_anciennete('', $t) === '' && dashboard_anciennete('0000-00-00 00:00:00', $t) === '');
+verifier('une date illisible non plus',
+	dashboard_anciennete('pas une date', $t) === '');
+
+/* Une erreur datée de demain ne s'explique que par une horloge qui a bougé —
+   celle du site géré ou la nôtre. Inventer « il y a -2 heures » serait pire que
+   se taire, et le libellé retombe alors sur sa forme sans date. */
+verifier('une date future ne rend rien',
+	dashboard_anciennete('2026-11-06 12:00:00', $t) === '');
+
+verifier('moins de deux minutes, c’est « à l’instant »',
+	dashboard_anciennete('2026-11-05 11:59:00', $t) === _T('dashboard:anciennete_instant'));
+verifier('en dessous de deux heures, en minutes',
+	dashboard_anciennete('2026-11-05 11:00:00', $t) === _T('dashboard:anciennete_minutes', ['nb' => 60]));
+verifier('en dessous de deux jours, en heures',
+	dashboard_anciennete('2026-11-04 12:00:00', $t) === _T('dashboard:anciennete_heures', ['nb' => 24]));
+verifier('au-delà, en jours',
+	dashboard_anciennete('2026-11-01 12:00:00', $t) === _T('dashboard:anciennete_jours', ['nb' => 4]));
+
+/* Et le libellé : la forme datée quand on a une date, la forme nue sinon.
+   Jamais de « Dernière erreur, : » — une ponctuation orpheline se remarque plus
+   que l'absence de date.
+
+   Le contrôle porte sur **la clef choisie**, qui est la décision de la
+   fonction, et non sur le texte composé : le bac à sable rend la clef sans
+   interpoler ses arguments, si bien qu'un contrôle sur le texte n'éprouverait
+   que ce faux-là. L'interpolation est le travail de SPIP, et il est éprouvé par
+   le parcours d'intégration qui relit la page. */
+verifier('la forme datée est choisie quand une date existe',
+	dashboard_erreur_libelle(date('Y-m-d H:i:s', time() - 86400 * 3)) === _T('dashboard:derniere_erreur_datee', ['age' => 'peu importe']),
+	dashboard_erreur_libelle(date('Y-m-d H:i:s', time() - 86400 * 3)));
+verifier('et la forme nue sans date',
+	dashboard_erreur_libelle('') === _T('dashboard:derniere_erreur'),
+	dashboard_erreur_libelle(''));
+verifier('les deux formes ne se confondent pas',
+	_T('dashboard:derniere_erreur_datee') !== _T('dashboard:derniere_erreur'));
+
+echo "\n== Un plugin ne doit pas être désactivé par son changement de dossier ==\n";
+
+/* Signalé en production : après la mise à jour de l'agent, celui-ci se
+   retrouvait **désactivé** sur les sites gérés — et un agent désactivé, c'est
+   le site qui sort du parc, puisque plus rien ne répond.
+
+   Le mécanisme, mesuré sur un SPIP réel : SVP remplace
+   `plugins/auto/<prefixe>/v1.0.27` par `v1.0.28` et efface l'ancien. La meta
+   désigne encore l'ancien, et `ecrire_plugin_actifs(…, 'ajoute')` reconstruit sa
+   liste depuis elle en écartant tout dossier absent. Le chemin zip déclarait
+   déjà le nouveau dossier ; le chemin SVP ne déclarait rien.
+
+   Ce que ces contrôles éprouvent est la **règle de choix**, qui est pure. La
+   recherche sur disque et le recalcul du core ont été mesurés sur l'installation
+   réelle : le bac à sable n'a ni l'un ni l'autre, et en écrire des faux
+   n'éprouverait que ce qu'on croit d'eux. */
+verifier('un seul candidat est retenu',
+	dashagent_dossier_retenu(['auto/waf/v1.2.24' => '1.2.24']) === 'auto/waf/v1.2.24');
+verifier('sans candidat, rien à déclarer',
+	dashagent_dossier_retenu([]) === '' && dashagent_dossier_retenu('pas un tableau') === '');
+
+/* SPIP retient la version la plus élevée quand deux dossiers déclarent le même
+   préfixe (`plugin_valide_resume()`). Déclarer l'autre ferait cohabiter deux
+   avis, et c'est le plus élevé qui gagnerait de toute façon. */
+verifier('entre deux dossiers, la version la plus élevée',
+	dashagent_dossier_retenu([
+		'tourdecontrole_agent-1.0.27' => '1.0.27',
+		'auto/tourdecontrole_agent/v1.0.28' => '1.0.28',
+	]) === 'auto/tourdecontrole_agent/v1.0.28');
+
+/* Et le piège qui mord sur ce parc précisément : « 1.0.9 » est supérieur à
+   « 1.0.10 » dans l'ordre alphabétique. Nos numéros ont deux chiffres depuis
+   longtemps, donc une comparaison de chaînes retiendrait le mauvais dossier —
+   et désactiverait le plugin une fois sur deux. */
+verifier('la comparaison est numérique, pas alphabétique',
+	dashagent_dossier_retenu([
+		'auto/p/v1.0.9' => '1.0.9',
+		'auto/p/v1.0.10' => '1.0.10',
+	]) === 'auto/p/v1.0.10');
+
+/* Un dossier sans version lisible ne doit pas l'emporter sur un dossier qui en
+   annonce une : on garde le premier vu faute de mieux, jamais au détriment d'un
+   candidat qui se nomme. */
+verifier('une version illisible ne détrône pas une version connue',
+	dashagent_dossier_retenu(['auto/p/vX' => '', 'auto/p/v2.0.0' => '2.0.0']) === 'auto/p/v2.0.0');
+
 echo "\n== L'alerte des plugins remonte dans l'inventaire ==\n";
 
 /* Côté agent : une lecture de meta, et rien d'autre. Les chemins sont ramenés à

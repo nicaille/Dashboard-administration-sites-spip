@@ -746,7 +746,25 @@ function dashagent_svp_conclure($actionneur, $args) {
 		$actualise = true;
 	}
 
-	$post = dashagent_apres_maj();
+	// Déclarer le dossier, comme le fait le chemin zip. SVP vient de remplacer
+	// `auto/<prefixe>/v<ancienne>` par `v<nouvelle>` et d'effacer l'ancien : la
+	// meta désigne un dossier disparu, et le recalcul qui suit écarterait le
+	// plugin — **désactivé par son propre changement de nom**. Mesuré sur un
+	// SPIP réel : sans cette déclaration le plugin sort de la liste des actifs,
+	// avec elle il y reste.
+	//
+	// On ne le demande pas à la meta, qui est justement ce qui est faux ici,
+	// mais au disque.
+	$prefixe_declare = strtoupper(trim((string) ($args['prefixe'] ?? '')));
+	$declare = [];
+	if ($prefixe_declare !== '') {
+		$dossier = dashagent_dossier_du_prefixe($prefixe_declare);
+		if ($dossier !== '') {
+			$declare[$prefixe_declare] = $dossier;
+		}
+	}
+
+	$post = dashagent_apres_maj($declare);
 	$actionneur->nettoyer_actions();
 
 	include_spip('inc/meta');

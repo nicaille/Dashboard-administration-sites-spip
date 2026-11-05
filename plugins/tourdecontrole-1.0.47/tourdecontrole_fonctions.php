@@ -279,6 +279,77 @@ function dashboard_date_lisible($date, $format = 'heure') {
 }
 
 /**
+ * L'ancienneté d'une date, en clair : « il y a 3 jours ».
+ *
+ * Pure, et volontairement grossière : on ne cherche pas la précision, on
+ * cherche à ce que le lecteur sache **s'il regarde du périmé**. « il y a 3
+ * jours » suffit à cela, là où une date absolue demande un calcul mental.
+ *
+ * Rend la chaîne vide pour une date vide ou future : une erreur datée de
+ * demain ne s'explique que par une horloge qui a bougé, et inventer « il y a
+ * -2 heures » serait pire que se taire.
+ *
+ * @param string $date Date SQL
+ * @param int|null $maintenant Horodatage de référence, pour pouvoir l'éprouver
+ * @return string
+ */
+function dashboard_anciennete($date, $maintenant = null) {
+	$date = trim((string) $date);
+	if ($date === '' || strncmp($date, '0000-00-00', 10) === 0) {
+		return '';
+	}
+
+	$t = strtotime($date);
+	if ($t === false) {
+		return '';
+	}
+
+	$ecart = (int) (($maintenant === null ? time() : (int) $maintenant) - $t);
+	if ($ecart < 0) {
+		return '';
+	}
+
+	if ($ecart < 120) {
+		return _T('dashboard:anciennete_instant');
+	}
+	if ($ecart < 7200) {
+		return _T('dashboard:anciennete_minutes', ['nb' => (int) round($ecart / 60)]);
+	}
+	if ($ecart < 172800) {
+		return _T('dashboard:anciennete_heures', ['nb' => (int) round($ecart / 3600)]);
+	}
+
+	return _T('dashboard:anciennete_jours', ['nb' => (int) round($ecart / 86400)]);
+}
+
+/**
+ * Le libellé de la dernière erreur, avec son ancienneté.
+ *
+ * La colonne `erreur` n'a qu'un écrivain — la synchronisation — et n'est remise
+ * à vide **qu'au succès de la suivante**. Un site réparé à la main sur place
+ * garde donc son dernier message tant que la tour n'est pas allée constater, et
+ * la fiche le donnait **sans date** : rien ne disait si l'on lisait une erreur
+ * de dix minutes ou de mardi. C'est exactement la confusion qui a coûté une
+ * recherche sur un site parfaitement sain.
+ *
+ * La chaîne de langue se compose ici et non dans le squelette, pour la raison
+ * déjà consignée : une chaîne à arguments écrite dans un `#SET` rend une chaîne
+ * vide, et `#ARRAY{nb,#GET{x}}` ajoute un niveau d'accolades que l'analyse ne
+ * suit plus.
+ *
+ * @filtre
+ * @param string $date Date de la dernière tentative
+ * @return string
+ */
+function dashboard_erreur_libelle($date) {
+	$age = dashboard_anciennete($date);
+
+	return $age === ''
+		? _T('dashboard:derniere_erreur')
+		: _T('dashboard:derniere_erreur_datee', ['age' => $age]);
+}
+
+/**
  * Nom de plugin lisible, même si l'inventaire mémorisé est antérieur au
  * filtrage fait côté agent.
  *

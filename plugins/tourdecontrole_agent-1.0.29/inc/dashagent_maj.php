@@ -60,6 +60,104 @@ function dashagent_plugin_actif($prefixe) {
 }
 
 /**
+ * Le dossier qui porte réellement un préfixe, cherché **sur le disque**.
+ *
+ * `dashagent_plugin_actif()` ne sert pas ici : elle lit la liste des plugins
+ * actifs, c'est-à-dire la meta — précisément ce qui est faux quand on en a
+ * besoin.
+ *
+ * Le cas, mesuré en production : SVP remplace `plugins/auto/<prefixe>/v1.0.27`
+ * par `v1.0.28` et **efface l'ancien**. La meta désigne encore l'ancien, et
+ * `ecrire_plugin_actifs(…, 'ajoute')` reconstruit sa liste depuis elle en
+ * écartant tout dossier absent (`is_plugin_dir()`) : le plugin est **désactivé
+ * par son propre changement de nom**. Pour l'agent, c'est le site qui sort du
+ * parc, puisque plus rien ne répond.
+ *
+ * On va donc le chercher là où il est, et on ne croit pas le nom du dossier :
+ * c'est son `paquet.xml` qui dit quel préfixe il porte. Deux endroits, parce
+ * qu'il y a deux installateurs — `auto/<prefixe>/v*` pour SVP, un dossier plat
+ * pour le nôtre.
+ *
+ * @param string $prefixe
+ * @return string Chemin relatif à `_DIR_PLUGINS`, chaîne vide si introuvable
+ */
+function dashagent_dossier_du_prefixe($prefixe) {
+	$prefixe = strtoupper(trim((string) $prefixe));
+	if ($prefixe === '') {
+		return '';
+	}
+
+	$racine = defined('_DIR_PLUGINS') ? _DIR_PLUGINS : 'plugins/';
+	$motifs = [
+		$racine . 'auto/' . strtolower($prefixe) . '/*',
+		$racine . '*',
+	];
+
+	$candidats = [];
+	foreach ($motifs as $motif) {
+		foreach ((array) glob($motif, GLOB_ONLYDIR) as $chemin) {
+			$controle = dashagent_verifier_archive_plugin($chemin, $prefixe);
+			if (empty($controle['ok'])) {
+				continue;
+			}
+			$relatif = ltrim(substr($chemin, strlen($racine)), '/');
+			if ($relatif !== '') {
+				$candidats[$relatif] = (string) $controle['version'];
+			}
+		}
+	}
+
+	return dashagent_dossier_retenu($candidats);
+}
+
+/**
+ * Lequel de ces dossiers SPIP retiendra, et donc lequel déclarer.
+ *
+ * Pure, et c'est là qu'est la règle : **SPIP retient la version la plus
+ * élevée** quand deux dossiers déclarent le même préfixe
+ * (`plugin_valide_resume()`). Déclarer l'autre ferait cohabiter deux avis, et
+ * c'est le plus élevé qui gagnerait de toute façon — autant le dire soi-même,
+ * pour que la meta et le disque racontent la même histoire.
+ *
+ * `version_compare()` et non une comparaison de chaînes : « 1.0.9 » est
+ * supérieur à « 1.0.10 » dans l'ordre alphabétique, et le parc porte justement
+ * des numéros à deux chiffres.
+ *
+ * @param array<string, string> $candidats Dossier relatif => version déclarée
+ * @return string
+ */
+function dashagent_dossier_retenu($candidats) {
+	// Pas de `(array)` sur l'argument : convertir une chaîne donne un tableau
+	// à clef entière, dont la clef `0` deviendrait un nom de dossier. Le
+	// contrôle unitaire l'a trouvé — un dossier fabriqué qu'on aurait déclaré
+	// à SPIP, pour désactiver le plugin qu'on voulait sauver.
+	if (!is_array($candidats)) {
+		return '';
+	}
+
+	$retenu = '';
+	$haute  = '';
+
+	foreach ($candidats as $dossier => $version) {
+		// Une clef entière n'est pas un chemin : PHP ne convertit en entier que
+		// les clefs purement numériques, et aucun de nos dossiers ne l'est.
+		if (!is_string($dossier)) {
+			continue;
+		}
+		$version = trim((string) $version);
+		if ($dossier === '') {
+			continue;
+		}
+		if ($retenu === '' || ($version !== '' && version_compare($version, $haute, '>'))) {
+			$retenu = $dossier;
+			$haute  = $version;
+		}
+	}
+
+	return $retenu;
+}
+
+/**
  * Analyse ce qu'il est possible de faire pour mettre à jour un plugin.
  *
  * @param array $args {prefixe}

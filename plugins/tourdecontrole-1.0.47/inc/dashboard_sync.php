@@ -80,7 +80,7 @@ function dashboard_synchroniser($id_dashboard_site, $options = []) {
 
 	$nb_maj = dashboard_compter_maj($plugins);
 
-	sql_updateq('spip_dashboard_sites', [
+	$champs = [
 		'etat'           => 'ok',
 		'erreur'         => '',
 		'version_spip'   => $version_spip,
@@ -104,7 +104,45 @@ function dashboard_synchroniser($id_dashboard_site, $options = []) {
 		'infos'          => json_encode($infos, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR),
 		'date_sync'      => $maintenant,
 		'date_sync_ok'   => $maintenant,
-	], 'id_dashboard_site = ' . (int) $id_dashboard_site);
+	];
+
+	/* Une colonne absente ne doit pas emporter l'inventaire entier.
+	   `sql_updateq()` rend `false` sur une colonne inconnue, SPIP range l'erreur
+	   au fond de son journal, et cette fonction annonçait un succès : sur une
+	   tour dont la migration n'avait pas joué, **aucun** champ n'était écrit —
+	   ni l'état, ni la date, ni la version de l'agent, ni le décompte des mises
+	   à jour. Le parc montrait donc l'erreur de la semaine passée sur un site
+	   qui venait de répondre.
+
+	   On écrit donc ce que la base sait recevoir, et on dit haut ce qu'on a
+	   laissé de côté. Le choix est celui déjà fait pour l'inventaire des caches :
+	   *une valeur approximative vaut mieux qu'une synchronisation perdue* — à
+	   condition que l'approximation se voie. */
+	$absentes = dashboard_colonnes_absentes('spip_dashboard_sites');
+	$ignorees = array_values(array_intersect($absentes, array_keys($champs)));
+	foreach ($ignorees as $colonne) {
+		unset($champs[$colonne]);
+	}
+
+	$ecrit = sql_updateq('spip_dashboard_sites', $champs, 'id_dashboard_site = ' . (int) $id_dashboard_site);
+
+	if ($ignorees) {
+		spip_log(
+			'dashboard_sync : base de la tour incomplète, colonne(s) ignorée(s) : '
+			. implode(', ', $ignorees) . ' — réactiver le plugin pour jouer la migration',
+			'dashboard'
+		);
+	}
+
+	// Et si l'écriture a échoué pour une autre raison, ne pas annoncer un
+	// succès : le site afficherait l'état d'avant en se croyant à jour.
+	if ($ecrit === false) {
+		$message = dashboard_inerte('Synchronisation reçue mais non enregistrée : la base de la tour refuse l’écriture'
+			. ($ignorees ? ' (colonnes manquantes : ' . implode(', ', $ignorees) . ')' : ''));
+		dashboard_journaliser($id_dashboard_site, 'sync', 'erreur', $message, []);
+
+		return ['ok' => false, 'message' => $message, 'site' => dashboard_charger_site($id_dashboard_site)];
+	}
 
 	dashboard_enregistrer_plugins($id_dashboard_site, $plugins);
 	dashboard_enregistrer_waf_serie($id_dashboard_site, $infos['waf_serie'] ?? null);

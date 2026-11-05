@@ -340,6 +340,54 @@ elle est dérivée elle aussi.
 `tests/test_structure.php` refuse désormais tout nom de table écrit en dur dans
 un `*_tables_presentes()`, et exige qu'il lise les déclarations.
 
+## Une colonne absente ne doit pas emporter l'inventaire entier
+
+Régression de la tour 1.0.46, celle qui ajoute une colonne et monte le schéma.
+Sur une tour dont la migration n'avait pas joué, la synchronisation s'est mise à
+échouer **en silence** : `sql_updateq()` rend `false` sur une colonne inconnue,
+SPIP range l'erreur au fond de son journal, et la fonction appelante annonçait
+un succès — sans avoir écrit **un seul champ**.
+
+Ce que le webmestre a vu, et qui ne désigne rien :
+
+- un site en erreur avec le message de la semaine passée, alors que l'agent
+  venait de répondre en 226 ms — et l'a journalisé de son côté ;
+- la version de l'agent fausse sur la fiche, juste dans la liste des plugins,
+  parce que celle-là s'écrit dans une **autre table**, qui n'avait pas le
+  problème ;
+- un plugin annoncé en retard alors que tout était à jour, le décompte étant
+  resté figé ;
+- une date de dernière synchronisation qui ne bougeait plus.
+
+Quatre symptômes incohérents pour une cause unique. Mesuré des deux côtés sur un
+SPIP réel, colonne retirée : avant, pas un champ ne bouge et la tour dit « OK » ;
+après, tout est écrit sauf la colonne absente.
+
+Trois décisions, et la première est la seule qui tienne :
+
+- **on écrit ce que la base sait recevoir**, et on dit haut ce qu'on a laissé de
+  côté. C'est le choix déjà fait pour l'inventaire des caches — *une valeur
+  approximative vaut mieux qu'une synchronisation perdue* —, à la condition qui
+  va avec : que l'approximation se voie. Le journal nomme les colonnes ignorées,
+  et le parc porte un bandeau qui nomme la migration à jouer ;
+- **un `false` de `sql_updateq()` n'est plus un succès.** Annoncer une
+  synchronisation enregistrée quand elle ne l'est pas, c'est afficher l'état
+  d'avant en se croyant à jour ;
+- **la liste des colonnes attendues se dérive des déclarations**
+  (`tourdecontrole_descriptions_tables()`), jamais écrite dans la fonction qui la
+  consulte. C'est mot pour mot la règle déjà payée sur les tables, et la colonne
+  suivante la vérifiera.
+
+La comparaison aplanit la casse : les déclarations s'écrivent en minuscules, mais
+rien n'oblige un serveur à rendre la casse qu'on lui a donnée, et accuser une
+colonne présente ferait pire que se taire.
+
+**Ce que ça apprend sur le harnais**, et c'est le vrai angle mort : le parcours
+d'intégration installe la base **à neuf**, donc toutes les colonnes y sont
+toujours. Aucune montée de schéma n'y est jouée à partir d'un état antérieur.
+Une migration qui ne passe pas, ou qui passe à moitié, ne peut donc pas y être
+vue — et c'est le troisième défaut de production que cet écart laisse filer.
+
 ## La tour a son propre avis, et le confronte
 
 Tout ce que la tour savait des versions **disponibles** venait du catalogue SVP
@@ -1700,6 +1748,62 @@ Et la liste est bornée à vingt chemins, chacun tronqué : elle voyage dans une
 colonne, puis dans une page. Un retour à la ligne dans un chemin y fabriquerait
 une fausse entrée, d'où la neutralisation des caractères de contrôle — *ce qui
 vient d'un site géré est inerte, y compris hors du HTML*.
+
+### Un plugin désactivé par son propre changement de dossier
+
+Signalé en production après la mise à jour de l'agent : **il se retrouvait
+désactivé** sur les sites gérés. Et un agent désactivé, c'est le site qui sort
+du parc — plus rien ne répond, donc plus rien ne peut le remettre d'aplomb à
+distance.
+
+La convention du dossier versionné le disait déjà — *« sans quoi le plugin
+serait désactivé par son propre changement de nom »* — et le chemin zip le
+traitait : il passe le nouveau dossier à `dashagent_apres_maj()`. **Le chemin
+SVP ne déclarait rien.** Or SVP remplace `plugins/auto/<prefixe>/v<ancienne>`
+par la nouvelle et **efface l'ancienne** : la meta désigne alors un dossier
+disparu, et `ecrire_plugin_actifs(…, 'ajoute')` reconstruit sa liste depuis elle
+en écartant tout dossier absent (`is_plugin_dir()`).
+
+Mesuré sur un SPIP réel, meta pointée sur un dossier inexistant :
+
+    sans déclarer le dossier : *** ABSENT — LE PLUGIN EST DÉSACTIVÉ ***
+    en déclarant le dossier  : ACTIF sur auto/zzztest/v1.0.1
+
+**Le dossier se demande au disque, pas à la meta** : celle-ci est précisément ce
+qui est faux au moment où l'on en a besoin. `dashagent_dossier_du_prefixe()`
+cherche donc dans les deux dispositions — `auto/<prefixe>/v*` pour SVP, un
+dossier plat pour notre installateur — et **ne croit pas le nom du dossier** :
+c'est le `paquet.xml` qui dit quel préfixe il porte.
+
+Entre deux candidats, `dashagent_dossier_retenu()` prend **la version la plus
+élevée**, parce que c'est ce que SPIP fera de toute façon
+(`plugin_valide_resume()`) : déclarer l'autre ferait raconter deux histoires
+différentes à la meta et au disque. Par `version_compare()`, et c'est tout
+l'enjeu : « 1.0.9 » dépasse « 1.0.10 » dans l'ordre alphabétique, et nos numéros
+ont deux chiffres depuis longtemps.
+
+Trois choses que les contrôles ont trouvées, et pas la relecture :
+
+- un `(array)` sur l'argument de la fonction pure transformait une chaîne en
+  tableau à clef entière, dont la clef `0` devenait **un nom de dossier
+  fabriqué** — qu'on aurait déclaré à SPIP pour désactiver le plugin qu'on
+  voulait sauver ;
+- le garde-fou de structure, premier jet, était rangé dans une boucle qui ne
+  visite que les fichiers appelant `ecrire_plugin_actifs()` : `dashagent_svp.php`
+  n'en fait pas partie, et **le contrôle ne s'exécutait jamais**. Deuxième fois
+  dans la même journée ;
+- son deuxième jet, lui, accusait la mise à jour du **core**, qui remplace les
+  fichiers de SPIP sans qu'aucun dossier de plugin change de nom et n'a donc rien
+  à déclarer. Un garde-fou trop large accuse du code juste, et on finit par le
+  désarmer : il nomme désormais les deux conclusions qui concernent un plugin,
+  avec un décompte qui tombe si l'une disparaît.
+
+Ce que le parcours d'intégration ne prouve pas, et il faut le savoir : **il ne
+reproduit pas la condition**. L'agent y part d'un dossier plat que notre
+installateur conserve comme retour en arrière, si bien que la meta ne peut pas
+désigner un dossier disparu. Il vérifie désormais que l'agent reste dans la
+liste des actifs et que le dossier nommé existe — ce qu'on veut voir —, mais
+c'est la mesure sur SPIP réel qui a établi la cause et le remède.
 
 ### Un message d'erreur sans son endroit ne sert à rien
 
