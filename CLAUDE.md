@@ -1805,6 +1805,49 @@ désigner un dossier disparu. Il vérifie désormais que l'agent reste dans la
 liste des actifs et que le dossier nommé existe — ce qu'on veut voir —, mais
 c'est la mesure sur SPIP réel qui a établi la cause et le remède.
 
+#### Un correctif qui vit dans le code de la mise à jour ne corrige pas la sienne
+
+Et c'est la faute la plus coûteuse de ce chantier, parce qu'elle était
+prévisible et qu'elle a frappé **tout le parc d'un coup**. L'agent 1.0.29
+déclare le dossier et clôt le sujet. Mais la mise à jour d'un agent est
+exécutée **par l'agent installé**, pas par celui qu'on installe : passer de la
+1.0.28 à la 1.0.29 est donc précisément l'opération que la 1.0.28 ne sait pas
+mener, et chaque agent du parc s'est désactivé en installant son propre
+remplaçant. Les fichiers étaient bien en place ; seule l'activation était
+perdue — et avec elle le seul chemin par lequel la tour pouvait intervenir.
+
+La règle, et elle vaut pour tout code qui se met à jour lui-même : **un
+correctif logé dans le code qui exécute la mise à jour prend effet à la mise à
+jour *suivante*, jamais à la sienne.** Ce qu'il faut annoncer en le publiant
+n'est donc pas « c'est corrigé » mais « la prochaine fois, c'est corrigé ; cette
+fois-ci, le défaut se joue une dernière fois ».
+
+Et comme la tour ne peut rien sur un site dont l'agent est éteint, le passage de
+relais est forcément **hors protocole** : `outils/reactiver-agent.php`, déposé
+par FTP à la racine du site géré et ouvert une fois. Il fait, depuis l'extérieur
+du plugin, exactement ce que la 1.0.29 fait désormais de l'intérieur — chercher
+le dossier **sur le disque**, le croire sur son `paquet.xml` et non sur son nom,
+retenir la version la plus élevée, et le déclarer en mode « ajoute », qui
+n'éteint rien d'autre.
+
+Trois choses que l'éprouver a apprises, et dont deux ne se devinent pas :
+
+- **il doit porter sa propre recherche de dossier.** Le plugin étant inactif,
+  aucune de ses fonctions n'est chargée : appeler `dashagent_dossier_du_prefixe()`
+  serait appeler ce qui n'existe pas ;
+- **il doit charger les filtres de texte**, pour la raison déjà consignée plus
+  haut : `ecrire_plugin_actifs()` fait relire les `paquet.xml` au core, et un nom
+  de plugin peut y porter du balisage multilingue ;
+- **son propre constat ne peut pas passer par `find_in_path()`.** La liste des
+  chemins a été bâtie à l'amorçage du processus, quand le plugin était encore
+  absent : elle répondra non quoi qu'on fasse. Mesuré des deux côtés —
+  réactivation faite, `find_in_path()` dit non dans le même processus et retrouve
+  le fichier dans le suivant. Ce qui se vérifie est donc ce que la **prochaine**
+  requête chargera : le cache de chemins que le recalcul vient de réécrire, et la
+  présence du fichier sur le disque. C'est la même faute que le contrôle dont
+  l'attente ne peut pas être vraie, et elle s'est glissée dans l'outil écrit pour
+  réparer la précédente.
+
 ### Un message d'erreur sans son endroit ne sert à rien
 
 `getMessage()` suffit pour une erreur qu'on a levée soi-même, et pas du tout
